@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { 
@@ -74,6 +76,11 @@ const Leads = () => {
     anuncio: "",
     status_id: ""
   });
+  
+  const [editingLead, setEditingLead] = useState<Lead | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -187,6 +194,98 @@ const Leads = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleEditLead = (lead: Lead) => {
+    setEditingLead(lead);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateLead = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!editingLead?.name || !editingLead?.phone) {
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Nome e telefone são obrigatórios",
+      });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('leads')
+        .update({
+          name: editingLead.name,
+          phone: editingLead.phone,
+          email: editingLead.email,
+          interesse: editingLead.interesse,
+          observacoes: editingLead.observacoes,
+          origem: editingLead.origem,
+          campanha: editingLead.campanha,
+          conjunto: editingLead.conjunto,
+          anuncio: editingLead.anuncio,
+          status_id: editingLead.status_id
+        })
+        .eq('id', editingLead.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Lead atualizado com sucesso!",
+        description: "As informações do lead foram atualizadas.",
+      });
+
+      setIsEditDialogOpen(false);
+      setEditingLead(null);
+      fetchData();
+
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Erro ao atualizar lead",
+        description: error.message,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteLead = async (leadId: string) => {
+    setLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('leads')
+        .delete()
+        .eq('id', leadId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Lead deletado com sucesso!",
+        description: "O lead foi removido do sistema.",
+      });
+
+      fetchData();
+
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Erro ao deletar lead",
+        description: error.message,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleViewDetails = (lead: Lead) => {
+    setSelectedLead(lead);
+    setIsDetailDialogOpen(true);
   };
 
   const formatPhone = (phone: string) => {
@@ -418,9 +517,30 @@ const Leads = () => {
                     <div key={lead.id} className="lead-card">
                       <div className="flex items-start justify-between mb-2">
                         <h4 className="font-medium text-sm">{lead.name}</h4>
-                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                          <MoreVertical className="h-3 w-3" />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                              <MoreVertical className="h-3 w-3" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleViewDetails(lead)}>
+                              <Eye className="h-4 w-4 mr-2" />
+                              Ver detalhes
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleEditLead(lead)}>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Editar lead
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => handleDeleteLead(lead.id)}
+                              className="text-destructive"
+                            >
+                              <Trash className="h-4 w-4 mr-2" />
+                              Deletar
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                       
                       <div className="space-y-1 text-xs text-muted-foreground">
@@ -529,6 +649,222 @@ const Leads = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Edit Lead Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Editar Lead</DialogTitle>
+            <DialogDescription>
+              Atualize as informações do lead.
+            </DialogDescription>
+          </DialogHeader>
+          {editingLead && (
+            <form onSubmit={handleUpdateLead} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-name">Nome *</Label>
+                  <Input
+                    id="edit-name"
+                    value={editingLead.name}
+                    onChange={(e) => setEditingLead({...editingLead, name: e.target.value})}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-phone">Telefone *</Label>
+                  <Input
+                    id="edit-phone"
+                    type="tel"
+                    value={editingLead.phone}
+                    onChange={(e) => setEditingLead({...editingLead, phone: e.target.value})}
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-email">Email</Label>
+                  <Input
+                    id="edit-email"
+                    type="email"
+                    value={editingLead.email || ""}
+                    onChange={(e) => setEditingLead({...editingLead, email: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-status">Status</Label>
+                  <Select
+                    value={editingLead.status_id || ""}
+                    onValueChange={(value) => setEditingLead({...editingLead, status_id: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {statuses.map((status) => (
+                        <SelectItem key={status.id} value={status.id}>
+                          {status.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-interesse">Interesse</Label>
+                <Input
+                  id="edit-interesse"
+                  value={editingLead.interesse || ""}
+                  onChange={(e) => setEditingLead({...editingLead, interesse: e.target.value})}
+                  placeholder="Ex: Apartamento 2 quartos, Casa em condomínio..."
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-origem">Origem</Label>
+                  <Input
+                    id="edit-origem"
+                    value={editingLead.origem || ""}
+                    onChange={(e) => setEditingLead({...editingLead, origem: e.target.value})}
+                    placeholder="Ex: Facebook, Google, Indicação..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-campanha">Campanha</Label>
+                  <Input
+                    id="edit-campanha"
+                    value={editingLead.campanha || ""}
+                    onChange={(e) => setEditingLead({...editingLead, campanha: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-observacoes">Observações</Label>
+                <Textarea
+                  id="edit-observacoes"
+                  value={editingLead.observacoes || ""}
+                  onChange={(e) => setEditingLead({...editingLead, observacoes: e.target.value})}
+                  placeholder="Informações adicionais sobre o lead..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={loading}>
+                  {loading ? "Atualizando..." : "Atualizar Lead"}
+                </Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Lead Details Dialog */}
+      <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Detalhes do Lead</DialogTitle>
+            <DialogDescription>
+              Informações completas do lead
+            </DialogDescription>
+          </DialogHeader>
+          {selectedLead && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium">Nome</Label>
+                  <p className="text-sm text-muted-foreground">{selectedLead.name}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Telefone</Label>
+                  <p className="text-sm text-muted-foreground">{formatPhone(selectedLead.phone)}</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium">Email</Label>
+                  <p className="text-sm text-muted-foreground">{selectedLead.email || '-'}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Status</Label>
+                  {selectedLead.lead_status && (
+                    <Badge 
+                      variant="outline"
+                      style={{ 
+                        borderColor: selectedLead.lead_status.color,
+                        color: selectedLead.lead_status.color 
+                      }}
+                    >
+                      {selectedLead.lead_status.name}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium">Interesse</Label>
+                <p className="text-sm text-muted-foreground">{selectedLead.interesse || '-'}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium">Origem</Label>
+                  <p className="text-sm text-muted-foreground">{selectedLead.origem || '-'}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Campanha</Label>
+                  <p className="text-sm text-muted-foreground">{selectedLead.campanha || '-'}</p>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium">Observações</Label>
+                <p className="text-sm text-muted-foreground">{selectedLead.observacoes || '-'}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium">Criado em</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {new Date(selectedLead.created_at).toLocaleDateString('pt-BR')}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Atualizado em</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {new Date(selectedLead.updated_at).toLocaleDateString('pt-BR')}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button 
+                  variant="outline"
+                  onClick={() => openWhatsApp(selectedLead.phone, selectedLead.name)}
+                >
+                  <MessageCircle className="h-4 w-4 mr-2" />
+                  WhatsApp
+                </Button>
+                <Button onClick={() => {
+                  setIsDetailDialogOpen(false);
+                  handleEditLead(selectedLead);
+                }}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Editar
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
