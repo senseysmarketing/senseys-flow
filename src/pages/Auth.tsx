@@ -10,6 +10,7 @@ import { signIn, signUp, resetPassword } from "@/lib/auth";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect } from "react";
 import logo from "@/assets/logo.png";
+import backgroundImage from "@/assets/background-crm.jpg";
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -133,8 +134,12 @@ const Auth = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md space-y-6">
+    <div 
+      className="min-h-screen flex items-center justify-center p-4 bg-cover bg-center bg-no-repeat relative"
+      style={{ backgroundImage: `url(${backgroundImage})` }}
+    >
+      <div className="absolute inset-0 bg-black/40"></div>
+      <div className="w-full max-w-md space-y-6 relative z-10">
         <div className="text-center space-y-4">
           <img 
             src={logo} 
