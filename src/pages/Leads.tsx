@@ -339,6 +339,13 @@ const Leads = () => {
     return phone;
   };
 
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    return `${day}/${month}`;
+  };
+
   const openWhatsApp = (phone: string, name: string) => {
     const message = `Olá ${name}! Aqui é da Senseys - Marketing Imobiliário. Como posso te ajudar?`;
     const whatsappUrl = `https://wa.me/55${phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
@@ -556,16 +563,16 @@ const Leads = () => {
                     </Badge>
                   </div>
                   
-                  <Droppable droppableId={status.id}>
-                    {(provided, snapshot) => (
-                      <div
-                        ref={provided.innerRef}
-                        {...provided.droppableProps}
-                        className={`space-y-3 min-h-[200px] p-2 rounded-lg transition-colors ${
-                          snapshot.isDraggingOver ? 'bg-muted/50' : ''
-                        }`}
-                      >
-                        {statusLeads.map((lead, index) => (
+                   <Droppable droppableId={status.id}>
+                     {(provided, snapshot) => (
+                       <div
+                         ref={provided.innerRef}
+                         {...provided.droppableProps}
+                         className={`space-y-3 min-h-[200px] max-h-[400px] overflow-y-auto p-2 rounded-lg transition-colors ${
+                           snapshot.isDraggingOver ? 'bg-muted/50' : ''
+                         }`}
+                       >
+                         {statusLeads.map((lead, index) => (
                           <Draggable key={lead.id} draggableId={lead.id} index={index}>
                             {(provided, snapshot) => (
                               <div
@@ -576,9 +583,12 @@ const Leads = () => {
                                   snapshot.isDragging ? 'rotate-2 scale-105 shadow-lg' : ''
                                 }`}
                               >
-                                <div className="flex items-start justify-between mb-2">
-                                  <h4 className="font-medium text-sm">{lead.name}</h4>
-                                  <DropdownMenu>
+                                 <div className="flex items-start justify-between mb-2">
+                                   <div>
+                                     <h4 className="font-medium text-sm">{lead.name}</h4>
+                                     <span className="text-xs text-muted-foreground">{formatDate(lead.created_at)}</span>
+                                   </div>
+                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                       <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
                                         <MoreVertical className="h-3 w-3" />
