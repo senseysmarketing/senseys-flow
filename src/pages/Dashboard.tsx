@@ -37,6 +37,17 @@ interface RecentLead {
   status_color?: string;
 }
 
+interface TodayEvent {
+  id: string;
+  title: string;
+  description?: string;
+  location?: string;
+  start_time: string;
+  end_time: string;
+  lead_id?: string;
+  lead_name?: string;
+}
+
 const Dashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -49,6 +60,7 @@ const Dashboard = () => {
     conversionRate: 0
   });
   const [recentLeads, setRecentLeads] = useState<RecentLead[]>([]);
+  const [todayEvents, setTodayEvents] = useState<TodayEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -123,6 +135,47 @@ const Dashboard = () => {
 
       setRecentLeads(recentLeadsData);
 
+      // Fetch today's events
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date();
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const { data: events, error: eventsError } = await supabase
+        .from('events')
+        .select(`
+          id,
+          title,
+          description,
+          location,
+          start_time,
+          end_time,
+          lead_id,
+          leads (
+            name
+          )
+        `)
+        .gte('start_time', startOfDay.toISOString())
+        .lte('start_time', endOfDay.toISOString())
+        .order('start_time', { ascending: true });
+
+      if (eventsError) {
+        console.error('Error fetching events:', eventsError);
+      } else {
+        const todayEventsData = events?.map(event => ({
+          id: event.id,
+          title: event.title,
+          description: event.description,
+          location: event.location,
+          start_time: event.start_time,
+          end_time: event.end_time,
+          lead_id: event.lead_id,
+          lead_name: event.leads?.name
+        })) || [];
+
+        setTodayEvents(todayEventsData);
+      }
+
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -139,6 +192,13 @@ const Dashboard = () => {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const formatTime = (dateString: string) => {
+    return new Date(dateString).toLocaleTimeString('pt-BR', {
       hour: '2-digit',
       minute: '2-digit'
     });
@@ -327,6 +387,57 @@ const Dashboard = () => {
                       {lead.origem && `${lead.origem} • `}
                       {formatDate(lead.created_at)}
                     </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Today's Events */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Eventos de Hoje</CardTitle>
+          <CardDescription>
+            Compromissos agendados para hoje
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {todayEvents.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Nenhum evento agendado para hoje</p>
+              <Button 
+                className="mt-4" 
+                onClick={() => navigate('/calendar')}
+              >
+                Agendar Evento
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {todayEvents.map((event) => (
+                <div 
+                  key={event.id}
+                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                  onClick={() => navigate('/calendar')}
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-primary" />
+                      <h4 className="font-medium">{event.title}</h4>
+                    </div>
+                    <div className="text-sm text-muted-foreground mt-1">
+                      {formatTime(event.start_time)} - {formatTime(event.end_time)}
+                      {event.location && ` • ${event.location}`}
+                      {event.lead_name && ` • ${event.lead_name}`}
+                    </div>
+                    {event.description && (
+                      <div className="text-sm text-muted-foreground mt-1">
+                        {event.description}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
