@@ -10,6 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { 
   Plus, 
@@ -64,6 +65,12 @@ const Leads = () => {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
   const [searchTerm, setSearchTerm] = useState("");
+  const [filters, setFilters] = useState({
+    status: "",
+    origem: "",
+    startDate: "",
+    endDate: ""
+  });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   
   const [newLead, setNewLead] = useState({
@@ -348,11 +355,37 @@ const Leads = () => {
   };
 
 
-  const filteredLeads = leads.filter(lead =>
-    lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    lead.phone.includes(searchTerm) ||
-    (lead.email && lead.email.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredLeads = leads.filter(lead => {
+    // Filtro de busca por texto
+    const matchesSearch = searchTerm === "" || 
+      lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      lead.phone.includes(searchTerm) ||
+      (lead.email && lead.email.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    // Filtro por status
+    const matchesStatus = filters.status === "" || lead.status_id === filters.status;
+
+    // Filtro por origem
+    const matchesOrigem = filters.origem === "" || 
+      (lead.origem && lead.origem.toLowerCase().includes(filters.origem.toLowerCase()));
+
+    // Filtro por período
+    let matchesDateRange = true;
+    if (filters.startDate || filters.endDate) {
+      const leadDate = new Date(lead.created_at);
+      if (filters.startDate) {
+        const startDate = new Date(filters.startDate);
+        matchesDateRange = matchesDateRange && leadDate >= startDate;
+      }
+      if (filters.endDate) {
+        const endDate = new Date(filters.endDate);
+        endDate.setHours(23, 59, 59, 999); // Incluir todo o dia final
+        matchesDateRange = matchesDateRange && leadDate <= endDate;
+      }
+    }
+
+    return matchesSearch && matchesStatus && matchesOrigem && matchesDateRange;
+  });
 
   const getLeadsByStatus = (statusId: string) => {
     return filteredLeads.filter(lead => lead.status_id === statusId);
@@ -511,10 +544,87 @@ const Leads = () => {
               className="pl-8"
             />
           </div>
-          <Button variant="outline" size="sm" className="gap-2">
-            <Filter className="h-4 w-4" />
-            Filtros
-          </Button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Filter className="h-4 w-4" />
+                Filtros
+                {(filters.status || filters.origem || filters.startDate || filters.endDate) && (
+                  <span className="ml-1 bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 text-xs">
+                    {Object.values(filters).filter(Boolean).length}
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium">Filtros</h4>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => setFilters({ status: "", origem: "", startDate: "", endDate: "" })}
+                  >
+                    Limpar
+                  </Button>
+                </div>
+                
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="filter-status">Status</Label>
+                    <Select
+                      value={filters.status}
+                      onValueChange={(value) => setFilters({...filters, status: value})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos os status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Todos os status</SelectItem>
+                        {statuses.map((status) => (
+                          <SelectItem key={status.id} value={status.id}>
+                            {status.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="filter-origem">Origem</Label>
+                    <Input
+                      id="filter-origem"
+                      placeholder="Ex: Facebook, Google..."
+                      value={filters.origem}
+                      onChange={(e) => setFilters({...filters, origem: e.target.value})}
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="filter-start-date">Data inicial</Label>
+                      <Input
+                        id="filter-start-date"
+                        type="date"
+                        value={filters.startDate}
+                        onChange={(e) => setFilters({...filters, startDate: e.target.value})}
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="filter-end-date">Data final</Label>
+                      <Input
+                        id="filter-end-date"
+                        type="date"
+                        value={filters.endDate}
+                        onChange={(e) => setFilters({...filters, endDate: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
         
         <div className="flex gap-2">
