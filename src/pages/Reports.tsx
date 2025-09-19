@@ -17,6 +17,7 @@ interface LeadStats {
   lastMonth: number;
   byStatus: { name: string; count: number; color: string }[];
   bySource: { name: string; count: number }[];
+  byInterest: { name: string; count: number }[];
   dailyCreated: { date: string; count: number }[];
 }
 
@@ -37,6 +38,7 @@ const ReportsPage = () => {
     lastMonth: 0,
     byStatus: [],
     bySource: [],
+    byInterest: [],
     dailyCreated: []
   });
   const [eventStats, setEventStats] = useState<EventStats>({
@@ -146,6 +148,26 @@ const ReportsPage = () => {
       return acc;
     }, [] as { name: string; count: number }[]) || [];
 
+    // Leads por interesse
+    const { data: leadsByInterest, error: interestError } = await supabase
+      .from("leads")
+      .select("interesse");
+
+    if (interestError) throw interestError;
+
+    const interestCounts = leadsByInterest?.reduce((acc, lead) => {
+      const interest = lead.interesse || "Não informado";
+      const existing = acc.find(item => item.name === interest);
+      
+      if (existing) {
+        existing.count++;
+      } else {
+        acc.push({ name: interest, count: 1 });
+      }
+      
+      return acc;
+    }, [] as { name: string; count: number }[]) || [];
+
     // Leads criados por dia (últimos 30 dias)
     const daysInterval = eachDayOfInterval({
       start: subDays(now, parseInt(period)),
@@ -177,6 +199,7 @@ const ReportsPage = () => {
       lastMonth: lastMonthLeads?.length || 0,
       byStatus: statusCounts,
       bySource: sourceCounts,
+      byInterest: interestCounts,
       dailyCreated
     });
   };
@@ -322,7 +345,7 @@ const ReportsPage = () => {
         </TabsList>
 
         <TabsContent value="leads" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             <Card>
               <CardHeader>
                 <CardTitle>Leads por Status</CardTitle>
@@ -385,6 +408,48 @@ const ReportsPage = () => {
                     <Bar dataKey="count" fill="hsl(var(--primary))" />
                   </BarChart>
                 </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Leads por Interesse</CardTitle>
+                <CardDescription>Distribuição por área de interesse</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={leadStats.byInterest}
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="count"
+                      label={({ name, value }) => `${name}: ${value}`}
+                    >
+                      {leadStats.byInterest.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+                
+                <div className="mt-4 space-y-2">
+                  {leadStats.byInterest.map((interest, index) => (
+                    <div key={interest.name} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-3 h-3 rounded-full" 
+                          style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                        />
+                        <span className="text-sm">{interest.name}</span>
+                      </div>
+                      <Badge variant="outline">{interest.count}</Badge>
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           </div>
