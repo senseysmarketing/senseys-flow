@@ -9,7 +9,7 @@ import { toast } from "@/hooks/use-toast";
 import { signIn, signUp, resetPassword } from "@/lib/auth";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect } from "react";
-import logo from "@/assets/logo.png";
+import logo from "@/assets/logo-alternativa.png";
 import backgroundImage from "@/assets/background-crm.jpg";
 const Auth = () => {
   const navigate = useNavigate();
