@@ -77,7 +77,7 @@ const WhatsAppMessagePopover = ({ phone, leadName, interesse, children }: WhatsA
           >
             <div className="text-left">
               <div className="font-medium text-sm">Mensagem Padrão</div>
-              <div className="text-xs text-muted-foreground mt-1 line-clamp-2">
+              <div className="text-xs text-muted-foreground mt-1 truncate">
                 {replaceVariables(defaultMessage)}
               </div>
             </div>
@@ -93,7 +93,7 @@ const WhatsAppMessagePopover = ({ phone, leadName, interesse, children }: WhatsA
             >
               <div className="text-left">
                 <div className="font-medium text-sm">{template.name}</div>
-                <div className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                <div className="text-xs text-muted-foreground mt-1 truncate">
                   {replaceVariables(template.template)}
                 </div>
               </div>
