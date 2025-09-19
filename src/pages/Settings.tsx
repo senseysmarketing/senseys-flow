@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Edit2, Trash2, Move, User, Settings as SettingsIcon, Palette } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Plus, Edit2, Trash2, Move, User, Settings as SettingsIcon, Palette, MessageCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
@@ -28,6 +29,14 @@ interface LeadStatus {
   is_default: boolean;
 }
 
+interface WhatsAppTemplate {
+  id: string;
+  name: string;
+  template: string;
+  position: number;
+  is_active: boolean;
+}
+
 const PRESET_COLORS = [
   "#ef4444", "#f97316", "#f59e0b", "#eab308",
   "#84cc16", "#22c55e", "#10b981", "#14b8a6",
@@ -41,11 +50,18 @@ const SettingsPage = () => {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [leadStatuses, setLeadStatuses] = useState<LeadStatus[]>([]);
+  const [whatsappTemplates, setWhatsappTemplates] = useState<WhatsAppTemplate[]>([]);
   const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false);
+  const [isWhatsAppDialogOpen, setIsWhatsAppDialogOpen] = useState(false);
   const [editingStatus, setEditingStatus] = useState<LeadStatus | null>(null);
+  const [editingTemplate, setEditingTemplate] = useState<WhatsAppTemplate | null>(null);
   const [statusForm, setStatusForm] = useState({
     name: "",
     color: "#5a5f65"
+  });
+  const [templateForm, setTemplateForm] = useState({
+    name: "",
+    template: ""
   });
   const [profileForm, setProfileForm] = useState({
     full_name: "",
@@ -55,7 +71,8 @@ const SettingsPage = () => {
   useEffect(() => {
     if (user) {
       fetchProfile();
-      fetchLeadStatuses(); 
+      fetchLeadStatuses();
+      fetchWhatsAppTemplates();
     }
   }, [user]);
 
@@ -97,6 +114,26 @@ const SettingsPage = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchWhatsAppTemplates = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("whatsapp_templates")
+        .select("*")
+        .eq("is_active", true)
+        .order("position", { ascending: true });
+
+      if (error) throw error;
+      setWhatsappTemplates(data || []);
+    } catch (error) {
+      console.error("Erro ao buscar templates:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Não foi possível carregar os templates do WhatsApp.",
+      });
     }
   };
 
@@ -226,6 +263,102 @@ const SettingsPage = () => {
     }
   };
 
+  const handleTemplateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!templateForm.name.trim() || !templateForm.template.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Nome e mensagem são obrigatórios.",
+      });
+      return;
+    }
+
+    try {
+      if (editingTemplate) {
+        // Atualizar template existente
+        const { error } = await supabase
+          .from("whatsapp_templates")
+          .update({
+            name: templateForm.name,
+            template: templateForm.template
+          })
+          .eq("id", editingTemplate.id);
+
+        if (error) throw error;
+
+        toast({
+          title: "Sucesso",
+          description: "Mensagem atualizada com sucesso!",
+        });
+      } else {
+        // Criar novo template
+        const maxPosition = Math.max(...whatsappTemplates.map(t => t.position), -1);
+        
+        // Get user's account_id
+        const { data: accountData, error: accountError } = await supabase
+          .rpc('get_user_account_id');
+        
+        if (accountError) throw accountError;
+        
+        const { error } = await supabase
+          .from("whatsapp_templates")
+          .insert([{
+            name: templateForm.name,
+            template: templateForm.template,
+            position: maxPosition + 1,
+            is_active: true,
+            account_id: accountData
+          }]);
+
+        if (error) throw error;
+
+        toast({
+          title: "Sucesso",
+          description: "Mensagem criada com sucesso!",
+        });
+      }
+
+      setIsWhatsAppDialogOpen(false);
+      setEditingTemplate(null);
+      setTemplateForm({ name: "", template: "" });
+      fetchWhatsAppTemplates();
+    } catch (error) {
+      console.error("Erro ao salvar template:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Não foi possível salvar a mensagem.",
+      });
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId: string) => {
+    try {
+      const { error } = await supabase
+        .from("whatsapp_templates")
+        .delete()
+        .eq("id", templateId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Sucesso",
+        description: "Mensagem removida com sucesso!",
+      });
+
+      fetchWhatsAppTemplates();
+    } catch (error) {
+      console.error("Erro ao remover template:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Não foi possível remover a mensagem.",
+      });
+    }
+  };
+
   const handleDragEnd = async (result: any) => {
     if (!result.destination) return;
 
@@ -307,6 +440,10 @@ const SettingsPage = () => {
           <TabsTrigger value="statuses">
             <SettingsIcon className="h-4 w-4 mr-2" />
             Status dos Leads
+          </TabsTrigger>
+          <TabsTrigger value="whatsapp">
+            <MessageCircle className="h-4 w-4 mr-2" />
+            Mensagens WhatsApp
           </TabsTrigger>
         </TabsList>
 
@@ -472,6 +609,106 @@ const SettingsPage = () => {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="whatsapp">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Mensagens WhatsApp</CardTitle>
+                  <CardDescription>
+                    Configure até 3 mensagens personalizadas para enviar aos leads. Use {"{nome}"} para o nome do lead e {"{interesse}"} para o interesse.
+                  </CardDescription>
+                </div>
+                {whatsappTemplates.length < 3 && (
+                  <Button onClick={() => {
+                    setEditingTemplate(null);
+                    setTemplateForm({ name: "", template: "" });
+                    setIsWhatsAppDialogOpen(true);
+                  }}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Nova Mensagem
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Default message preview */}
+              <div className="p-4 border rounded-lg bg-muted/50">
+                <div className="flex items-center gap-2 mb-2">
+                  <MessageCircle className="h-4 w-4 text-primary" />
+                  <span className="font-medium">Mensagem Padrão</span>
+                  <Badge variant="outline">Sistema</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Olá {"{nome}"}! Recebi seu cadastro com interesse no(a) {"{interesse}"}. Como posso te ajudar?
+                </p>
+              </div>
+
+              {/* Custom templates */}
+              {whatsappTemplates.map((template, index) => (
+                <div key={template.id} className="p-4 border rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <MessageCircle className="h-4 w-4 text-primary" />
+                      <span className="font-medium">{template.name}</span>
+                      <Badge variant="outline">Personalizada {index + 1}</Badge>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setEditingTemplate(template);
+                          setTemplateForm({
+                            name: template.name,
+                            template: template.template
+                          });
+                          setIsWhatsAppDialogOpen(true);
+                        }}
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="sm">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Tem certeza que deseja remover a mensagem "{template.name}"?
+                              Esta ação não pode ser desfeita.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleDeleteTemplate(template.id)}
+                            >
+                              Remover
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{template.template}</p>
+                </div>
+              ))}
+
+              {whatsappTemplates.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <MessageCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>Nenhuma mensagem personalizada configurada</p>
+                  <p className="text-sm">Crie até 3 mensagens personalizadas para usar com seus leads</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Dialog para criar/editar status */}
@@ -549,6 +786,61 @@ const SettingsPage = () => {
               </Button>
               <Button type="submit">
                 {editingStatus ? "Atualizar" : "Criar"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog para criar/editar templates WhatsApp */}
+      <Dialog open={isWhatsAppDialogOpen} onOpenChange={setIsWhatsAppDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingTemplate ? "Editar Mensagem" : "Nova Mensagem"}
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleTemplateSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="template-name">Nome da Mensagem *</Label>
+              <Input
+                id="template-name"
+                value={templateForm.name}
+                onChange={(e) => setTemplateForm({
+                  ...templateForm,
+                  name: e.target.value
+                })}
+                placeholder="Ex: Primeira mensagem"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="template-text">Mensagem *</Label>
+              <Textarea
+                id="template-text"
+                value={templateForm.template}
+                onChange={(e) => setTemplateForm({
+                  ...templateForm,
+                  template: e.target.value
+                })}
+                placeholder="Digite sua mensagem aqui. Use {nome} para o nome do lead e {interesse} para o interesse."
+                rows={4}
+              />
+              <p className="text-xs text-muted-foreground">
+                Variáveis disponíveis: {"{nome}"} e {"{interesse}"}
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsWhatsAppDialogOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit">
+                {editingTemplate ? "Atualizar" : "Criar"}
               </Button>
             </div>
           </form>

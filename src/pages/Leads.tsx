@@ -28,6 +28,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
+import WhatsAppMessagePopover from "@/components/WhatsAppMessagePopover";
 
 interface Lead {
   id: string;
@@ -346,11 +347,6 @@ const Leads = () => {
     return `${day}/${month}`;
   };
 
-  const openWhatsApp = (phone: string, name: string) => {
-    const message = `Olá ${name}! Aqui é da Senseys - Marketing Imobiliário. Como posso te ajudar?`;
-    const whatsappUrl = `https://wa.me/55${phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
-  };
 
   const filteredLeads = leads.filter(lead =>
     lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -633,15 +629,20 @@ const Leads = () => {
                                 </div>
                                 
                                 <div className="flex gap-2 mt-3">
-                                  <Button 
-                                    size="sm" 
-                                    variant="outline" 
-                                    className="flex-1 h-7 text-xs gap-1"
-                                    onClick={() => openWhatsApp(lead.phone, lead.name)}
+                                  <WhatsAppMessagePopover 
+                                    phone={lead.phone} 
+                                    leadName={lead.name}
+                                    interesse={lead.interesse}
                                   >
-                                    <MessageCircle className="h-3 w-3" />
-                                    WhatsApp
-                                  </Button>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline" 
+                                      className="flex-1 h-7 text-xs gap-1"
+                                    >
+                                      <MessageCircle className="h-3 w-3" />
+                                      WhatsApp
+                                    </Button>
+                                  </WhatsAppMessagePopover>
                                 </div>
                               </div>
                             )}
@@ -732,13 +733,18 @@ const Leads = () => {
                     </div>
                     
                     <div className="flex gap-2">
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => openWhatsApp(lead.phone, lead.name)}
+                      <WhatsAppMessagePopover 
+                        phone={lead.phone} 
+                        leadName={lead.name}
+                        interesse={lead.interesse}
                       >
-                        <MessageCircle className="h-4 w-4" />
-                      </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                        </Button>
+                      </WhatsAppMessagePopover>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
@@ -968,13 +974,16 @@ const Leads = () => {
               </div>
 
               <div className="flex justify-end gap-2 pt-4">
-                <Button 
-                  variant="outline"
-                  onClick={() => openWhatsApp(selectedLead.phone, selectedLead.name)}
+                <WhatsAppMessagePopover 
+                  phone={selectedLead.phone} 
+                  leadName={selectedLead.name}
+                  interesse={selectedLead.interesse}
                 >
-                  <MessageCircle className="h-4 w-4 mr-2" />
-                  WhatsApp
-                </Button>
+                  <Button variant="outline">
+                    <MessageCircle className="h-4 w-4 mr-2" />
+                    WhatsApp
+                  </Button>
+                </WhatsAppMessagePopover>
                 <Button onClick={() => {
                   setIsDetailDialogOpen(false);
                   handleEditLead(selectedLead);
