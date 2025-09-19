@@ -78,7 +78,9 @@ const WhatsAppMessagePopover = ({ phone, leadName, interesse, children }: WhatsA
             <div className="text-left">
               <div className="font-medium text-sm">Mensagem Padrão</div>
               <div className="text-xs text-muted-foreground mt-1 truncate">
-                {replaceVariables(defaultMessage)}
+                {replaceVariables(defaultMessage).length > 30 
+                  ? `${replaceVariables(defaultMessage).substring(0, 30)}...` 
+                  : replaceVariables(defaultMessage)}
               </div>
             </div>
           </Button>
@@ -94,7 +96,9 @@ const WhatsAppMessagePopover = ({ phone, leadName, interesse, children }: WhatsA
               <div className="text-left">
                 <div className="font-medium text-sm">{template.name}</div>
                 <div className="text-xs text-muted-foreground mt-1 truncate">
-                  {replaceVariables(template.template)}
+                  {replaceVariables(template.template).length > 30 
+                    ? `${replaceVariables(template.template).substring(0, 30)}...` 
+                    : replaceVariables(template.template)}
                 </div>
               </div>
             </Button>
