@@ -6,14 +6,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Clock, MapPin, User } from "lucide-react";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Plus, Clock, MapPin, User, Check, ChevronsUpDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
 import { format, isToday, isSameDay, startOfDay, endOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 interface Event {
   id: string;
@@ -42,6 +44,7 @@ const CalendarPage = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [leadPopoverOpen, setLeadPopoverOpen] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -145,6 +148,7 @@ const CalendarPage = () => {
         end_time: "",
         lead_id: "",
       });
+      setLeadPopoverOpen(false);
       fetchEvents();
     } catch (error) {
       console.error("Erro ao criar evento:", error);
@@ -208,21 +212,62 @@ const CalendarPage = () => {
 
               <div className="space-y-2">
                 <Label htmlFor="lead_id">Lead (opcional)</Label>
-                <Select
-                  value={formData.lead_id}
-                  onValueChange={(value) => setFormData({ ...formData, lead_id: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um lead" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {leads.map((lead) => (
-                      <SelectItem key={lead.id} value={lead.id}>
-                        {lead.name} - {lead.phone}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={leadPopoverOpen} onOpenChange={setLeadPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={leadPopoverOpen}
+                      className="w-full justify-between"
+                    >
+                      {formData.lead_id
+                        ? leads.find((lead) => lead.id === formData.lead_id)?.name
+                        : "Buscar lead..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0">
+                    <Command>
+                      <CommandInput placeholder="Digite o nome do lead..." />
+                      <CommandList>
+                        <CommandEmpty>Nenhum lead encontrado.</CommandEmpty>
+                        <CommandGroup>
+                          {formData.lead_id && (
+                            <CommandItem
+                              onSelect={() => {
+                                setFormData({ ...formData, lead_id: "" });
+                                setLeadPopoverOpen(false);
+                              }}
+                            >
+                              <span className="text-muted-foreground">Limpar seleção</span>
+                            </CommandItem>
+                          )}
+                          {leads.map((lead) => (
+                            <CommandItem
+                              key={lead.id}
+                              value={lead.name}
+                              onSelect={() => {
+                                setFormData({ ...formData, lead_id: lead.id });
+                                setLeadPopoverOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  formData.lead_id === lead.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              <div className="flex flex-col">
+                                <span>{lead.name}</span>
+                                <span className="text-sm text-muted-foreground">{lead.phone}</span>
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
