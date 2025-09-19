@@ -5,6 +5,7 @@ import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGrou
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
+import logoAlternativaBranca from "@/assets/logo-alternativa-branca.png";
 const menuItems = [{
   title: "Dashboard",
   url: "/dashboard",
@@ -50,14 +51,12 @@ export function AppSidebar() {
       <SidebarContent className="bg-sidebar">
         {/* Logo/Brand */}
         <div className="p-4 border-b border-sidebar-border">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <Building2 className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-sidebar-foreground">Senseys</p>
-              <p className="text-xs text-sidebar-foreground/70">Marketing de Performance</p>
-            </div>
+          <div className="flex items-center justify-center">
+            <img 
+              src={logoAlternativaBranca} 
+              alt="Logo" 
+              className="h-8 w-auto"
+            />
           </div>
         </div>
 
