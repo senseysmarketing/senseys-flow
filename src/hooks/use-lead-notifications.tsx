@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './use-auth';
 import { toast } from './use-toast';
 
-export const useLeadNotifications = (onNewLead?: () => void) => {
+export const useLeadNotifications = (onNewLead?: () => void, enabled: boolean = true) => {
   const { user } = useAuth();
 
   // Função para reproduzir som de notificação
@@ -56,7 +56,7 @@ export const useLeadNotifications = (onNewLead?: () => void) => {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !enabled) return;
 
     // Solicitar permissão para notificações quando o hook for usado
     requestNotificationPermission();
@@ -101,7 +101,7 @@ export const useLeadNotifications = (onNewLead?: () => void) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, playNotificationSound, showBrowserNotification, onNewLead, requestNotificationPermission]);
+  }, [user, enabled, playNotificationSound, showBrowserNotification, onNewLead, requestNotificationPermission]);
 
   return {
     playNotificationSound,

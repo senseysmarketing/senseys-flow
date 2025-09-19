@@ -24,11 +24,14 @@ import {
   Edit,
   Trash,
   Grid,
-  List
+  List,
+  Bell,
+  BellOff
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
+import { useLeadNotifications } from "@/hooks/use-lead-notifications";
 import WhatsAppMessagePopover from "@/components/WhatsAppMessagePopover";
 
 interface Lead {
@@ -71,6 +74,29 @@ const Leads = () => {
     startDate: "",
     endDate: ""
   });
+  const [notificationsEnabled, setNotificationsEnabled] = useState(
+    localStorage.getItem('lead-notifications-enabled') !== 'false'
+  );
+
+  // Ativar notificações de novos leads (apenas se habilitado)
+  useLeadNotifications(notificationsEnabled ? () => {
+    // Recarregar dados quando um novo lead for adicionado
+    fetchData();
+  } : undefined, notificationsEnabled);
+
+  // Função para alternar notificações
+  const toggleNotifications = () => {
+    const newState = !notificationsEnabled;
+    setNotificationsEnabled(newState);
+    localStorage.setItem('lead-notifications-enabled', newState.toString());
+    
+    toast({
+      title: newState ? "🔔 Notificações Ativadas" : "🔕 Notificações Desativadas",
+      description: newState 
+        ? "Você receberá sons e alertas quando novos leads forem adicionados" 
+        : "Não receberá mais notificações sonoras de novos leads",
+    });
+  };
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   
   const [newLead, setNewLead] = useState({
@@ -644,6 +670,21 @@ const Leads = () => {
           >
             <List className="h-4 w-4" />
             Lista
+          </Button>
+          
+          <Button
+            variant={notificationsEnabled ? 'default' : 'outline'}
+            size="sm"
+            onClick={toggleNotifications}
+            className="gap-2"
+            title={notificationsEnabled ? 'Desativar notificações sonoras' : 'Ativar notificações sonoras'}
+          >
+            {notificationsEnabled ? (
+              <Bell className="h-4 w-4" />
+            ) : (
+              <BellOff className="h-4 w-4" />
+            )}
+            {notificationsEnabled ? 'Sons On' : 'Sons Off'}
           </Button>
         </div>
       </div>
