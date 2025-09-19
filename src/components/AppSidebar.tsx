@@ -51,7 +51,7 @@ export function AppSidebar() {
       <SidebarContent className="bg-sidebar">
         {/* Logo/Brand */}
         <div className="p-4 border-b border-sidebar-border">
-          <div className="flex items-center justify-center">
+          <div className="flex items-center">
             <img 
               src={logoAlternativaBranca} 
               alt="Logo" 
