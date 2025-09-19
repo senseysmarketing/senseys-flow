@@ -57,17 +57,8 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error('Could not find user profile');
     }
 
-    // Check if email already exists
-    const { data: existingUser } = await supabaseAdmin.auth.admin.getUserByEmail(email);
-    if (existingUser?.user) {
-      return new Response(
-        JSON.stringify({ error: 'Este email já está cadastrado no sistema' }),
-        { 
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      );
-    }
+    // Try to create the new user - if email exists, Supabase will return an error
+    // We'll handle duplicate email in the createUser error handling below
 
     // Create the new user
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
@@ -79,9 +70,27 @@ const handler = async (req: Request): Promise<Response> => {
       email_confirm: true // Auto-confirm email for team members
     });
 
-    if (createError || !newUser.user) {
+    if (createError) {
       console.error('Error creating user:', createError);
+      
+      // Check if it's a duplicate email error
+      if (createError.message?.includes('already been registered') || 
+          createError.message?.includes('email address is already registered') ||
+          createError.message?.includes('User already registered')) {
+        return new Response(
+          JSON.stringify({ error: 'Este email já está cadastrado no sistema' }),
+          { 
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
+      
       throw new Error('Falha ao criar usuário: ' + (createError?.message || 'Erro desconhecido'));
+    }
+
+    if (!newUser.user) {
+      throw new Error('Usuário criado mas dados não retornados');
     }
 
     // Update the new user's profile to use the same account_id
