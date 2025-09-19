@@ -8,11 +8,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Edit2, Trash2, Move, User, Settings as SettingsIcon, Palette, MessageCircle } from "lucide-react";
+import { Plus, Edit2, Trash2, Move, User, Settings as SettingsIcon, Palette, MessageCircle, Bell } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import FollowUpSettings from "@/components/FollowUpSettings";
 
 interface Profile {
   id: string;
@@ -445,6 +446,10 @@ const SettingsPage = () => {
             <MessageCircle className="h-4 w-4 mr-2" />
             Mensagens WhatsApp
           </TabsTrigger>
+          <TabsTrigger value="followup">
+            <Bell className="h-4 w-4 mr-2" />
+            Follow-up
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile">
@@ -708,6 +713,76 @@ const SettingsPage = () => {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="followup">
+          <div className="grid gap-6 md:grid-cols-2">
+            <FollowUpSettings />
+            
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Bell className="h-5 w-5" />
+                  Sobre os Lembretes de Follow-up
+                </CardTitle>
+                <CardDescription>
+                  Como funcionam as notificações automáticas
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-2 h-2 bg-primary rounded-full mt-2"></div>
+                    <div>
+                      <p className="font-medium">Detecção Automática</p>
+                      <p className="text-sm text-muted-foreground">
+                        O sistema identifica automaticamente leads que estão há muito tempo no status "Novo Lead"
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-start gap-3">
+                    <div className="w-2 h-2 bg-orange-500 rounded-full mt-2"></div>
+                    <div>
+                      <p className="font-medium">Notificações Inteligentes</p>
+                      <p className="text-sm text-muted-foreground">
+                        Receba alertes em intervalos configuráveis para não esquecer de fazer follow-up
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-start gap-3">
+                    <div className="w-2 h-2 bg-red-500 rounded-full mt-2"></div>
+                    <div>
+                      <p className="font-medium">Priorização</p>
+                      <p className="text-sm text-muted-foreground">
+                        Leads há mais de 14 dias são marcados como urgentes e recebem destaque especial
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-start gap-3">
+                    <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
+                    <div>
+                      <p className="font-medium">Ação Rápida</p>
+                      <p className="text-sm text-muted-foreground">
+                        Um clique para marcar leads como contatados e remover dos lembretes
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="pt-4 border-t">
+                  <p className="text-sm font-medium mb-2">💡 Dicas:</p>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    <li>• Configure intervalos menores para períodos de maior atividade</li>
+                    <li>• Use "Apenas Urgentes" para reduzir notificações desnecessárias</li>
+                    <li>• Ajuste o threshold de dias conforme sua estratégia de vendas</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
 

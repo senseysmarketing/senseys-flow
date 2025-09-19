@@ -10,12 +10,17 @@ import {
   Plus, 
   FileDown,
   Calendar,
-  Activity
+  Activity,
+  Clock,
+  AlertCircle,
+  Phone
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { useOldLeads } from "@/hooks/use-old-leads";
+import { useFollowUpReminders } from "@/hooks/use-follow-up-reminders";
 
 interface DashboardStats {
   totalLeads: number;
@@ -62,6 +67,12 @@ const Dashboard = () => {
   const [recentLeads, setRecentLeads] = useState<RecentLead[]>([]);
   const [todayEvents, setTodayEvents] = useState<TodayEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Hook para leads antigos que precisam de follow-up
+  const { oldLeads, loading: oldLeadsLoading, markLeadAsContacted } = useOldLeads(7);
+  
+  // Hook para lembretes automáticos de follow-up
+  const { scheduleCustomReminder, highPriorityCount } = useFollowUpReminders();
 
   useEffect(() => {
     fetchDashboardData();
@@ -260,6 +271,13 @@ const Dashboard = () => {
             <p className="text-xs text-muted-foreground">
               Leads ativos no funil
             </p>
+            {highPriorityCount > 0 && (
+              <div className="mt-2">
+                <Badge variant="destructive" className="text-xs">
+                  {highPriorityCount} urgentes
+                </Badge>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -390,6 +408,89 @@ const Dashboard = () => {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Follow-up Alerts */}
+      <Card className="border-orange-200 bg-orange-50/50 dark:border-orange-800 dark:bg-orange-950/20">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-orange-600" />
+            <CardTitle className="text-orange-800 dark:text-orange-200">
+              Leads Precisam de Follow-up
+            </CardTitle>
+          </div>
+          <CardDescription className="text-orange-700/80 dark:text-orange-300/80">
+            Leads que estão há mais de 7 dias como "Novo Lead"
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {oldLeadsLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-600"></div>
+            </div>
+          ) : oldLeads.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Clock className="h-12 w-12 mx-auto mb-4 opacity-50 text-green-600" />
+              <p className="text-green-700 dark:text-green-300 font-medium">
+                ✅ Todos os leads estão atualizados!
+              </p>
+              <p className="text-sm">Nenhum lead antigo precisa de follow-up</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {oldLeads.slice(0, 5).map((lead) => (
+                <div 
+                  key={lead.id}
+                  className="flex items-center justify-between p-4 bg-white dark:bg-card border border-orange-200 dark:border-orange-800 rounded-lg hover:shadow-md transition-all"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-medium text-foreground">{lead.name}</h4>
+                      <Badge variant="outline" className="text-orange-700 border-orange-300">
+                        {lead.days_since_creation} dias
+                      </Badge>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {lead.phone} • {lead.email && `${lead.email} • `}
+                      {lead.origem && `${lead.origem} • `}
+                      Criado em {new Date(lead.created_at).toLocaleDateString('pt-BR')}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      className="gap-2"
+                      onClick={() => markLeadAsContacted(lead.id)}
+                    >
+                      <Phone className="h-4 w-4" />
+                      Marcar Contatado
+                    </Button>
+                    <Button 
+                      size="sm"
+                      onClick={() => navigate('/leads')}
+                    >
+                      Ver Lead
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              
+              {oldLeads.length > 5 && (
+                <div className="text-center pt-4">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => navigate('/leads')}
+                    className="gap-2"
+                  >
+                    <AlertCircle className="h-4 w-4" />
+                    Ver todos os {oldLeads.length} leads antigos
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
