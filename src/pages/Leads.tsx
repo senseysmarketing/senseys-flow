@@ -580,7 +580,6 @@ const Leads = () => {
                         <SelectValue placeholder="Todos os status" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Todos os status</SelectItem>
                         {statuses.map((status) => (
                           <SelectItem key={status.id} value={status.id}>
                             {status.name}
