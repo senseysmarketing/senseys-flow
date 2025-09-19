@@ -291,6 +291,39 @@ export type Database = {
           },
         ]
       }
+      team_invites: {
+        Row: {
+          account_id: string
+          created_at: string
+          email: string
+          expires_at: string
+          full_name: string
+          id: string
+          invited_by: string
+          used: boolean
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          email: string
+          expires_at?: string
+          full_name: string
+          id?: string
+          invited_by: string
+          used?: boolean
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          email?: string
+          expires_at?: string
+          full_name?: string
+          id?: string
+          invited_by?: string
+          used?: boolean
+        }
+        Relationships: []
+      }
       whatsapp_templates: {
         Row: {
           account_id: string
@@ -329,9 +362,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_team_invite: {
+        Args: { p_invite_id: string }
+        Returns: Json
+      }
       get_user_account_id: {
         Args: Record<PropertyKey, never>
         Returns: string
+      }
+      invite_user_to_account: {
+        Args: {
+          p_email: string
+          p_full_name: string
+          p_password: string
+          p_target_account_id: string
+        }
+        Returns: Json
       }
     }
     Enums: {
