@@ -73,16 +73,57 @@ const handler = async (req: Request): Promise<Response> => {
     if (createError) {
       console.error('Error creating user:', createError);
       
-      // Check if it's a duplicate email error
-      if (createError.message?.includes('already been registered') || 
-          createError.message?.includes('email address is already registered') ||
-          createError.message?.includes('User already registered')) {
-        return new Response(
-          JSON.stringify({ error: 'Este email já está cadastrado no sistema' }),
-          { 
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      // Check if it's a duplicate email error -> attach existing user to this account
+      const duplicate = createError.message?.includes('already been registered') || 
+                        createError.message?.includes('email address is already registered') ||
+                        createError.message?.includes('User already registered');
+      if (duplicate) {
+        // Find existing user by scanning admin users (no direct get by email)
+        let existingUserId: string | null = null;
+        const perPage = 100;
+        for (let page = 1; page <= 10; page++) {
+          const { data: list, error: listErr } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
+          if (listErr) break;
+          const found = list.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
+          if (found) {
+            existingUserId = found.id;
+            break;
           }
+          if (!list.users.length) break;
+        }
+
+        if (!existingUserId) {
+          return new Response(
+            JSON.stringify({ error: 'Email já cadastrado, mas não foi possível localizar o usuário.' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Ensure profile exists and attach to this account
+        const { data: existingProfile } = await supabaseAdmin
+          .from('profiles')
+          .select('id')
+          .eq('user_id', existingUserId)
+          .maybeSingle();
+
+        if (existingProfile) {
+          await supabaseAdmin
+            .from('profiles')
+            .update({ account_id: profile.account_id, full_name })
+            .eq('user_id', existingUserId);
+        } else {
+          await supabaseAdmin
+            .from('profiles')
+            .insert({ user_id: existingUserId, account_id: profile.account_id, full_name });
+        }
+
+        return new Response(
+          JSON.stringify({ 
+            success: true,
+            message: 'Usuário existente vinculado à sua equipe com sucesso!',
+            user: { id: existingUserId, email, full_name }
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       
