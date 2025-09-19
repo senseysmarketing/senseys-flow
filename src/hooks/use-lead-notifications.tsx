@@ -56,14 +56,16 @@ export const useLeadNotifications = (onNewLead?: () => void, enabled: boolean = 
   }, []);
 
   useEffect(() => {
-    if (!user || !enabled) return;
+    if (!user || !enabled) {
+      return;
+    }
 
     // Solicitar permissão para notificações quando o hook for usado
     requestNotificationPermission();
 
     // Configurar listener para mudanças em tempo real na tabela leads
     const channel = supabase
-      .channel('leads-changes')
+      .channel(`leads-changes-${user.id}`) // Nome único do canal para evitar conflitos
       .on(
         'postgres_changes',
         {
@@ -101,7 +103,8 @@ export const useLeadNotifications = (onNewLead?: () => void, enabled: boolean = 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, enabled, playNotificationSound, showBrowserNotification, onNewLead, requestNotificationPermission]);
+  // Removidas dependências desnecessárias que causavam recriação do listener
+  }, [user, enabled]);
 
   return {
     playNotificationSound,
