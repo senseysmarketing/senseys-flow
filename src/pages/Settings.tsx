@@ -8,12 +8,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Edit2, Trash2, Move, User, Settings as SettingsIcon, Palette, MessageCircle, Bell } from "lucide-react";
+import { Plus, Edit2, Trash2, Move, User, Settings as SettingsIcon, Palette, MessageCircle, Bell, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import FollowUpSettings from "@/components/FollowUpSettings";
+import TeamManagement from "@/components/TeamManagement";
 interface Profile {
   id: string;
   full_name: string | null;
@@ -383,6 +384,10 @@ const SettingsPage = () => {
             <User className="h-4 w-4 mr-2" />
             Perfil
           </TabsTrigger>
+          <TabsTrigger value="team">
+            <Users className="h-4 w-4 mr-2" />
+            Equipe
+          </TabsTrigger>
           <TabsTrigger value="statuses">
             <SettingsIcon className="h-4 w-4 mr-2" />
             Status dos Leads
@@ -437,6 +442,10 @@ const SettingsPage = () => {
               </form>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="team">
+          <TeamManagement />
         </TabsContent>
 
         <TabsContent value="statuses">
