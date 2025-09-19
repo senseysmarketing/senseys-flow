@@ -554,9 +554,9 @@ const Leads = () => {
                             {lead.email}
                           </div>
                         )}
-                        {lead.origem && (
+                        {lead.interesse && (
                           <div className="text-xs">
-                            Origem: {lead.origem}
+                            Interesse: {lead.interesse}
                           </div>
                         )}
                       </div>
