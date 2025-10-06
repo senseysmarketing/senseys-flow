@@ -2,3 +2,6 @@ project_id = "ujodxlzlfvdwqufkgdnw"
 
 [functions.create-team-member]
 verify_jwt = true
+
+[functions.webhook-leads]
+verify_jwt = false

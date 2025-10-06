@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Edit2, Trash2, Move, User, Settings as SettingsIcon, Palette, MessageCircle, Bell, Users } from "lucide-react";
+import { Plus, Edit2, Trash2, Move, User, Settings as SettingsIcon, Palette, MessageCircle, Bell, Users, Webhook, Copy, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
@@ -60,13 +60,33 @@ const SettingsPage = () => {
     full_name: "",
     timezone: "America/Sao_Paulo"
   });
+  const [accountId, setAccountId] = useState<string>("");
+  const [copiedUrl, setCopiedUrl] = useState(false);
+  const [copiedPayload, setCopiedPayload] = useState(false);
+  const [testingWebhook, setTestingWebhook] = useState(false);
   useEffect(() => {
     if (user) {
       fetchProfile();
       fetchLeadStatuses();
       fetchWhatsAppTemplates();
+      fetchAccountId();
     }
   }, [user]);
+
+  const fetchAccountId = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("account_id")
+        .eq("user_id", user!.id)
+        .single();
+      
+      if (error) throw error;
+      setAccountId(data.account_id);
+    } catch (error) {
+      console.error("Erro ao buscar account_id:", error);
+    }
+  };
   const fetchProfile = async () => {
     try {
       const {
@@ -400,6 +420,10 @@ const SettingsPage = () => {
             <Bell className="h-4 w-4 mr-2" />
             Follow-up
           </TabsTrigger>
+          <TabsTrigger value="webhook">
+            <Webhook className="h-4 w-4 mr-2" />
+            Webhook
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile">
@@ -676,6 +700,202 @@ const SettingsPage = () => {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="webhook">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Webhook className="h-5 w-5" />
+                Configuração do Webhook
+              </CardTitle>
+              <CardDescription>
+                Receba leads automaticamente através de integrações externas
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* URL do Webhook */}
+              <div className="space-y-3">
+                <Label className="text-base font-semibold">URL do Webhook</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={`https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/webhook-leads?account_id=${accountId}`}
+                    readOnly
+                    className="font-mono text-sm"
+                  />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => {
+                      navigator.clipboard.writeText(
+                        `https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/webhook-leads?account_id=${accountId}`
+                      );
+                      setCopiedUrl(true);
+                      setTimeout(() => setCopiedUrl(false), 2000);
+                      toast({
+                        title: "Copiado!",
+                        description: "URL do webhook copiada para a área de transferência",
+                      });
+                    }}
+                  >
+                    {copiedUrl ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Esta URL é única para sua conta. Use-a para enviar leads de sistemas externos.
+                </p>
+              </div>
+
+              {/* Método e Headers */}
+              <div className="space-y-3">
+                <Label className="text-base font-semibold">Como Enviar</Label>
+                <div className="bg-muted p-4 rounded-lg space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Badge>POST</Badge>
+                    <span className="text-sm font-mono">Content-Type: application/json</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payload de Exemplo */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-base font-semibold">Payload de Exemplo (JSON)</Label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      const payload = JSON.stringify({
+                        name: "João Silva",
+                        phone: "11999999999",
+                        email: "joao@exemplo.com",
+                        conjunto: "Apartamento 101",
+                        campanha: "Facebook Ads",
+                        interesse: "Compra",
+                        observacoes: "Cliente interessado em imóveis de 2 quartos",
+                        origem: "Site",
+                        anuncio: "Banner Principal"
+                      }, null, 2);
+                      navigator.clipboard.writeText(payload);
+                      setCopiedPayload(true);
+                      setTimeout(() => setCopiedPayload(false), 2000);
+                      toast({
+                        title: "Copiado!",
+                        description: "Payload copiado para a área de transferência",
+                      });
+                    }}
+                  >
+                    {copiedPayload ? <Check className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
+                    Copiar
+                  </Button>
+                </div>
+                <pre className="bg-muted p-4 rounded-lg text-xs overflow-x-auto">
+{`{
+  "name": "João Silva",          // Obrigatório
+  "phone": "11999999999",       // Obrigatório
+  "email": "joao@exemplo.com",  // Opcional
+  "conjunto": "Apartamento 101", // Opcional
+  "campanha": "Facebook Ads",    // Opcional
+  "interesse": "Compra",         // Opcional
+  "observacoes": "Cliente interessado...", // Opcional
+  "origem": "Site",              // Opcional
+  "anuncio": "Banner Principal"  // Opcional
+}`}
+                </pre>
+                <p className="text-sm text-muted-foreground">
+                  ⚠️ Campos obrigatórios: <strong>name</strong> e <strong>phone</strong>
+                </p>
+              </div>
+
+              {/* Botão de Teste */}
+              <div className="pt-4 border-t">
+                <Button
+                  onClick={async () => {
+                    setTestingWebhook(true);
+                    try {
+                      const response = await fetch(
+                        `https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/webhook-leads?account_id=${accountId}`,
+                        {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                          },
+                          body: JSON.stringify({
+                            name: "Lead de Teste",
+                            phone: "11999887766",
+                            email: "teste@webhook.com",
+                            conjunto: "Teste Webhook",
+                            campanha: "Teste",
+                            interesse: "Teste de Integração",
+                            observacoes: "Este é um lead de teste criado via webhook",
+                            origem: "Webhook Test",
+                            anuncio: "Teste"
+                          })
+                        }
+                      );
+
+                      const data = await response.json();
+
+                      if (response.ok) {
+                        toast({
+                          title: "✅ Webhook Funcionando!",
+                          description: "Lead de teste criado com sucesso. Verifique na página de Leads.",
+                        });
+                      } else {
+                        toast({
+                          variant: "destructive",
+                          title: "Erro no Webhook",
+                          description: data.error || "Não foi possível criar o lead de teste",
+                        });
+                      }
+                    } catch (error) {
+                      toast({
+                        variant: "destructive",
+                        title: "Erro de Conexão",
+                        description: "Não foi possível conectar ao webhook",
+                      });
+                    } finally {
+                      setTestingWebhook(false);
+                    }
+                  }}
+                  disabled={testingWebhook || !accountId}
+                  className="w-full"
+                >
+                  {testingWebhook ? "Testando..." : "🧪 Testar Webhook"}
+                </Button>
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  Isso criará um lead de teste na sua conta para verificar se o webhook está funcionando
+                </p>
+              </div>
+
+              {/* Respostas Esperadas */}
+              <div className="space-y-3">
+                <Label className="text-base font-semibold">Respostas do Webhook</Label>
+                <div className="space-y-2 text-sm">
+                  <div className="bg-green-50 dark:bg-green-950 p-3 rounded border border-green-200 dark:border-green-800">
+                    <p className="font-semibold text-green-900 dark:text-green-100">✅ Sucesso (201)</p>
+                    <pre className="text-xs mt-1 text-green-800 dark:text-green-200">
+{`{
+  "success": true,
+  "lead_id": "uuid-do-lead",
+  "message": "Lead criado com sucesso"
+}`}
+                    </pre>
+                  </div>
+                  
+                  <div className="bg-red-50 dark:bg-red-950 p-3 rounded border border-red-200 dark:border-red-800">
+                    <p className="font-semibold text-red-900 dark:text-red-100">❌ Erro (400/500)</p>
+                    <pre className="text-xs mt-1 text-red-800 dark:text-red-200">
+{`{
+  "error": "Mensagem de erro",
+  "details": "Detalhes específicos"
+}`}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
