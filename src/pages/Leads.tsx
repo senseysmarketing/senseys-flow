@@ -125,13 +125,29 @@ const Leads = () => {
     if (!user) return;
 
     try {
+      // Debug: Check current session
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log('Current session user:', session?.user?.id);
+      
+      // Debug: Check profile
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('account_id')
+        .eq('user_id', user.id)
+        .single();
+      
+      console.log('User profile account_id:', profile?.account_id, 'Error:', profileError);
+
       // Fetch statuses
       const { data: statusData, error: statusError } = await supabase
         .from('lead_status')
         .select('*')
         .order('position');
 
-      if (statusError) throw statusError;
+      if (statusError) {
+        console.error('Status fetch error:', statusError);
+        throw statusError;
+      }
       setStatuses(statusData || []);
 
       // Fetch leads
@@ -146,7 +162,12 @@ const Leads = () => {
         `)
         .order('created_at', { ascending: false });
 
-      if (leadsError) throw leadsError;
+      console.log('Leads fetch result:', { count: leadsData?.length, error: leadsError });
+      
+      if (leadsError) {
+        console.error('Leads fetch error:', leadsError);
+        throw leadsError;
+      }
       setLeads(leadsData || []);
 
     } catch (error: any) {
