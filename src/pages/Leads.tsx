@@ -168,7 +168,33 @@ const Leads = () => {
         console.error('Leads fetch error:', leadsError);
         throw leadsError;
       }
-      setLeads(leadsData || []);
+
+      // Atribuir status padrão para leads sem status_id
+      const defaultStatus = statusData?.find(s => s.is_default) || statusData?.[0];
+      const leadsWithoutStatus = leadsData?.filter(l => !l.status_id) || [];
+      
+      console.log('Leads sem status:', leadsWithoutStatus.length);
+      console.log('Status padrão:', defaultStatus);
+
+      // Atualizar leads sem status no banco de dados
+      if (leadsWithoutStatus.length > 0 && defaultStatus) {
+        const updatePromises = leadsWithoutStatus.map(lead =>
+          supabase
+            .from('leads')
+            .update({ status_id: defaultStatus.id })
+            .eq('id', lead.id)
+        );
+        
+        await Promise.all(updatePromises);
+        console.log('Leads atualizadas com status padrão:', leadsWithoutStatus.length);
+      }
+
+      const leadsWithStatus = leadsData?.map(lead => ({
+        ...lead,
+        status_id: lead.status_id || defaultStatus?.id
+      })) || [];
+
+      setLeads(leadsWithStatus);
 
     } catch (error: any) {
       toast({
