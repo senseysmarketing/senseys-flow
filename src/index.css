@@ -177,7 +177,6 @@ All colors MUST be HSL.
   }
 
   .kanban-column {
-    min-height: 600px;
     @apply bg-muted/30 rounded-lg p-4;
   }
 }
