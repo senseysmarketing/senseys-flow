@@ -740,118 +740,120 @@ const Leads = () => {
       {viewMode === 'kanban' ? (
         // Kanban View with Drag and Drop
         <DragDropContext onDragEnd={onDragEnd}>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {statuses.map((status) => {
-              const statusLeads = getLeadsByStatus(status.id);
-              return (
-                <div key={status.id} className="kanban-column">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div 
-                      className="w-3 h-3 rounded-full" 
-                      style={{ backgroundColor: status.color }}
-                    />
-                    <h3 className="font-semibold">{status.name}</h3>
-                    <Badge variant="secondary" className="ml-auto">
-                      {statusLeads.length}
-                    </Badge>
-                  </div>
-                  
-                   <Droppable droppableId={status.id}>
-                     {(provided, snapshot) => (
-                       <div
-                         ref={provided.innerRef}
-                         {...provided.droppableProps}
-                         className={`space-y-3 min-h-[200px] max-h-[400px] overflow-y-auto p-2 rounded-lg transition-colors ${
-                           snapshot.isDraggingOver ? 'bg-muted/50' : ''
-                         }`}
-                       >
-                         {statusLeads.map((lead, index) => (
-                          <Draggable key={lead.id} draggableId={lead.id} index={index}>
-                            {(provided, snapshot) => (
-                              <div
-                                ref={provided.innerRef}
-                                {...provided.draggableProps}
-                                {...provided.dragHandleProps}
-                                className={`lead-card transition-transform ${
-                                  snapshot.isDragging ? 'rotate-2 scale-105 shadow-lg' : ''
-                                }`}
-                              >
-                                 <div className="flex items-start justify-between mb-2">
-                                   <div>
-                                     <h4 className="font-medium text-sm">{lead.name}</h4>
-                                     <span className="text-xs text-muted-foreground">{formatDate(lead.created_at)}</span>
-                                   </div>
-                                   <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                                        <MoreVertical className="h-3 w-3" />
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                      <DropdownMenuItem onClick={() => handleViewDetails(lead)}>
-                                        <Eye className="h-4 w-4 mr-2" />
-                                        Ver detalhes
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem onClick={() => handleEditLead(lead)}>
-                                        <Edit className="h-4 w-4 mr-2" />
-                                        Editar lead
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem 
-                                        onClick={() => handleDeleteLead(lead.id)}
-                                        className="text-destructive"
-                                      >
-                                        <Trash className="h-4 w-4 mr-2" />
-                                        Deletar
-                                      </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
-                                </div>
-                                
-                                <div className="space-y-1 text-xs text-muted-foreground">
-                                  <div className="flex items-center gap-2">
-                                    <Phone className="h-3 w-3" />
-                                    {formatPhone(lead.phone)}
+          <div className="overflow-x-auto pb-4">
+            <div className="flex gap-4 min-w-max">
+              {statuses.map((status) => {
+                const statusLeads = getLeadsByStatus(status.id);
+                return (
+                  <div key={status.id} className="kanban-column w-[330px] flex-shrink-0">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div 
+                        className="w-3 h-3 rounded-full" 
+                        style={{ backgroundColor: status.color }}
+                      />
+                      <h3 className="font-semibold">{status.name}</h3>
+                      <Badge variant="secondary" className="ml-auto">
+                        {statusLeads.length}
+                      </Badge>
+                    </div>
+                    
+                     <Droppable droppableId={status.id}>
+                       {(provided, snapshot) => (
+                         <div
+                           ref={provided.innerRef}
+                           {...provided.droppableProps}
+                           className={`space-y-3 min-h-[200px] max-h-[calc(100vh-300px)] overflow-y-auto p-2 rounded-lg transition-colors ${
+                             snapshot.isDraggingOver ? 'bg-muted/50' : ''
+                           }`}
+                         >
+                           {statusLeads.map((lead, index) => (
+                            <Draggable key={lead.id} draggableId={lead.id} index={index}>
+                              {(provided, snapshot) => (
+                                <div
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  {...provided.dragHandleProps}
+                                  className={`lead-card transition-transform ${
+                                    snapshot.isDragging ? 'rotate-2 scale-105 shadow-lg' : ''
+                                  }`}
+                                >
+                                   <div className="flex items-start justify-between mb-2">
+                                     <div>
+                                       <h4 className="font-medium text-sm">{lead.name}</h4>
+                                       <span className="text-xs text-muted-foreground">{formatDate(lead.created_at)}</span>
+                                     </div>
+                                     <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                                          <MoreVertical className="h-3 w-3" />
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end">
+                                        <DropdownMenuItem onClick={() => handleViewDetails(lead)}>
+                                          <Eye className="h-4 w-4 mr-2" />
+                                          Ver detalhes
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleEditLead(lead)}>
+                                          <Edit className="h-4 w-4 mr-2" />
+                                          Editar lead
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem 
+                                          onClick={() => handleDeleteLead(lead.id)}
+                                          className="text-destructive"
+                                        >
+                                          <Trash className="h-4 w-4 mr-2" />
+                                          Deletar
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
                                   </div>
-                                  {lead.email && (
+                                  
+                                  <div className="space-y-1 text-xs text-muted-foreground">
                                     <div className="flex items-center gap-2">
-                                      <Mail className="h-3 w-3" />
-                                      {lead.email}
+                                      <Phone className="h-3 w-3" />
+                                      {formatPhone(lead.phone)}
                                     </div>
-                                  )}
-                                  {lead.interesse && (
-                                    <div className="text-xs">
-                                      Interesse: {lead.interesse}
-                                    </div>
-                                  )}
-                                </div>
-                                
-                                <div className="flex gap-2 mt-3">
-                                  <WhatsAppMessagePopover 
-                                    phone={lead.phone} 
-                                    leadName={lead.name}
-                                    interesse={lead.interesse}
-                                  >
-                                    <Button 
-                                      size="sm" 
-                                      variant="outline" 
-                                      className="flex-1 h-7 text-xs gap-1"
+                                    {lead.email && (
+                                      <div className="flex items-center gap-2">
+                                        <Mail className="h-3 w-3" />
+                                        {lead.email}
+                                      </div>
+                                    )}
+                                    {lead.interesse && (
+                                      <div className="text-xs">
+                                        Interesse: {lead.interesse}
+                                      </div>
+                                    )}
+                                  </div>
+                                  
+                                  <div className="flex gap-2 mt-3">
+                                    <WhatsAppMessagePopover 
+                                      phone={lead.phone} 
+                                      leadName={lead.name}
+                                      interesse={lead.interesse}
                                     >
-                                      <MessageCircle className="h-3 w-3" />
-                                      WhatsApp
-                                    </Button>
-                                  </WhatsAppMessagePopover>
+                                      <Button 
+                                        size="sm" 
+                                        variant="outline" 
+                                        className="flex-1 h-7 text-xs gap-1"
+                                      >
+                                        <MessageCircle className="h-3 w-3" />
+                                        WhatsApp
+                                      </Button>
+                                    </WhatsAppMessagePopover>
+                                  </div>
                                 </div>
-                              </div>
-                            )}
-                          </Draggable>
-                        ))}
-                        {provided.placeholder}
-                      </div>
-                    )}
-                  </Droppable>
-                </div>
-              );
-            })}
+                              )}
+                            </Draggable>
+                          ))}
+                          {provided.placeholder}
+                        </div>
+                      )}
+                    </Droppable>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </DragDropContext>
       ) : (
