@@ -65,6 +65,25 @@ serve(async (req) => {
       .eq('is_default', true)
       .single();
 
+    // Validate property_id if provided
+    let validPropertyId: string | null = null;
+    if (body.property_id) {
+      console.log('Validating property_id:', body.property_id);
+      const { data: property, error: propertyError } = await supabase
+        .from('properties')
+        .select('id')
+        .eq('id', body.property_id)
+        .eq('account_id', accountId)
+        .single();
+
+      if (propertyError || !property) {
+        console.log('Property not found or not owned by account, lead will be created without property link');
+      } else {
+        validPropertyId = property.id;
+        console.log('Property validated successfully:', validPropertyId);
+      }
+    }
+
     // Prepare lead data
     const leadData = {
       account_id: accountId,
@@ -78,6 +97,7 @@ serve(async (req) => {
       origem: body.origem || 'Webhook',
       anuncio: body.anuncio || null,
       status_id: defaultStatus?.id || null,
+      property_id: validPropertyId,
     };
 
     console.log('Inserting lead:', leadData);
@@ -153,6 +173,7 @@ serve(async (req) => {
       JSON.stringify({ 
         success: true, 
         lead_id: lead.id,
+        property_linked: validPropertyId !== null,
         message: 'Lead criado com sucesso' 
       }),
       { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
