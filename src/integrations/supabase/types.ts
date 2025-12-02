@@ -41,6 +41,59 @@ export type Database = {
         }
         Relationships: []
       }
+      custom_fields: {
+        Row: {
+          account_id: string
+          created_at: string
+          field_key: string
+          field_type: string
+          id: string
+          is_active: boolean
+          is_required: boolean
+          name: string
+          options: Json | null
+          placeholder: string | null
+          position: number
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          field_key: string
+          field_type?: string
+          id?: string
+          is_active?: boolean
+          is_required?: boolean
+          name: string
+          options?: Json | null
+          placeholder?: string | null
+          position?: number
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          field_key?: string
+          field_type?: string
+          id?: string
+          is_active?: boolean
+          is_required?: boolean
+          name?: string
+          options?: Json | null
+          placeholder?: string | null
+          position?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custom_fields_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
           account_id: string
@@ -142,6 +195,48 @@ export type Database = {
           },
           {
             foreignKeyName: "lead_activities_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_custom_field_values: {
+        Row: {
+          created_at: string
+          custom_field_id: string
+          id: string
+          lead_id: string
+          updated_at: string
+          value: string | null
+        }
+        Insert: {
+          created_at?: string
+          custom_field_id: string
+          id?: string
+          lead_id: string
+          updated_at?: string
+          value?: string | null
+        }
+        Update: {
+          created_at?: string
+          custom_field_id?: string
+          id?: string
+          lead_id?: string
+          updated_at?: string
+          value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_custom_field_values_custom_field_id_fkey"
+            columns: ["custom_field_id"]
+            isOneToOne: false
+            referencedRelation: "custom_fields"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_custom_field_values_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"

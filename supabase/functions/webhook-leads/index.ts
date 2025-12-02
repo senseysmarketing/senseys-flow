@@ -99,6 +99,56 @@ serve(async (req) => {
 
     console.log('Lead created successfully:', lead.id);
 
+    // Handle custom fields if provided
+    if (body.custom_fields && typeof body.custom_fields === 'object') {
+      console.log('Processing custom fields:', body.custom_fields);
+      
+      // Get custom fields for this account
+      const { data: customFields, error: fieldsError } = await supabase
+        .from('custom_fields')
+        .select('id, field_key')
+        .eq('account_id', accountId)
+        .eq('is_active', true);
+
+      if (fieldsError) {
+        console.error('Error fetching custom fields:', fieldsError);
+      } else if (customFields && customFields.length > 0) {
+        // Create a map of field_key -> id
+        const fieldKeyToId = new Map<string, string>();
+        customFields.forEach((field: { id: string; field_key: string }) => {
+          fieldKeyToId.set(field.field_key, field.id);
+        });
+
+        // Prepare values to insert
+        const valuesToInsert: { lead_id: string; custom_field_id: string; value: string }[] = [];
+        
+        for (const [key, value] of Object.entries(body.custom_fields)) {
+          const fieldId = fieldKeyToId.get(key);
+          if (fieldId && value !== undefined && value !== null) {
+            valuesToInsert.push({
+              lead_id: lead.id,
+              custom_field_id: fieldId,
+              value: String(value)
+            });
+          } else if (!fieldId) {
+            console.log(`Custom field key not found: ${key}`);
+          }
+        }
+
+        if (valuesToInsert.length > 0) {
+          const { error: valuesError } = await supabase
+            .from('lead_custom_field_values')
+            .insert(valuesToInsert);
+
+          if (valuesError) {
+            console.error('Error inserting custom field values:', valuesError);
+          } else {
+            console.log(`Inserted ${valuesToInsert.length} custom field values`);
+          }
+        }
+      }
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true, 

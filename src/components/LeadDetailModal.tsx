@@ -25,6 +25,7 @@ import {
 import WhatsAppMessagePopover from "@/components/WhatsAppMessagePopover";
 import TemperatureBadge from "@/components/TemperatureBadge";
 import LeadActivityTimeline from "@/components/LeadActivityTimeline";
+import LeadCustomFields from "@/components/LeadCustomFields";
 import { toast } from "@/hooks/use-toast";
 
 interface Lead {
@@ -232,6 +233,10 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
               <Separator />
             </>
           )}
+
+          {/* Campos Personalizados */}
+          <LeadCustomFields leadId={lead.id} />
+          <Separator />
 
           {/* Observações */}
           {lead.observacoes && (
