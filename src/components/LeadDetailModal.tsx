@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import WhatsAppMessagePopover from "@/components/WhatsAppMessagePopover";
 import TemperatureBadge from "@/components/TemperatureBadge";
+import OriginBadge from "@/components/OriginBadge";
 import LeadActivityTimeline from "@/components/LeadActivityTimeline";
 import LeadCustomFields from "@/components/LeadCustomFields";
 import { toast } from "@/hooks/use-toast";
@@ -130,8 +131,9 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
             </div>
             <div className="flex-1 min-w-0">
               <h2 className="text-2xl font-bold text-foreground truncate">{lead.name}</h2>
-              <div className="flex items-center gap-3 mt-2">
+              <div className="flex items-center gap-3 mt-2 flex-wrap">
                 <TemperatureBadge temperature={lead.temperature} size="sm" />
+                <OriginBadge origem={lead.origem} size="sm" />
                 {lead.interesse && (
                   <span className="text-sm text-muted-foreground truncate">
                     {lead.interesse}
