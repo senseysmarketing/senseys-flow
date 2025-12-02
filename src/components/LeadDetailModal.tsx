@@ -1,4 +1,5 @@
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -18,10 +19,12 @@ import {
   Thermometer,
   Snowflake,
   ExternalLink,
-  Copy
+  Copy,
+  History
 } from "lucide-react";
 import WhatsAppMessagePopover from "@/components/WhatsAppMessagePopover";
 import TemperatureBadge from "@/components/TemperatureBadge";
+import LeadActivityTimeline from "@/components/LeadActivityTimeline";
 import { toast } from "@/hooks/use-toast";
 
 interface Lead {
@@ -98,7 +101,10 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] p-0 gap-0 overflow-hidden">
+      <DialogContent className="sm:max-w-[650px] max-h-[90vh] p-0 gap-0 overflow-hidden flex flex-col">
+        <VisuallyHidden>
+          <DialogTitle>Detalhes do Lead: {lead.name}</DialogTitle>
+        </VisuallyHidden>
         {/* Header com gradiente */}
         <div className="relative bg-gradient-to-br from-primary/20 via-primary/10 to-transparent p-6 pb-8">
           {/* Status Badge */}
@@ -136,7 +142,7 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
         </div>
 
         {/* Conteúdo principal */}
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-6 overflow-y-auto flex-1">
           {/* Informações de Contato */}
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
@@ -269,6 +275,17 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
                 {updatedAt.time}
               </p>
             </div>
+          </div>
+
+          <Separator />
+
+          {/* Histórico de Atividades */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+              <History className="h-4 w-4" />
+              Histórico de Atividades
+            </h3>
+            <LeadActivityTimeline leadId={lead.id} />
           </div>
         </div>
 
