@@ -15,6 +15,7 @@ import Properties from "./pages/Properties";
 import Calendar from "./pages/Calendar";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
+import AgencyAdmin from "./pages/AgencyAdmin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,6 +38,7 @@ const App = () => (
               <Route path="/calendar" element={<Layout><Calendar /></Layout>} />
                 <Route path="/reports" element={<Layout><Reports /></Layout>} />
                 <Route path="/settings" element={<Layout><Settings /></Layout>} />
+                <Route path="/agency-admin" element={<Layout><AgencyAdmin /></Layout>} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<Layout><NotFound /></Layout>} />
               </Routes>

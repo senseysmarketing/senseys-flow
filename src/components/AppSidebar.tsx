@@ -6,7 +6,8 @@ import {
   Settings, 
   LogOut, 
   Building2,
-  Sparkles
+  Sparkles,
+  Shield
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { 
@@ -23,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { signOut } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 import { useAccount } from "@/hooks/use-account";
+import { useSuperAdmin } from "@/hooks/use-super-admin";
 import logoAlternativaBranca from "@/assets/logo-alternativa-branca.png";
 import { cn } from "@/lib/utils";
 
@@ -64,6 +66,7 @@ const bottomItems = [
 
 export function AppSidebar() {
   const { account } = useAccount();
+  const { isSuperAdmin } = useSuperAdmin();
   const location = useLocation();
   
   const handleSignOut = async () => {
@@ -156,6 +159,38 @@ export function AppSidebar() {
         {/* Bottom Items */}
         <div className="mt-auto p-3 border-t border-sidebar-border/50">
           <SidebarMenu className="space-y-1">
+            {/* Agency Admin Link - Only for super admins */}
+            {isSuperAdmin && (
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <NavLink
+                    to="/agency-admin"
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative",
+                      location.pathname === "/agency-admin"
+                        ? "bg-amber-500/15 text-amber-400 font-medium"
+                        : "text-amber-400/70 hover:bg-amber-500/10 hover:text-amber-400"
+                    )}
+                  >
+                    {location.pathname === "/agency-admin" && (
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full bg-gradient-to-b from-amber-400 to-amber-600" />
+                    )}
+                    <div
+                      className={cn(
+                        "p-1.5 rounded-lg transition-all duration-200",
+                        location.pathname === "/agency-admin"
+                          ? "bg-amber-500/20"
+                          : "bg-transparent group-hover:bg-amber-500/10"
+                      )}
+                    >
+                      <Shield className="h-4 w-4" />
+                    </div>
+                    <span className="text-sm">Painel Agência</span>
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )}
+
             {bottomItems.map((item) => {
               const isActive = location.pathname === item.url;
               return (
