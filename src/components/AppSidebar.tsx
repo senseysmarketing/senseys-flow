@@ -1,11 +1,12 @@
-import { useState } from "react";
-import { Home, Users, Calendar, BarChart3, Settings, LogOut, Building2, User } from "lucide-react";
-import { NavLink, useLocation } from "react-router-dom";
+import { Home, Users, Calendar, BarChart3, Settings, LogOut, Building2 } from "lucide-react";
+import { NavLink } from "react-router-dom";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
+import { useAccount } from "@/hooks/use-account";
 import logoAlternativaBranca from "@/assets/logo-alternativa-branca.png";
+
 const menuItems = [{
   title: "Dashboard",
   url: "/dashboard",
@@ -23,17 +24,18 @@ const menuItems = [{
   url: "/reports",
   icon: BarChart3
 }];
+
 const bottomItems = [{
   title: "Configurações",
   url: "/settings",
   icon: Settings
 }];
+
 export function AppSidebar() {
-  const location = useLocation();
+  const { account } = useAccount();
+  
   const handleSignOut = async () => {
-    const {
-      error
-    } = await signOut();
+    const { error } = await signOut();
     if (error) {
       toast({
         variant: "destructive",
@@ -47,15 +49,21 @@ export function AppSidebar() {
       });
     }
   };
-  return <Sidebar className="w-64">
+
+  // Use custom logo if available, otherwise use default
+  const logoSrc = account?.logo_url || logoAlternativaBranca;
+  const companyName = account?.company_name || "";
+
+  return (
+    <Sidebar className="w-64">
       <SidebarContent className="bg-sidebar">
         {/* Logo/Brand */}
         <div className="p-4 border-b border-sidebar-border">
-          <div className="flex items-center">
+          <div className="flex items-center gap-2">
             <img 
-              src={logoAlternativaBranca} 
-              alt="Logo" 
-              className="h-8 w-auto"
+              src={logoSrc} 
+              alt={companyName || "Logo"} 
+              className="h-8 w-auto max-w-[180px] object-contain"
             />
           </div>
         </div>
@@ -67,16 +75,25 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {menuItems.map(item => <SidebarMenuItem key={item.title}>
+              {menuItems.map(item => (
+                <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <NavLink to={item.url} className={({
-                  isActive
-                }) => `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${isActive ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"}`}>
+                    <NavLink 
+                      to={item.url} 
+                      className={({ isActive }) => 
+                        `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                          isActive 
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" 
+                            : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                        }`
+                      }
+                    >
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                     </NavLink>
                   </SidebarMenuButton>
-                </SidebarMenuItem>)}
+                </SidebarMenuItem>
+              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -84,20 +101,33 @@ export function AppSidebar() {
         {/* Bottom Items */}
         <div className="mt-auto p-2 border-t border-sidebar-border">
           <SidebarMenu>
-            {bottomItems.map(item => <SidebarMenuItem key={item.title}>
+            {bottomItems.map(item => (
+              <SidebarMenuItem key={item.title}>
                 <SidebarMenuButton asChild>
-                  <NavLink to={item.url} className={({
-                isActive
-              }) => `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${isActive ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"}`}>
+                  <NavLink 
+                    to={item.url} 
+                    className={({ isActive }) => 
+                      `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                        isActive 
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" 
+                          : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                      }`
+                    }
+                  >
                     <item.icon className="h-4 w-4" />
                     <span>{item.title}</span>
                   </NavLink>
                 </SidebarMenuButton>
-              </SidebarMenuItem>)}
+              </SidebarMenuItem>
+            ))}
             
             <SidebarMenuItem>
               <SidebarMenuButton asChild>
-                <Button variant="ghost" onClick={handleSignOut} className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground">
+                <Button 
+                  variant="ghost" 
+                  onClick={handleSignOut} 
+                  className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                >
                   <LogOut className="h-4 w-4 mr-3" />
                   <span>Sair</span>
                 </Button>
@@ -106,5 +136,6 @@ export function AppSidebar() {
           </SidebarMenu>
         </div>
       </SidebarContent>
-    </Sidebar>;
+    </Sidebar>
+  );
 }

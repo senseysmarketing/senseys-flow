@@ -16,20 +16,26 @@ export type Database = {
     Tables: {
       accounts: {
         Row: {
+          company_name: string | null
           created_at: string
           id: string
+          logo_url: string | null
           name: string
           updated_at: string
         }
         Insert: {
+          company_name?: string | null
           created_at?: string
           id?: string
+          logo_url?: string | null
           name: string
           updated_at?: string
         }
         Update: {
+          company_name?: string | null
           created_at?: string
           id?: string
+          logo_url?: string | null
           name?: string
           updated_at?: string
         }
@@ -199,6 +205,7 @@ export type Database = {
           origem: string | null
           phone: string
           status_id: string | null
+          temperature: string | null
           updated_at: string
         }
         Insert: {
@@ -215,6 +222,7 @@ export type Database = {
           origem?: string | null
           phone: string
           status_id?: string | null
+          temperature?: string | null
           updated_at?: string
         }
         Update: {
@@ -231,6 +239,7 @@ export type Database = {
           origem?: string | null
           phone?: string
           status_id?: string | null
+          temperature?: string | null
           updated_at?: string
         }
         Relationships: [

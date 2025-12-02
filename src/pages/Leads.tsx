@@ -26,13 +26,17 @@ import {
   Grid,
   List,
   Bell,
-  BellOff
+  BellOff,
+  Flame,
+  Thermometer,
+  Snowflake
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
 import { useLeadNotifications } from "@/hooks/use-lead-notifications";
 import WhatsAppMessagePopover from "@/components/WhatsAppMessagePopover";
+import TemperatureBadge from "@/components/TemperatureBadge";
 
 interface Lead {
   id: string;
@@ -48,6 +52,7 @@ interface Lead {
   created_at: string;
   updated_at: string;
   status_id?: string;
+  temperature?: string | null;
   lead_status?: {
     name: string;
     color: string;
@@ -109,7 +114,8 @@ const Leads = () => {
     campanha: "",
     conjunto: "",
     anuncio: "",
-    status_id: ""
+    status_id: "",
+    temperature: "warm" as 'hot' | 'warm' | 'cold'
   });
   
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
@@ -262,7 +268,8 @@ const Leads = () => {
         campanha: "",
         conjunto: "",
         anuncio: "",
-        status_id: ""
+        status_id: "",
+        temperature: "warm"
       });
 
       fetchData();
@@ -310,7 +317,8 @@ const Leads = () => {
           campanha: editingLead.campanha,
           conjunto: editingLead.conjunto,
           anuncio: editingLead.anuncio,
-          status_id: editingLead.status_id
+          status_id: editingLead.status_id,
+          temperature: editingLead.temperature
         })
         .eq('id', editingLead.id);
 
@@ -551,14 +559,47 @@ const Leads = () => {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="interesse">Interesse</Label>
-                  <Input
-                    id="interesse"
-                    value={newLead.interesse}
-                    onChange={(e) => setNewLead({...newLead, interesse: e.target.value})}
-                    placeholder="Ex: Apartamento 2 quartos, Casa em condomínio..."
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="interesse">Interesse</Label>
+                    <Input
+                      id="interesse"
+                      value={newLead.interesse}
+                      onChange={(e) => setNewLead({...newLead, interesse: e.target.value})}
+                      placeholder="Ex: Apartamento 2 quartos, Casa em condomínio..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="temperature">Temperatura</Label>
+                    <Select
+                      value={newLead.temperature}
+                      onValueChange={(value: 'hot' | 'warm' | 'cold') => setNewLead({...newLead, temperature: value})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a temperatura" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="hot">
+                          <span className="flex items-center gap-2">
+                            <Flame className="h-4 w-4 text-red-500" />
+                            Quente
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="warm">
+                          <span className="flex items-center gap-2">
+                            <Thermometer className="h-4 w-4 text-yellow-500" />
+                            Morno
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="cold">
+                          <span className="flex items-center gap-2">
+                            <Snowflake className="h-4 w-4 text-blue-500" />
+                            Frio
+                          </span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -779,7 +820,10 @@ const Leads = () => {
                                 >
                                    <div className="flex items-start justify-between mb-2">
                                      <div>
-                                       <h4 className="font-medium text-sm">{lead.name}</h4>
+                                       <div className="flex items-center gap-2">
+                                         <h4 className="font-medium text-sm">{lead.name}</h4>
+                                         <TemperatureBadge temperature={lead.temperature} showLabel={false} size="sm" />
+                                       </div>
                                        <span className="text-xs text-muted-foreground">{formatDate(lead.created_at)}</span>
                                      </div>
                                      <DropdownMenu>
@@ -1040,14 +1084,47 @@ const Leads = () => {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="edit-interesse">Interesse</Label>
-                <Input
-                  id="edit-interesse"
-                  value={editingLead.interesse || ""}
-                  onChange={(e) => setEditingLead({...editingLead, interesse: e.target.value})}
-                  placeholder="Ex: Apartamento 2 quartos, Casa em condomínio..."
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-interesse">Interesse</Label>
+                  <Input
+                    id="edit-interesse"
+                    value={editingLead.interesse || ""}
+                    onChange={(e) => setEditingLead({...editingLead, interesse: e.target.value})}
+                    placeholder="Ex: Apartamento 2 quartos, Casa em condomínio..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-temperature">Temperatura</Label>
+                  <Select
+                    value={editingLead.temperature || "warm"}
+                    onValueChange={(value) => setEditingLead({...editingLead, temperature: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a temperatura" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="hot">
+                        <span className="flex items-center gap-2">
+                          <Flame className="h-4 w-4 text-red-500" />
+                          Quente
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="warm">
+                        <span className="flex items-center gap-2">
+                          <Thermometer className="h-4 w-4 text-yellow-500" />
+                          Morno
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="cold">
+                        <span className="flex items-center gap-2">
+                          <Snowflake className="h-4 w-4 text-blue-500" />
+                          Frio
+                        </span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
