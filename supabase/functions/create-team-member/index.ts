@@ -10,6 +10,7 @@ interface CreateTeamMemberRequest {
   email: string;
   password: string;
   full_name: string;
+  role_id: string;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -19,7 +20,14 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { email, password, full_name }: CreateTeamMemberRequest = await req.json();
+    const { email, password, full_name, role_id }: CreateTeamMemberRequest = await req.json();
+
+    if (!role_id) {
+      return new Response(
+        JSON.stringify({ error: 'O tipo de usuário (role) é obrigatório' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Create admin client with service role key
     const supabaseAdmin = createClient(
@@ -57,8 +65,34 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error('Could not find user profile');
     }
 
-    // Try to create the new user - if email exists, Supabase will return an error
-    // We'll handle duplicate email in the createUser error handling below
+    // Verify that the role belongs to the same account
+    const { data: roleData, error: roleError } = await supabaseAdmin
+      .from('roles')
+      .select('id, name, account_id')
+      .eq('id', role_id)
+      .single();
+
+    if (roleError || !roleData) {
+      return new Response(
+        JSON.stringify({ error: 'Tipo de usuário não encontrado' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (roleData.account_id !== profile.account_id) {
+      return new Response(
+        JSON.stringify({ error: 'Tipo de usuário não pertence à sua conta' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Prevent creating another owner
+    if (roleData.name === 'Proprietário') {
+      return new Response(
+        JSON.stringify({ error: 'Não é possível criar outro Proprietário. Escolha outro tipo de usuário.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Create the new user
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
@@ -117,6 +151,24 @@ const handler = async (req: Request): Promise<Response> => {
             .insert({ user_id: existingUserId, account_id: profile.account_id, full_name });
         }
 
+        // Update or create user_roles entry
+        const { data: existingUserRole } = await supabaseAdmin
+          .from('user_roles')
+          .select('id')
+          .eq('user_id', existingUserId)
+          .maybeSingle();
+
+        if (existingUserRole) {
+          await supabaseAdmin
+            .from('user_roles')
+            .update({ role_id })
+            .eq('user_id', existingUserId);
+        } else {
+          await supabaseAdmin
+            .from('user_roles')
+            .insert({ user_id: existingUserId, role_id });
+        }
+
         return new Response(
           JSON.stringify({ 
             success: true,
@@ -145,10 +197,26 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (updateError) {
       console.error('Error updating profile:', updateError);
-      // Don't fail completely, as the user was created successfully
     }
 
-    console.log('Team member created successfully:', newUser.user.email);
+    // Delete any existing user_role (from handle_new_user trigger) and assign the selected role
+    await supabaseAdmin
+      .from('user_roles')
+      .delete()
+      .eq('user_id', newUser.user.id);
+
+    const { error: roleInsertError } = await supabaseAdmin
+      .from('user_roles')
+      .insert({
+        user_id: newUser.user.id,
+        role_id
+      });
+
+    if (roleInsertError) {
+      console.error('Error assigning role:', roleInsertError);
+    }
+
+    console.log('Team member created successfully:', newUser.user.email, 'with role:', roleData.name);
 
     return new Response(
       JSON.stringify({ 

@@ -8,14 +8,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Edit2, Trash2, Move, User, Settings as SettingsIcon, Palette, MessageCircle, Bell, Users, Webhook, Copy, Check, Building2 } from "lucide-react";
+import { Plus, Edit2, Trash2, Move, User, Settings as SettingsIcon, Palette, MessageCircle, Bell, Users, Webhook, Copy, Check, Building2, Shield } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { usePermissions } from "@/hooks/use-permissions";
 import { toast } from "@/hooks/use-toast";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import FollowUpSettings from "@/components/FollowUpSettings";
 import TeamManagement from "@/components/TeamManagement";
 import WhiteLabelSettings from "@/components/WhiteLabelSettings";
+import RolePermissionsManager from "@/components/RolePermissionsManager";
 interface Profile {
   id: string;
   full_name: string | null;
@@ -38,9 +40,8 @@ interface WhatsAppTemplate {
 }
 const PRESET_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "#22c55e", "#10b981", "#14b8a6", "#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#d946ef", "#ec4899", "#f43f5e", "#64748b", "#374151", "#111827"];
 const SettingsPage = () => {
-  const {
-    user
-  } = useAuth();
+  const { user } = useAuth();
+  const { hasPermission } = usePermissions();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [leadStatuses, setLeadStatuses] = useState<LeadStatus[]>([]);
@@ -425,6 +426,12 @@ const SettingsPage = () => {
             <Webhook className="h-4 w-4 mr-2" />
             Webhook
           </TabsTrigger>
+          {hasPermission('settings.manage') && (
+            <TabsTrigger value="permissions">
+              <Shield className="h-4 w-4 mr-2" />
+              Permissões
+            </TabsTrigger>
+          )}
           <TabsTrigger value="whitelabel">
             <Building2 className="h-4 w-4 mr-2" />
             White Label
@@ -901,6 +908,10 @@ const SettingsPage = () => {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="permissions">
+          <RolePermissionsManager />
         </TabsContent>
 
         <TabsContent value="whitelabel">
