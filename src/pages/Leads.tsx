@@ -911,13 +911,13 @@ const Leads = () => {
                                   </div>
                                   
                                   <div className="space-y-1 text-xs text-muted-foreground">
-                                    <div className="flex items-center gap-2">
-                                      <Phone className="h-3 w-3 text-green-500" />
+                                    <div className="flex items-center gap-1">
+                                      <span>📞</span>
                                       {formatPhone(lead.phone)}
                                     </div>
                                     {lead.email && (
-                                      <div className="flex items-center gap-2">
-                                        <Mail className="h-3 w-3 text-blue-400" />
+                                      <div className="flex items-center gap-1">
+                                        <span>📧</span>
                                         {lead.email}
                                       </div>
                                     )}
