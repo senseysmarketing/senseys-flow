@@ -705,6 +705,16 @@ const PropertiesPage = () => {
           setIsDetailModalOpen(false);
           setSelectedProperty(null);
         }}
+        onEdit={(property) => {
+          setIsDetailModalOpen(false);
+          openEditDialog(property);
+        }}
+        onDelete={async (propertyId) => {
+          await handleDelete(propertyId);
+        }}
+        onStatusChange={() => {
+          fetchProperties();
+        }}
       />
     </div>
   );

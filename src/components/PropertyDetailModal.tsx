@@ -7,15 +7,19 @@ import { Separator } from "@/components/ui/separator";
 import { AvatarFallbackColored } from "@/components/ui/avatar-fallback-colored";
 import TemperatureBadge from "@/components/TemperatureBadge";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 import { 
   Building2, MapPin, Bed, Bath, Car, Ruler, Calendar, DollarSign, 
   Users, Eye, TrendingUp, Clock, User, Phone, Mail, ChevronRight,
-  Home, CalendarDays, Activity
+  Home, CalendarDays, Activity, Edit2, Trash2, CheckCircle, XCircle,
+  BookmarkCheck, Key
 } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 interface Property {
   id: string;
@@ -46,6 +50,9 @@ interface PropertyDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenLead?: (leadId: string) => void;
+  onEdit?: (property: Property) => void;
+  onDelete?: (propertyId: string) => void;
+  onStatusChange?: () => void;
 }
 
 interface LeadWithStatus {
@@ -92,7 +99,7 @@ const TYPE_LABELS: Record<string, string> = {
   rural: "Rural",
 };
 
-export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead }: PropertyDetailModalProps) {
+export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onEdit, onDelete, onStatusChange }: PropertyDetailModalProps) {
   const [leads, setLeads] = useState<LeadWithStatus[]>([]);
   const [brokerStats, setBrokerStats] = useState<BrokerStats[]>([]);
   const [events, setEvents] = useState<PropertyEvent[]>([]);
@@ -103,6 +110,40 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead }: P
       fetchPropertyData();
     }
   }, [property, isOpen]);
+
+  const handleStatusChange = async (newStatus: string) => {
+    if (!property) return;
+    
+    try {
+      const { error } = await supabase
+        .from("properties")
+        .update({ status: newStatus })
+        .eq("id", property.id);
+      
+      if (error) throw error;
+      
+      toast({
+        title: "Status atualizado",
+        description: `Imóvel marcado como ${STATUS_LABELS[newStatus]?.label || newStatus}`,
+      });
+      
+      onStatusChange?.();
+      onClose();
+    } catch (error) {
+      console.error("Error updating status:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Não foi possível atualizar o status.",
+      });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!property) return;
+    onDelete?.(property.id);
+    onClose();
+  };
 
   const fetchPropertyData = async () => {
     if (!property) return;
@@ -224,6 +265,91 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead }: P
                   </span>
                 )}
               </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  onEdit?.(property);
+                  onClose();
+                }}
+              >
+                <Edit2 className="h-4 w-4 mr-1" />
+                Editar
+              </Button>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <CheckCircle className="h-4 w-4 mr-1" />
+                    Status
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem 
+                    onClick={() => handleStatusChange("disponivel")}
+                    className="text-green-600"
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Disponível
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => handleStatusChange("reservado")}
+                    className="text-yellow-600"
+                  >
+                    <BookmarkCheck className="h-4 w-4 mr-2" />
+                    Reservado
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    onClick={() => handleStatusChange("vendido")}
+                    className="text-blue-600"
+                  >
+                    <DollarSign className="h-4 w-4 mr-2" />
+                    Vendido
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => handleStatusChange("alugado")}
+                    className="text-purple-600"
+                  >
+                    <Key className="h-4 w-4 mr-2" />
+                    Alugado
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    onClick={() => handleStatusChange("inativo")}
+                    className="text-gray-600"
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Inativo
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="text-destructive">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Remover imóvel?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Esta ação não pode ser desfeita. Todos os leads vinculados perderão a associação com este imóvel.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDelete}>
+                      Remover
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           </div>
 
