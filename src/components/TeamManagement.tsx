@@ -5,10 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Users, UserPlus, Mail } from "lucide-react";
+import { Plus, Trash2, Users, UserPlus, Mail, Shield, Pencil } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { usePermissions } from "@/hooks/use-permissions";
 import { toast } from "@/hooks/use-toast";
 
 interface TeamMember {
@@ -17,19 +19,30 @@ interface TeamMember {
   user_id: string;
   created_at: string;
   email?: string;
+  role?: {
+    id: string;
+    name: string;
+  } | null;
 }
 
 const TeamManagement = () => {
   const { user } = useAuth();
+  const { roles, hasPermission, isOwner, refetch: refetchPermissions } = usePermissions();
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditRoleDialogOpen, setIsEditRoleDialogOpen] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
+  const [editingRoleId, setEditingRoleId] = useState<string>("");
   const [memberForm, setMemberForm] = useState({
     email: "",
     password: "",
-    full_name: ""
+    full_name: "",
+    role_id: ""
   });
+
+  const canManageTeam = hasPermission('team.manage');
 
   useEffect(() => {
     if (user) {
@@ -39,14 +52,39 @@ const TeamManagement = () => {
 
   const fetchTeamMembers = async () => {
     try {
-      const { data, error } = await supabase
+      // Fetch profiles
+      const { data: profiles, error: profilesError } = await supabase
         .from("profiles")
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      if (profilesError) throw profilesError;
 
-      setTeamMembers(data || []);
+      // Fetch user_roles with roles
+      const { data: userRoles, error: userRolesError } = await supabase
+        .from("user_roles")
+        .select(`
+          user_id,
+          roles (
+            id,
+            name
+          )
+        `);
+
+      if (userRolesError) {
+        console.error("Erro ao buscar roles:", userRolesError);
+      }
+
+      // Merge profiles with roles
+      const membersWithRoles = (profiles || []).map(profile => {
+        const userRole = userRoles?.find(ur => ur.user_id === profile.user_id);
+        return {
+          ...profile,
+          role: userRole?.roles as { id: string; name: string } | null
+        };
+      });
+
+      setTeamMembers(membersWithRoles);
     } catch (error) {
       console.error("Erro ao buscar membros da equipe:", error);
       toast({
@@ -62,11 +100,11 @@ const TeamManagement = () => {
   const handleCreateMember = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!memberForm.email || !memberForm.password || !memberForm.full_name) {
+    if (!memberForm.email || !memberForm.password || !memberForm.full_name || !memberForm.role_id) {
       toast({
         variant: "destructive",
         title: "Erro",
-        description: "Todos os campos são obrigatórios."
+        description: "Todos os campos são obrigatórios, incluindo o tipo de usuário."
       });
       return;
     }
@@ -87,7 +125,8 @@ const TeamManagement = () => {
         body: {
           email: memberForm.email,
           password: memberForm.password,
-          full_name: memberForm.full_name
+          full_name: memberForm.full_name,
+          role_id: memberForm.role_id
         }
       });
 
@@ -103,7 +142,7 @@ const TeamManagement = () => {
       });
 
       setIsDialogOpen(false);
-      setMemberForm({ email: "", password: "", full_name: "" });
+      setMemberForm({ email: "", password: "", full_name: "", role_id: "" });
       fetchTeamMembers();
 
     } catch (error: any) {
@@ -118,10 +157,40 @@ const TeamManagement = () => {
     }
   };
 
+  const handleUpdateRole = async () => {
+    if (!selectedMember || !editingRoleId) return;
+
+    try {
+      const { error } = await supabase
+        .from('user_roles')
+        .update({ role_id: editingRoleId })
+        .eq('user_id', selectedMember.user_id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Sucesso",
+        description: "Tipo de usuário atualizado com sucesso!"
+      });
+
+      setIsEditRoleDialogOpen(false);
+      setSelectedMember(null);
+      setEditingRoleId("");
+      fetchTeamMembers();
+      refetchPermissions();
+
+    } catch (error: any) {
+      console.error("Erro ao atualizar role:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: error.message || "Não foi possível atualizar o tipo de usuário."
+      });
+    }
+  };
+
   const handleDeleteMember = async (memberId: string, memberName: string) => {
     try {
-      // Note: This is a placeholder - actual user deletion would require admin privileges
-      // For now, we'll just show a message
       toast({
         variant: "destructive",
         title: "Funcionalidade em desenvolvimento",
@@ -134,6 +203,31 @@ const TeamManagement = () => {
         title: "Erro",
         description: "Não foi possível remover o membro da equipe."
       });
+    }
+  };
+
+  const openEditRoleDialog = (member: TeamMember) => {
+    setSelectedMember(member);
+    setEditingRoleId(member.role?.id || "");
+    setIsEditRoleDialogOpen(true);
+  };
+
+  // Filter roles for selection - exclude "Proprietário" from creating new members
+  const availableRolesForCreate = roles.filter(r => r.name !== 'Proprietário');
+  const availableRolesForEdit = roles;
+
+  const getRoleBadgeColor = (roleName: string) => {
+    switch (roleName) {
+      case 'Proprietário':
+        return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+      case 'Gerente':
+        return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      case 'Corretor':
+        return 'bg-green-500/20 text-green-400 border-green-500/30';
+      case 'Assistente':
+        return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+      default:
+        return 'bg-primary/20 text-primary border-primary/30';
     }
   };
 
@@ -155,75 +249,101 @@ const TeamManagement = () => {
               Gerenciar Equipe
             </CardTitle>
             <CardDescription>
-              Adicione membros à sua equipe para compartilhar o acesso aos leads
+              Adicione membros à sua equipe e defina suas permissões
             </CardDescription>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <UserPlus className="h-4 w-4 mr-2" />
-                Adicionar Membro
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Adicionar Novo Membro</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleCreateMember} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="member_email">Email</Label>
-                  <Input
-                    id="member_email"
-                    type="email"
-                    value={memberForm.email}
-                    onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
-                    placeholder="email@exemplo.com"
-                    required
-                  />
-                </div>
+          {canManageTeam && (
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Adicionar Membro
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Adicionar Novo Membro</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleCreateMember} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="member_email">Email</Label>
+                    <Input
+                      id="member_email"
+                      type="email"
+                      value={memberForm.email}
+                      onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
+                      placeholder="email@exemplo.com"
+                      required
+                    />
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="member_name">Nome Completo</Label>
-                  <Input
-                    id="member_name"
-                    value={memberForm.full_name}
-                    onChange={(e) => setMemberForm({ ...memberForm, full_name: e.target.value })}
-                    placeholder="Nome do membro"
-                    required
-                  />
-                </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="member_name">Nome Completo</Label>
+                    <Input
+                      id="member_name"
+                      value={memberForm.full_name}
+                      onChange={(e) => setMemberForm({ ...memberForm, full_name: e.target.value })}
+                      placeholder="Nome do membro"
+                      required
+                    />
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="member_password">Senha</Label>
-                  <Input
-                    id="member_password"
-                    type="password"
-                    value={memberForm.password}
-                    onChange={(e) => setMemberForm({ ...memberForm, password: e.target.value })}
-                    placeholder="Senha temporária (mín. 6 caracteres)"
-                    required
-                    minLength={6}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    O membro poderá alterar a senha após o primeiro login
-                  </p>
-                </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="member_password">Senha</Label>
+                    <Input
+                      id="member_password"
+                      type="password"
+                      value={memberForm.password}
+                      onChange={(e) => setMemberForm({ ...memberForm, password: e.target.value })}
+                      placeholder="Senha temporária (mín. 6 caracteres)"
+                      required
+                      minLength={6}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      O membro poderá alterar a senha após o primeiro login
+                    </p>
+                  </div>
 
-                <div className="flex justify-end gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsDialogOpen(false)}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button type="submit" disabled={creating}>
-                    {creating ? "Criando..." : "Criar Membro"}
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+                  <div className="space-y-2">
+                    <Label htmlFor="member_role">Tipo de Usuário</Label>
+                    <Select
+                      value={memberForm.role_id}
+                      onValueChange={(value) => setMemberForm({ ...memberForm, role_id: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o tipo de usuário" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableRolesForCreate.map((role) => (
+                          <SelectItem key={role.id} value={role.id}>
+                            <div className="flex flex-col">
+                              <span>{role.name}</span>
+                              {role.description && (
+                                <span className="text-xs text-muted-foreground">{role.description}</span>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsDialogOpen(false)}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button type="submit" disabled={creating}>
+                      {creating ? "Criando..." : "Criar Membro"}
+                    </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       </CardHeader>
       <CardContent>
@@ -242,48 +362,116 @@ const TeamManagement = () => {
                     <Users className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <p className="font-medium">{member.full_name || "Nome não informado"}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">{member.full_name || "Nome não informado"}</p>
+                      {member.user_id === user?.id && (
+                        <Badge variant="outline">Você</Badge>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Mail className="h-3 w-3" />
-                      <span>ID: {member.user_id}</span>
+                      <span>ID: {member.user_id.substring(0, 8)}...</span>
                     </div>
                   </div>
-                  {member.user_id === user?.id && (
-                    <Badge variant="outline">Você</Badge>
+                  {member.role && (
+                    <Badge className={`ml-2 ${getRoleBadgeColor(member.role.name)}`}>
+                      <Shield className="h-3 w-3 mr-1" />
+                      {member.role.name}
+                    </Badge>
                   )}
                 </div>
 
-                {member.user_id !== user?.id && (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="sm">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Confirmar Remoção</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Tem certeza que deseja remover {member.full_name} da equipe?
-                          Esta ação não pode ser desfeita.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleDeleteMember(member.id, member.full_name || "")}
-                        >
-                          Remover
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                )}
+                <div className="flex items-center gap-2">
+                  {canManageTeam && member.user_id !== user?.id && member.role?.name !== 'Proprietário' && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openEditRoleDialog(member)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  )}
+
+                  {canManageTeam && member.user_id !== user?.id && member.role?.name !== 'Proprietário' && (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="sm">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Confirmar Remoção</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Tem certeza que deseja remover {member.full_name} da equipe?
+                            Esta ação não pode ser desfeita.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => handleDeleteMember(member.id, member.full_name || "")}
+                          >
+                            Remover
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
+                </div>
               </div>
             ))
           )}
         </div>
       </CardContent>
+
+      {/* Edit Role Dialog */}
+      <Dialog open={isEditRoleDialogOpen} onOpenChange={setIsEditRoleDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Alterar Tipo de Usuário</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Alterando tipo de usuário de: <strong>{selectedMember?.full_name}</strong>
+            </p>
+            <div className="space-y-2">
+              <Label>Novo Tipo de Usuário</Label>
+              <Select
+                value={editingRoleId}
+                onValueChange={setEditingRoleId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o tipo de usuário" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableRolesForEdit.filter(r => r.name !== 'Proprietário').map((role) => (
+                    <SelectItem key={role.id} value={role.id}>
+                      <div className="flex flex-col">
+                        <span>{role.name}</span>
+                        {role.description && (
+                          <span className="text-xs text-muted-foreground">{role.description}</span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setIsEditRoleDialogOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button onClick={handleUpdateRole} disabled={!editingRoleId}>
+                Salvar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };
