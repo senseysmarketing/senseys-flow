@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Edit2, Trash2, Building2, MapPin, Bed, Car, Bath, Search, Filter } from "lucide-react";
+import { Plus, Edit2, Trash2, Building2, MapPin, Bed, Car, Bath, Search, Filter, Eye } from "lucide-react";
+import { PropertyDetailModal } from "@/components/PropertyDetailModal";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
@@ -31,7 +32,10 @@ interface Property {
   status: string;
   description: string | null;
   assigned_broker_id: string | null;
+  campaign_cost: number | null;
+  campaign_name: string | null;
   created_at: string;
+  updated_at: string | null;
 }
 
 interface Broker {
@@ -71,6 +75,8 @@ const PropertiesPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
+  const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   
   const [form, setForm] = useState({
     title: "",
@@ -569,7 +575,14 @@ const PropertiesPage = () => {
             const broker = brokers.find(b => b.user_id === property.assigned_broker_id);
             
             return (
-              <Card key={property.id} className="overflow-hidden">
+              <Card 
+                key={property.id} 
+                className="overflow-hidden cursor-pointer hover:shadow-lg hover:border-primary/50 transition-all"
+                onClick={() => {
+                  setSelectedProperty(property);
+                  setIsDetailModalOpen(true);
+                }}
+              >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
@@ -630,19 +643,38 @@ const PropertiesPage = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => openEditDialog(property)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedProperty(property);
+                        setIsDetailModalOpen(true);
+                      }}
                       className="flex-1"
                     >
-                      <Edit2 className="h-3 w-3 mr-1" />
-                      Editar
+                      <Eye className="h-3 w-3 mr-1" />
+                      Detalhes
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditDialog(property);
+                      }}
+                    >
+                      <Edit2 className="h-3 w-3" />
                     </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="outline" size="sm" className="text-destructive">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="text-destructive"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <Trash2 className="h-3 w-3" />
                         </Button>
                       </AlertDialogTrigger>
-                      <AlertDialogContent>
+                      <AlertDialogContent onClick={(e) => e.stopPropagation()}>
                         <AlertDialogHeader>
                           <AlertDialogTitle>Remover imóvel?</AlertDialogTitle>
                           <AlertDialogDescription>
@@ -664,6 +696,16 @@ const PropertiesPage = () => {
           })}
         </div>
       )}
+
+      {/* Property Detail Modal */}
+      <PropertyDetailModal
+        property={selectedProperty}
+        isOpen={isDetailModalOpen}
+        onClose={() => {
+          setIsDetailModalOpen(false);
+          setSelectedProperty(null);
+        }}
+      />
     </div>
   );
 };

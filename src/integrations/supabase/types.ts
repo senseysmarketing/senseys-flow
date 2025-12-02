@@ -190,6 +190,7 @@ export type Database = {
           id: string
           lead_id: string | null
           location: string | null
+          property_id: string | null
           start_time: string
           title: string
           updated_at: string
@@ -203,6 +204,7 @@ export type Database = {
           id?: string
           lead_id?: string | null
           location?: string | null
+          property_id?: string | null
           start_time: string
           title: string
           updated_at?: string
@@ -216,6 +218,7 @@ export type Database = {
           id?: string
           lead_id?: string | null
           location?: string | null
+          property_id?: string | null
           start_time?: string
           title?: string
           updated_at?: string
@@ -233,6 +236,13 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
             referencedColumns: ["id"]
           },
         ]
