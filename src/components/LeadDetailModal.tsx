@@ -20,7 +20,9 @@ import {
   Snowflake,
   ExternalLink,
   Copy,
-  History
+  History,
+  Building2,
+  UserCheck
 } from "lucide-react";
 import WhatsAppMessagePopover from "@/components/WhatsAppMessagePopover";
 import TemperatureBadge from "@/components/TemperatureBadge";
@@ -28,6 +30,8 @@ import OriginBadge from "@/components/OriginBadge";
 import LeadActivityTimeline from "@/components/LeadActivityTimeline";
 import LeadCustomFields from "@/components/LeadCustomFields";
 import { toast } from "@/hooks/use-toast";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Lead {
   id: string;
@@ -44,6 +48,8 @@ interface Lead {
   updated_at: string;
   status_id?: string;
   temperature?: string | null;
+  assigned_broker_id?: string | null;
+  property_id?: string | null;
   lead_status?: {
     name: string;
     color: string;
@@ -58,6 +64,33 @@ interface LeadDetailModalProps {
 }
 
 const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalProps) => {
+  const [brokerName, setBrokerName] = useState<string | null>(null);
+  const [propertyInfo, setPropertyInfo] = useState<{ title: string; city?: string } | null>(null);
+
+  useEffect(() => {
+    if (lead?.assigned_broker_id) {
+      supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('user_id', lead.assigned_broker_id)
+        .single()
+        .then(({ data }) => setBrokerName(data?.full_name || null));
+    } else {
+      setBrokerName(null);
+    }
+
+    if (lead?.property_id) {
+      supabase
+        .from('properties')
+        .select('title, city')
+        .eq('id', lead.property_id)
+        .single()
+        .then(({ data }) => setPropertyInfo(data || null));
+    } else {
+      setPropertyInfo(null);
+    }
+  }, [lead?.assigned_broker_id, lead?.property_id]);
+
   if (!lead) return null;
 
   const formatPhone = (phone: string) => {
@@ -228,6 +261,41 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
                         <span className="text-xs">Anúncio</span>
                       </div>
                       <p className="font-medium text-sm">{lead.anuncio}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <Separator />
+            </>
+          )}
+
+          {/* Corretor e Imóvel Atribuídos */}
+          {(brokerName || propertyInfo) && (
+            <>
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                  Atribuição
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {brokerName && (
+                    <div className="p-3 rounded-lg bg-muted/50">
+                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                        <UserCheck className="h-4 w-4" />
+                        <span className="text-xs">Corretor Responsável</span>
+                      </div>
+                      <p className="font-medium text-sm">{brokerName}</p>
+                    </div>
+                  )}
+                  {propertyInfo && (
+                    <div className="p-3 rounded-lg bg-muted/50">
+                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                        <Building2 className="h-4 w-4" />
+                        <span className="text-xs">Imóvel de Interesse</span>
+                      </div>
+                      <p className="font-medium text-sm">
+                        {propertyInfo.title}
+                        {propertyInfo.city && ` - ${propertyInfo.city}`}
+                      </p>
                     </div>
                   )}
                 </div>

@@ -35,10 +35,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
 import { useLeadNotifications } from "@/hooks/use-lead-notifications";
+import { usePermissions } from "@/hooks/use-permissions";
 import WhatsAppMessagePopover from "@/components/WhatsAppMessagePopover";
 import TemperatureBadge from "@/components/TemperatureBadge";
 import OriginBadge from "@/components/OriginBadge";
 import LeadDetailModal from "@/components/LeadDetailModal";
+import BrokerSelect from "@/components/BrokerSelect";
+import PropertySelect from "@/components/PropertySelect";
 
 interface Lead {
   id: string;
@@ -55,6 +58,8 @@ interface Lead {
   updated_at: string;
   status_id?: string;
   temperature?: string | null;
+  assigned_broker_id?: string | null;
+  property_id?: string | null;
   lead_status?: {
     name: string;
     color: string;
@@ -70,6 +75,8 @@ interface LeadStatus {
 
 const Leads = () => {
   const { user } = useAuth();
+  const { hasPermission, isOwner } = usePermissions();
+  const canAssignLeads = hasPermission('leads.assign') || isOwner;
   const [leads, setLeads] = useState<Lead[]>([]);
   const [statuses, setStatuses] = useState<LeadStatus[]>([]);
   const [loading, setLoading] = useState(true);
@@ -117,7 +124,9 @@ const Leads = () => {
     conjunto: "",
     anuncio: "",
     status_id: "",
-    temperature: "warm" as 'hot' | 'warm' | 'cold'
+    temperature: "warm" as 'hot' | 'warm' | 'cold',
+    assigned_broker_id: null as string | null,
+    property_id: null as string | null
   });
   
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
@@ -271,7 +280,9 @@ const Leads = () => {
         conjunto: "",
         anuncio: "",
         status_id: "",
-        temperature: "warm"
+        temperature: "warm",
+        assigned_broker_id: null,
+        property_id: null
       });
 
       fetchData();
@@ -320,7 +331,9 @@ const Leads = () => {
           conjunto: editingLead.conjunto,
           anuncio: editingLead.anuncio,
           status_id: editingLead.status_id,
-          temperature: editingLead.temperature
+          temperature: editingLead.temperature,
+          assigned_broker_id: (editingLead as any).assigned_broker_id,
+          property_id: (editingLead as any).property_id
         })
         .eq('id', editingLead.id);
 
@@ -623,6 +636,27 @@ const Leads = () => {
                     />
                   </div>
                 </div>
+
+                {canAssignLeads && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Corretor Responsável</Label>
+                      <BrokerSelect
+                        value={newLead.assigned_broker_id}
+                        onValueChange={(value) => setNewLead({...newLead, assigned_broker_id: value})}
+                        placeholder="Selecionar corretor"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Imóvel de Interesse</Label>
+                      <PropertySelect
+                        value={newLead.property_id}
+                        onValueChange={(value) => setNewLead({...newLead, property_id: value})}
+                        placeholder="Selecionar imóvel"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="observacoes">Observações</Label>
@@ -1151,6 +1185,27 @@ const Leads = () => {
                   />
                 </div>
               </div>
+
+              {canAssignLeads && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Corretor Responsável</Label>
+                    <BrokerSelect
+                      value={(editingLead as any).assigned_broker_id || null}
+                      onValueChange={(value) => setEditingLead({...editingLead, assigned_broker_id: value} as any)}
+                      placeholder="Selecionar corretor"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Imóvel de Interesse</Label>
+                    <PropertySelect
+                      value={(editingLead as any).property_id || null}
+                      onValueChange={(value) => setEditingLead({...editingLead, property_id: value} as any)}
+                      placeholder="Selecionar imóvel"
+                    />
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="edit-observacoes">Observações</Label>
