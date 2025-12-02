@@ -4,12 +4,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from "recharts";
-import { TrendingUp, TrendingDown, Users, Calendar, Target, Phone } from "lucide-react";
+import { TrendingUp, TrendingDown, Users, Calendar, Target, Phone, Trophy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
 import { format, subDays, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import BrokerRanking from "@/components/BrokerRanking";
 
 interface LeadStats {
   total: number;
@@ -341,6 +342,10 @@ const ReportsPage = () => {
       <Tabs defaultValue="leads" className="space-y-6">
         <TabsList>
           <TabsTrigger value="leads">Leads</TabsTrigger>
+          <TabsTrigger value="brokers">
+            <Trophy className="h-4 w-4 mr-2" />
+            Corretores
+          </TabsTrigger>
           <TabsTrigger value="events">Eventos</TabsTrigger>
         </TabsList>
 
@@ -553,6 +558,10 @@ const ReportsPage = () => {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="brokers">
+          <BrokerRanking />
         </TabsContent>
       </Tabs>
     </div>
