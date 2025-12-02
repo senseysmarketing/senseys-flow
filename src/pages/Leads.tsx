@@ -37,6 +37,7 @@ import { toast } from "@/hooks/use-toast";
 import { useLeadNotifications } from "@/hooks/use-lead-notifications";
 import WhatsAppMessagePopover from "@/components/WhatsAppMessagePopover";
 import TemperatureBadge from "@/components/TemperatureBadge";
+import LeadDetailModal from "@/components/LeadDetailModal";
 
 interface Lead {
   id: string;
@@ -814,9 +815,10 @@ const Leads = () => {
                                   ref={provided.innerRef}
                                   {...provided.draggableProps}
                                   {...provided.dragHandleProps}
-                                  className={`lead-card transition-transform ${
+                                  className={`lead-card transition-transform cursor-pointer ${
                                     snapshot.isDragging ? 'rotate-2 scale-105 shadow-lg' : ''
                                   }`}
+                                  onDoubleClick={() => handleViewDetails(lead)}
                                 >
                                    <div className="flex items-start justify-between mb-2">
                                      <div>
@@ -919,7 +921,8 @@ const Leads = () => {
                 {filteredLeads.map((lead) => (
                   <div 
                     key={lead.id}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                    onDoubleClick={() => handleViewDetails(lead)}
                   >
                     <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div>
@@ -1170,108 +1173,13 @@ const Leads = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Lead Details Dialog */}
-      <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Detalhes do Lead</DialogTitle>
-            <DialogDescription>
-              Informações completas do lead
-            </DialogDescription>
-          </DialogHeader>
-          {selectedLead && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium">Nome</Label>
-                  <p className="text-sm text-muted-foreground">{selectedLead.name}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">Telefone</Label>
-                  <p className="text-sm text-muted-foreground">{formatPhone(selectedLead.phone)}</p>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium">Email</Label>
-                  <p className="text-sm text-muted-foreground">{selectedLead.email || '-'}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">Status</Label>
-                  {selectedLead.lead_status && (
-                    <Badge 
-                      variant="outline"
-                      style={{ 
-                        borderColor: selectedLead.lead_status.color,
-                        color: selectedLead.lead_status.color 
-                      }}
-                    >
-                      {selectedLead.lead_status.name}
-                    </Badge>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <Label className="text-sm font-medium">Interesse</Label>
-                <p className="text-sm text-muted-foreground">{selectedLead.interesse || '-'}</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium">Origem</Label>
-                  <p className="text-sm text-muted-foreground">{selectedLead.origem || '-'}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">Campanha</Label>
-                  <p className="text-sm text-muted-foreground">{selectedLead.campanha || '-'}</p>
-                </div>
-              </div>
-
-              <div>
-                <Label className="text-sm font-medium">Observações</Label>
-                <p className="text-sm text-muted-foreground">{selectedLead.observacoes || '-'}</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium">Criado em</Label>
-                  <p className="text-sm text-muted-foreground">
-                    {new Date(selectedLead.created_at).toLocaleDateString('pt-BR')}
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">Atualizado em</Label>
-                  <p className="text-sm text-muted-foreground">
-                    {new Date(selectedLead.updated_at).toLocaleDateString('pt-BR')}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-4">
-                <WhatsAppMessagePopover 
-                  phone={selectedLead.phone} 
-                  leadName={selectedLead.name}
-                  interesse={selectedLead.interesse}
-                >
-                  <Button variant="outline">
-                    <MessageCircle className="h-4 w-4 mr-2" />
-                    WhatsApp
-                  </Button>
-                </WhatsAppMessagePopover>
-                <Button onClick={() => {
-                  setIsDetailDialogOpen(false);
-                  handleEditLead(selectedLead);
-                }}>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Editar
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Lead Details Modal */}
+      <LeadDetailModal
+        lead={selectedLead}
+        open={isDetailDialogOpen}
+        onOpenChange={setIsDetailDialogOpen}
+        onEdit={handleEditLead}
+      />
     </div>
   );
 };
