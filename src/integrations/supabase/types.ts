@@ -362,14 +362,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      accept_team_invite: {
-        Args: { p_invite_id: string }
-        Returns: Json
-      }
-      get_user_account_id: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
+      accept_team_invite: { Args: { p_invite_id: string }; Returns: Json }
+      get_user_account_id: { Args: never; Returns: string }
       invite_user_to_account: {
         Args: {
           p_email: string
