@@ -37,6 +37,7 @@ import { toast } from "@/hooks/use-toast";
 import { useLeadNotifications } from "@/hooks/use-lead-notifications";
 import WhatsAppMessagePopover from "@/components/WhatsAppMessagePopover";
 import TemperatureBadge from "@/components/TemperatureBadge";
+import OriginBadge from "@/components/OriginBadge";
 import LeadDetailModal from "@/components/LeadDetailModal";
 
 interface Lead {
@@ -822,9 +823,10 @@ const Leads = () => {
                                 >
                                    <div className="flex items-start justify-between mb-2">
                                      <div>
-                                       <div className="flex items-center gap-2">
+                                       <div className="flex items-center gap-2 flex-wrap">
                                          <h4 className="font-medium text-sm">{lead.name}</h4>
                                          <TemperatureBadge temperature={lead.temperature} showLabel={false} size="sm" />
+                                         <OriginBadge origem={lead.origem} showLabel={false} size="sm" />
                                        </div>
                                        <span className="text-xs text-muted-foreground">{formatDate(lead.created_at)}</span>
                                      </div>
