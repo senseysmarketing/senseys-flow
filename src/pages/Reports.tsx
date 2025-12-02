@@ -341,12 +341,18 @@ const ReportsPage = () => {
 
       <Tabs defaultValue="leads" className="space-y-6">
         <TabsList>
-          <TabsTrigger value="leads">Leads</TabsTrigger>
+          <TabsTrigger value="leads">
+            <Target className="h-4 w-4 mr-2" />
+            Leads
+          </TabsTrigger>
           <TabsTrigger value="brokers">
             <Trophy className="h-4 w-4 mr-2" />
             Corretores
           </TabsTrigger>
-          <TabsTrigger value="events">Eventos</TabsTrigger>
+          <TabsTrigger value="events">
+            <Calendar className="h-4 w-4 mr-2" />
+            Eventos
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="leads" className="space-y-6">
