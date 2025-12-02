@@ -259,6 +259,33 @@ export type Database = {
           },
         ]
       }
+      permissions: {
+        Row: {
+          category: Database["public"]["Enums"]["permission_category"]
+          created_at: string
+          description: string | null
+          id: string
+          key: string
+          name: string
+        }
+        Insert: {
+          category: Database["public"]["Enums"]["permission_category"]
+          created_at?: string
+          description?: string | null
+          id?: string
+          key: string
+          name: string
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["permission_category"]
+          created_at?: string
+          description?: string | null
+          id?: string
+          key?: string
+          name?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           account_id: string
@@ -300,6 +327,86 @@ export type Database = {
           },
         ]
       }
+      role_permissions: {
+        Row: {
+          created_at: string
+          granted: boolean
+          id: string
+          permission_id: string
+          role_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          granted?: boolean
+          id?: string
+          permission_id: string
+          role_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          granted?: boolean
+          id?: string
+          permission_id?: string
+          role_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "role_permissions_permission_id_fkey"
+            columns: ["permission_id"]
+            isOneToOne: false
+            referencedRelation: "permissions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "role_permissions_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      roles: {
+        Row: {
+          account_id: string
+          created_at: string
+          description: string | null
+          id: string
+          is_system: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_system?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_system?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roles_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       team_invites: {
         Row: {
           account_id: string
@@ -332,6 +439,35 @@ export type Database = {
           used?: boolean
         }
         Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       whatsapp_templates: {
         Row: {
@@ -372,7 +508,16 @@ export type Database = {
     }
     Functions: {
       accept_team_invite: { Args: { p_invite_id: string }; Returns: Json }
+      create_default_roles: {
+        Args: { p_account_id: string }
+        Returns: undefined
+      }
       get_user_account_id: { Args: never; Returns: string }
+      get_user_role_id: { Args: { _user_id?: string }; Returns: string }
+      has_permission: {
+        Args: { _permission_key: string; _user_id: string }
+        Returns: boolean
+      }
       invite_user_to_account: {
         Args: {
           p_email: string
@@ -382,9 +527,15 @@ export type Database = {
         }
         Returns: Json
       }
+      is_account_owner: { Args: { _user_id?: string }; Returns: boolean }
     }
     Enums: {
-      [_ in never]: never
+      permission_category:
+        | "leads"
+        | "reports"
+        | "team"
+        | "settings"
+        | "calendar"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -511,6 +662,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      permission_category: ["leads", "reports", "team", "settings", "calendar"],
+    },
   },
 } as const
