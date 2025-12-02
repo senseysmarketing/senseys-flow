@@ -912,12 +912,12 @@ const Leads = () => {
                                   
                                   <div className="space-y-1 text-xs text-muted-foreground">
                                     <div className="flex items-center gap-2">
-                                      <Phone className="h-3 w-3" />
+                                      <Phone className="h-3 w-3 text-green-500" />
                                       {formatPhone(lead.phone)}
                                     </div>
                                     {lead.email && (
                                       <div className="flex items-center gap-2">
-                                        <Mail className="h-3 w-3" />
+                                        <Mail className="h-3 w-3 text-blue-400" />
                                         {lead.email}
                                       </div>
                                     )}
@@ -928,7 +928,7 @@ const Leads = () => {
                                     )}
                                     {lead.properties && (
                                       <div className="text-xs flex items-center gap-1">
-                                        <span className="text-muted-foreground">🏠</span>
+                                        <span className="text-amber-500">🏠</span>
                                         <span className="truncate">{lead.properties.title}</span>
                                       </div>
                                     )}
