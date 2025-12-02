@@ -27,6 +27,29 @@ export const useOldLeads = (daysThreshold: number = 7) => {
       const now = new Date();
       const thresholdDate = new Date(now.getTime() - daysThreshold * 24 * 60 * 60 * 1000);
 
+      // Primeiro, buscar o status_id de "Novo Lead"
+      const { data: novoLeadStatus, error: statusError } = await supabase
+        .from('lead_status')
+        .select('id')
+        .eq('name', 'Novo Lead')
+        .eq('is_default', true)
+        .maybeSingle();
+
+      if (statusError) {
+        console.error('Erro ao buscar status Novo Lead:', statusError);
+        setLoading(false);
+        return;
+      }
+
+      // Se não encontrou o status "Novo Lead", retornar lista vazia
+      if (!novoLeadStatus) {
+        console.log('Status "Novo Lead" não encontrado');
+        setOldLeads([]);
+        setLoading(false);
+        return;
+      }
+
+      // Agora buscar leads que estejam no status "Novo Lead" E criados há mais de X dias
       const { data: leads, error } = await supabase
         .from('leads')
         .select(`
@@ -36,13 +59,14 @@ export const useOldLeads = (daysThreshold: number = 7) => {
           email,
           origem,
           created_at,
+          status_id,
           lead_status (
             name,
             color
           )
         `)
+        .eq('status_id', novoLeadStatus.id)
         .lt('created_at', thresholdDate.toISOString())
-        .eq('lead_status.name', 'Novo Lead')
         .order('created_at', { ascending: true });
 
       if (error) {
@@ -107,7 +131,7 @@ export const useOldLeads = (daysThreshold: number = 7) => {
         .from('lead_status')
         .select('id')
         .eq('name', 'Em Contato')
-        .single();
+        .maybeSingle();
 
       if (statusError || !statusData) {
         throw new Error('Status "Em Contato" não encontrado');
