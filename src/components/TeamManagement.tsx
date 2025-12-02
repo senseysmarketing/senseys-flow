@@ -189,19 +189,31 @@ const TeamManagement = () => {
     }
   };
 
-  const handleDeleteMember = async (memberId: string, memberName: string) => {
+  const handleDeleteMember = async (memberId: string, memberUserId: string, memberName: string) => {
     try {
-      toast({
-        variant: "destructive",
-        title: "Funcionalidade em desenvolvimento",
-        description: "A remoção de membros será implementada em breve."
+      const { data, error } = await supabase.functions.invoke('delete-team-member', {
+        body: { user_id: memberUserId }
       });
-    } catch (error) {
+
+      if (error) throw error;
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      toast({
+        title: "Sucesso",
+        description: `${memberName} foi removido da equipe.`
+      });
+
+      fetchTeamMembers();
+
+    } catch (error: any) {
       console.error("Erro ao remover membro:", error);
       toast({
         variant: "destructive",
         title: "Erro",
-        description: "Não foi possível remover o membro da equipe."
+        description: error.message || "Não foi possível remover o membro da equipe."
       });
     }
   };
@@ -382,21 +394,22 @@ const TeamManagement = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {canManageTeam && member.user_id !== user?.id && member.role?.name !== 'Proprietário' && (
+                  {isOwner && member.user_id !== user?.id && member.role?.name !== 'Proprietário' && (
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => openEditRoleDialog(member)}
+                      title="Editar tipo de usuário"
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
                   )}
 
-                  {canManageTeam && member.user_id !== user?.id && member.role?.name !== 'Proprietário' && (
+                  {isOwner && member.user_id !== user?.id && member.role?.name !== 'Proprietário' && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          <Trash2 className="h-4 w-4" />
+                        <Button variant="ghost" size="sm" title="Remover membro">
+                          <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
@@ -404,13 +417,14 @@ const TeamManagement = () => {
                           <AlertDialogTitle>Confirmar Remoção</AlertDialogTitle>
                           <AlertDialogDescription>
                             Tem certeza que deseja remover {member.full_name} da equipe?
-                            Esta ação não pode ser desfeita.
+                            Esta ação não pode ser desfeita e o usuário perderá acesso ao sistema.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancelar</AlertDialogCancel>
                           <AlertDialogAction
-                            onClick={() => handleDeleteMember(member.id, member.full_name || "")}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={() => handleDeleteMember(member.id, member.user_id, member.full_name || "")}
                           >
                             Remover
                           </AlertDialogAction>
