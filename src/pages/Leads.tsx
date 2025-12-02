@@ -499,8 +499,13 @@ const Leads = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Gestão de Leads</h1>
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight">Gestão de Leads</h1>
+            <Badge variant="secondary" className="text-sm">
+              {filteredLeads.length} leads
+            </Badge>
+          </div>
           <p className="text-muted-foreground">
             Gerencie seus leads e acompanhe o funil de vendas
           </p>
@@ -823,13 +828,20 @@ const Leads = () => {
                 const statusLeads = getLeadsByStatus(status.id);
                 return (
                   <div key={status.id} className="kanban-column w-[330px] flex-none">
-                    <div className="flex items-center gap-2 mb-4">
+                    <div 
+                      className="flex items-center gap-3 mb-4 p-3 rounded-lg"
+                      style={{ background: `linear-gradient(135deg, ${status.color}20 0%, transparent 100%)` }}
+                    >
                       <div 
-                        className="w-3 h-3 rounded-full" 
-                        style={{ backgroundColor: status.color }}
+                        className="w-3 h-3 rounded-full shadow-sm" 
+                        style={{ backgroundColor: status.color, boxShadow: `0 0 8px ${status.color}50` }}
                       />
-                      <h3 className="font-semibold">{status.name}</h3>
-                      <Badge variant="secondary" className="ml-auto">
+                      <h3 className="font-semibold flex-1">{status.name}</h3>
+                      <Badge 
+                        variant="secondary" 
+                        className="font-bold"
+                        style={{ backgroundColor: `${status.color}20`, color: status.color }}
+                      >
                         {statusLeads.length}
                       </Badge>
                     </div>

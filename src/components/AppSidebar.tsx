@@ -1,42 +1,70 @@
-import { Home, Users, Calendar, BarChart3, Settings, LogOut, Building2 } from "lucide-react";
-import { NavLink } from "react-router-dom";
-import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
+import { 
+  Home, 
+  Users, 
+  Calendar, 
+  BarChart3, 
+  Settings, 
+  LogOut, 
+  Building2,
+  Sparkles
+} from "lucide-react";
+import { NavLink, useLocation } from "react-router-dom";
+import { 
+  Sidebar, 
+  SidebarContent, 
+  SidebarGroup, 
+  SidebarGroupContent, 
+  SidebarGroupLabel, 
+  SidebarMenu, 
+  SidebarMenuButton, 
+  SidebarMenuItem 
+} from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 import { useAccount } from "@/hooks/use-account";
 import logoAlternativaBranca from "@/assets/logo-alternativa-branca.png";
+import { cn } from "@/lib/utils";
 
-const menuItems = [{
-  title: "Dashboard",
-  url: "/dashboard",
-  icon: Home
-}, {
-  title: "Leads",
-  url: "/leads",
-  icon: Users
-}, {
-  title: "Imóveis",
-  url: "/properties",
-  icon: Building2
-}, {
-  title: "Agenda",
-  url: "/calendar",
-  icon: Calendar
-}, {
-  title: "Relatórios",
-  url: "/reports",
-  icon: BarChart3
-}];
+const menuItems = [
+  {
+    title: "Dashboard",
+    url: "/dashboard",
+    icon: Home,
+  },
+  {
+    title: "Leads",
+    url: "/leads",
+    icon: Users,
+  },
+  {
+    title: "Imóveis",
+    url: "/properties",
+    icon: Building2,
+  },
+  {
+    title: "Agenda",
+    url: "/calendar",
+    icon: Calendar,
+  },
+  {
+    title: "Relatórios",
+    url: "/reports",
+    icon: BarChart3,
+  },
+];
 
-const bottomItems = [{
-  title: "Configurações",
-  url: "/settings",
-  icon: Settings
-}];
+const bottomItems = [
+  {
+    title: "Configurações",
+    url: "/settings",
+    icon: Settings,
+  },
+];
 
 export function AppSidebar() {
   const { account } = useAccount();
+  const location = useLocation();
   
   const handleSignOut = async () => {
     const { error } = await signOut();
@@ -44,96 +72,132 @@ export function AppSidebar() {
       toast({
         variant: "destructive",
         title: "Erro ao sair",
-        description: error.message
+        description: error.message,
       });
     } else {
       toast({
         title: "Logout realizado",
-        description: "Até logo!"
+        description: "Até logo!",
       });
     }
   };
 
-  // Use custom logo if available, otherwise use default
   const logoSrc = account?.logo_url || logoAlternativaBranca;
   const companyName = account?.company_name || "";
 
   return (
-    <Sidebar className="w-64">
-      <SidebarContent className="bg-sidebar">
+    <Sidebar className="w-64 border-r-0">
+      <SidebarContent className="bg-sidebar/95 backdrop-blur-xl">
         {/* Logo/Brand */}
-        <div className="p-4 border-b border-sidebar-border">
-          <div className="flex items-center gap-2">
-            <img 
-              src={logoSrc} 
-              alt={companyName || "Logo"} 
-              className="h-8 w-auto max-w-[180px] object-contain"
-            />
+        <div className="p-5 border-b border-sidebar-border/50">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <img 
+                src={logoSrc} 
+                alt={companyName || "Logo"} 
+                className="h-9 w-auto max-w-[160px] object-contain"
+              />
+              <div className="absolute -top-1 -right-1">
+                <Sparkles className="h-3 w-3 text-primary animate-pulse" />
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Main Navigation */}
-        <SidebarGroup className="flex-1">
-          <SidebarGroupLabel className="text-sidebar-foreground/70">
-            Principal
+        <SidebarGroup className="flex-1 px-3 py-4">
+          <SidebarGroupLabel className="text-sidebar-foreground/50 text-xs font-semibold uppercase tracking-wider px-3 mb-2">
+            Menu Principal
           </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {menuItems.map(item => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <NavLink 
-                      to={item.url} 
-                      className={({ isActive }) => 
-                        `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                          isActive 
-                            ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" 
-                            : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-                        }`
-                      }
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+            <SidebarMenu className="space-y-1">
+              {menuItems.map((item) => {
+                const isActive = location.pathname === item.url;
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild>
+                      <NavLink
+                        to={item.url}
+                        className={cn(
+                          "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative",
+                          isActive
+                            ? "bg-primary/15 text-primary font-medium"
+                            : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                        )}
+                      >
+                        {isActive && (
+                          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full bg-gradient-to-b from-primary to-accent" />
+                        )}
+                        <div
+                          className={cn(
+                            "p-1.5 rounded-lg transition-all duration-200",
+                            isActive
+                              ? "bg-primary/20"
+                              : "bg-transparent group-hover:bg-sidebar-accent/30"
+                          )}
+                        >
+                          <item.icon
+                            className={cn(
+                              "h-4 w-4 transition-transform duration-200",
+                              isActive && "scale-110"
+                            )}
+                          />
+                        </div>
+                        <span className="text-sm">{item.title}</span>
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         {/* Bottom Items */}
-        <div className="mt-auto p-2 border-t border-sidebar-border">
-          <SidebarMenu>
-            {bottomItems.map(item => (
-              <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton asChild>
-                  <NavLink 
-                    to={item.url} 
-                    className={({ isActive }) => 
-                      `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                        isActive 
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" 
-                          : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-                      }`
-                    }
-                  >
-                    <item.icon className="h-4 w-4" />
-                    <span>{item.title}</span>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-            
+        <div className="mt-auto p-3 border-t border-sidebar-border/50">
+          <SidebarMenu className="space-y-1">
+            {bottomItems.map((item) => {
+              const isActive = location.pathname === item.url;
+              return (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to={item.url}
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group",
+                        isActive
+                          ? "bg-primary/15 text-primary font-medium"
+                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "p-1.5 rounded-lg transition-all duration-200",
+                          isActive
+                            ? "bg-primary/20"
+                            : "bg-transparent group-hover:bg-sidebar-accent/30"
+                        )}
+                      >
+                        <item.icon className="h-4 w-4" />
+                      </div>
+                      <span className="text-sm">{item.title}</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              );
+            })}
+
             <SidebarMenuItem>
               <SidebarMenuButton asChild>
-                <Button 
-                  variant="ghost" 
-                  onClick={handleSignOut} 
-                  className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                <Button
+                  variant="ghost"
+                  onClick={handleSignOut}
+                  className="w-full justify-start gap-3 px-3 py-2.5 h-auto text-sidebar-foreground/70 hover:bg-destructive/10 hover:text-destructive rounded-xl transition-all duration-200"
                 >
-                  <LogOut className="h-4 w-4 mr-3" />
-                  <span>Sair</span>
+                  <div className="p-1.5 rounded-lg bg-transparent group-hover:bg-destructive/10">
+                    <LogOut className="h-4 w-4" />
+                  </div>
+                  <span className="text-sm">Sair</span>
                 </Button>
               </SidebarMenuButton>
             </SidebarMenuItem>
