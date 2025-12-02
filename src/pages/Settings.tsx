@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Edit2, Trash2, Move, User, Settings as SettingsIcon, Palette, MessageCircle, Bell, Users, Webhook, Copy, Check, Building2, Shield, FormInput } from "lucide-react";
+import { Plus, Edit2, Trash2, Move, User, Settings as SettingsIcon, Palette, MessageCircle, Bell, Users, Webhook, Copy, Check, Building2, Shield, FormInput, Shuffle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -19,6 +19,7 @@ import TeamManagement from "@/components/TeamManagement";
 import WhiteLabelSettings from "@/components/WhiteLabelSettings";
 import RolePermissionsManager from "@/components/RolePermissionsManager";
 import CustomFieldsManager from "@/components/CustomFieldsManager";
+import DistributionRulesManager from "@/components/DistributionRulesManager";
 interface Profile {
   id: string;
   full_name: string | null;
@@ -426,6 +427,10 @@ const SettingsPage = () => {
           <TabsTrigger value="customfields">
             <FormInput className="h-4 w-4 mr-2" />
             Campos Personalizados
+          </TabsTrigger>
+          <TabsTrigger value="distribution">
+            <Shuffle className="h-4 w-4 mr-2" />
+            Distribuição
           </TabsTrigger>
           <TabsTrigger value="webhook">
             <Webhook className="h-4 w-4 mr-2" />
@@ -921,6 +926,10 @@ const SettingsPage = () => {
 
         <TabsContent value="permissions">
           <RolePermissionsManager />
+        </TabsContent>
+
+        <TabsContent value="distribution">
+          <DistributionRulesManager />
         </TabsContent>
 
         <TabsContent value="whitelabel">

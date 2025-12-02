@@ -41,6 +41,38 @@ export type Database = {
         }
         Relationships: []
       }
+      broker_round_robin: {
+        Row: {
+          account_id: string
+          broker_order: Json | null
+          id: string
+          last_broker_index: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          account_id: string
+          broker_order?: Json | null
+          id?: string
+          last_broker_index?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          account_id?: string
+          broker_order?: Json | null
+          id?: string
+          last_broker_index?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broker_round_robin_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: true
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       custom_fields: {
         Row: {
           account_id: string
@@ -91,6 +123,60 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "accounts"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      distribution_rules: {
+        Row: {
+          account_id: string
+          conditions: Json | null
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          priority: number | null
+          rule_type: string
+          target_broker_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          account_id: string
+          conditions?: Json | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          priority?: number | null
+          rule_type: string
+          target_broker_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          account_id?: string
+          conditions?: Json | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          priority?: number | null
+          rule_type?: string
+          target_broker_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "distribution_rules_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "distribution_rules_target_broker_id_fkey"
+            columns: ["target_broker_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -289,6 +375,7 @@ export type Database = {
         Row: {
           account_id: string
           anuncio: string | null
+          assigned_broker_id: string | null
           campanha: string | null
           conjunto: string | null
           created_at: string
@@ -299,6 +386,7 @@ export type Database = {
           observacoes: string | null
           origem: string | null
           phone: string
+          property_id: string | null
           status_id: string | null
           temperature: string | null
           updated_at: string
@@ -306,6 +394,7 @@ export type Database = {
         Insert: {
           account_id: string
           anuncio?: string | null
+          assigned_broker_id?: string | null
           campanha?: string | null
           conjunto?: string | null
           created_at?: string
@@ -316,6 +405,7 @@ export type Database = {
           observacoes?: string | null
           origem?: string | null
           phone: string
+          property_id?: string | null
           status_id?: string | null
           temperature?: string | null
           updated_at?: string
@@ -323,6 +413,7 @@ export type Database = {
         Update: {
           account_id?: string
           anuncio?: string | null
+          assigned_broker_id?: string | null
           campanha?: string | null
           conjunto?: string | null
           created_at?: string
@@ -333,6 +424,7 @@ export type Database = {
           observacoes?: string | null
           origem?: string | null
           phone?: string
+          property_id?: string | null
           status_id?: string | null
           temperature?: string | null
           updated_at?: string
@@ -343,6 +435,20 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_assigned_broker_id_fkey"
+            columns: ["assigned_broker_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "leads_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
             referencedColumns: ["id"]
           },
           {
@@ -419,6 +525,111 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "accounts"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      properties: {
+        Row: {
+          account_id: string
+          address: string | null
+          amenities: Json | null
+          area_m2: number | null
+          assigned_broker_id: string | null
+          bathrooms: number | null
+          bedrooms: number | null
+          campaign_cost: number | null
+          campaign_name: string | null
+          city: string | null
+          condo_fee: number | null
+          created_at: string | null
+          description: string | null
+          id: string
+          image_urls: Json | null
+          iptu: number | null
+          neighborhood: string | null
+          parking_spots: number | null
+          rent_price: number | null
+          sale_price: number | null
+          state: string | null
+          status: string | null
+          title: string
+          transaction_type: string
+          type: string
+          updated_at: string | null
+          zip_code: string | null
+        }
+        Insert: {
+          account_id: string
+          address?: string | null
+          amenities?: Json | null
+          area_m2?: number | null
+          assigned_broker_id?: string | null
+          bathrooms?: number | null
+          bedrooms?: number | null
+          campaign_cost?: number | null
+          campaign_name?: string | null
+          city?: string | null
+          condo_fee?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          image_urls?: Json | null
+          iptu?: number | null
+          neighborhood?: string | null
+          parking_spots?: number | null
+          rent_price?: number | null
+          sale_price?: number | null
+          state?: string | null
+          status?: string | null
+          title: string
+          transaction_type: string
+          type: string
+          updated_at?: string | null
+          zip_code?: string | null
+        }
+        Update: {
+          account_id?: string
+          address?: string | null
+          amenities?: Json | null
+          area_m2?: number | null
+          assigned_broker_id?: string | null
+          bathrooms?: number | null
+          bedrooms?: number | null
+          campaign_cost?: number | null
+          campaign_name?: string | null
+          city?: string | null
+          condo_fee?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          image_urls?: Json | null
+          iptu?: number | null
+          neighborhood?: string | null
+          parking_spots?: number | null
+          rent_price?: number | null
+          sale_price?: number | null
+          state?: string | null
+          status?: string | null
+          title?: string
+          transaction_type?: string
+          type?: string
+          updated_at?: string | null
+          zip_code?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "properties_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "properties_assigned_broker_id_fkey"
+            columns: ["assigned_broker_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
           },
         ]
       }

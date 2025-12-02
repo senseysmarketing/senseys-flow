@@ -16,6 +16,10 @@ const menuItems = [{
   url: "/leads",
   icon: Users
 }, {
+  title: "Imóveis",
+  url: "/properties",
+  icon: Building2
+}, {
   title: "Agenda",
   url: "/calendar",
   icon: Calendar
