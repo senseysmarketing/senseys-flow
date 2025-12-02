@@ -9,7 +9,7 @@ import TemperatureBadge from "@/components/TemperatureBadge";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   Building2, MapPin, Bed, Bath, Car, Ruler, Calendar, DollarSign, 
-  Users, Eye, TrendingUp, Clock, X, User, Phone, Mail, ChevronRight,
+  Users, Eye, TrendingUp, Clock, User, Phone, Mail, ChevronRight,
   Home, CalendarDays, Activity
 } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
@@ -203,16 +203,7 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead }: P
         </VisuallyHidden.Root>
 
         {/* Header */}
-        <div className="relative bg-gradient-to-br from-primary/20 via-primary/10 to-transparent p-6">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-4 right-4 rounded-full"
-            onClick={onClose}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-
+        <div className="relative bg-gradient-to-br from-primary/20 via-primary/10 to-transparent p-6 pt-8">
           <div className="flex items-start gap-4">
             <div className="w-16 h-16 rounded-xl bg-primary/20 border-2 border-primary/30 flex items-center justify-center">
               <Building2 className="h-8 w-8 text-primary" />
