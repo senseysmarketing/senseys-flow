@@ -41,6 +41,13 @@ interface WhatsAppTemplate {
   is_active: boolean;
 }
 const PRESET_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "#22c55e", "#10b981", "#14b8a6", "#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#d946ef", "#ec4899", "#f43f5e", "#64748b", "#374151", "#111827"];
+interface Property {
+  id: string;
+  title: string;
+  type: string;
+  city: string | null;
+}
+
 const SettingsPage = () => {
   const { user } = useAuth();
   const { hasPermission } = usePermissions();
@@ -48,6 +55,7 @@ const SettingsPage = () => {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [leadStatuses, setLeadStatuses] = useState<LeadStatus[]>([]);
   const [whatsappTemplates, setWhatsappTemplates] = useState<WhatsAppTemplate[]>([]);
+  const [properties, setProperties] = useState<Property[]>([]);
   const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false);
   const [isWhatsAppDialogOpen, setIsWhatsAppDialogOpen] = useState(false);
   const [editingStatus, setEditingStatus] = useState<LeadStatus | null>(null);
@@ -67,6 +75,7 @@ const SettingsPage = () => {
   const [accountId, setAccountId] = useState<string>("");
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedPayload, setCopiedPayload] = useState(false);
+  const [copiedPropertyId, setCopiedPropertyId] = useState<string | null>(null);
   const [testingWebhook, setTestingWebhook] = useState(false);
   useEffect(() => {
     if (user) {
@@ -74,8 +83,23 @@ const SettingsPage = () => {
       fetchLeadStatuses();
       fetchWhatsAppTemplates();
       fetchAccountId();
+      fetchProperties();
     }
   }, [user]);
+
+  const fetchProperties = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("properties")
+        .select("id, title, type, city")
+        .order("title");
+      
+      if (error) throw error;
+      setProperties(data || []);
+    } catch (error) {
+      console.error("Erro ao buscar imóveis:", error);
+    }
+  };
 
   const fetchAccountId = async () => {
     try {
@@ -795,6 +819,7 @@ const SettingsPage = () => {
                         name: "João Silva",
                         phone: "11999999999",
                         email: "joao@exemplo.com",
+                        property_id: "id-do-imovel-aqui",
                         conjunto: "Apartamento 101",
                         campanha: "Facebook Ads",
                         interesse: "Compra",
@@ -820,6 +845,7 @@ const SettingsPage = () => {
   "name": "João Silva",          // Obrigatório
   "phone": "11999999999",       // Obrigatório
   "email": "joao@exemplo.com",  // Opcional
+  "property_id": "uuid-do-imovel", // Opcional - vincula ao imóvel
   "conjunto": "Apartamento 101", // Opcional
   "campanha": "Facebook Ads",    // Opcional
   "interesse": "Compra",         // Opcional
@@ -832,6 +858,53 @@ const SettingsPage = () => {
                   ⚠️ Campos obrigatórios: <strong>name</strong> e <strong>phone</strong>
                 </p>
               </div>
+
+              {/* Imóveis Disponíveis */}
+              {properties.length > 0 && (
+                <div className="space-y-3">
+                  <Label className="text-base font-semibold flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Imóveis Disponíveis para Vincular
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Copie o ID do imóvel e adicione no campo <code className="bg-muted px-1 rounded">property_id</code> do payload para vincular automaticamente o lead ao imóvel.
+                  </p>
+                  <div className="border rounded-lg divide-y max-h-64 overflow-y-auto">
+                    {properties.map((property) => (
+                      <div key={property.id} className="p-3 flex items-center justify-between gap-2 hover:bg-muted/50">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{property.title}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {property.type}{property.city && ` • ${property.city}`}
+                          </p>
+                          <p className="text-xs font-mono text-muted-foreground truncate mt-1">
+                            {property.id}
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            navigator.clipboard.writeText(property.id);
+                            setCopiedPropertyId(property.id);
+                            setTimeout(() => setCopiedPropertyId(null), 2000);
+                            toast({
+                              title: "ID Copiado!",
+                              description: `ID do imóvel "${property.title}" copiado`,
+                            });
+                          }}
+                        >
+                          {copiedPropertyId === property.id ? (
+                            <Check className="h-4 w-4" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Botão de Teste */}
               <div className="pt-4 border-t">
