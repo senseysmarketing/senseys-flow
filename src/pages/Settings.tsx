@@ -8,13 +8,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Edit2, Trash2, Move, User, Settings as SettingsIcon, Palette, MessageCircle, Bell, Users, Webhook, Copy, Check } from "lucide-react";
+import { Plus, Edit2, Trash2, Move, User, Settings as SettingsIcon, Palette, MessageCircle, Bell, Users, Webhook, Copy, Check, Building2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import FollowUpSettings from "@/components/FollowUpSettings";
 import TeamManagement from "@/components/TeamManagement";
+import WhiteLabelSettings from "@/components/WhiteLabelSettings";
 interface Profile {
   id: string;
   full_name: string | null;
@@ -423,6 +424,10 @@ const SettingsPage = () => {
           <TabsTrigger value="webhook">
             <Webhook className="h-4 w-4 mr-2" />
             Webhook
+          </TabsTrigger>
+          <TabsTrigger value="whitelabel">
+            <Building2 className="h-4 w-4 mr-2" />
+            White Label
           </TabsTrigger>
         </TabsList>
 
@@ -896,6 +901,10 @@ const SettingsPage = () => {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="whitelabel">
+          <WhiteLabelSettings />
         </TabsContent>
       </Tabs>
 
