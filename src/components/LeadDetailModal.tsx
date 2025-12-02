@@ -142,21 +142,6 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
         </VisuallyHidden>
         {/* Header com gradiente */}
         <div className="relative bg-gradient-to-br from-primary/20 via-primary/10 to-transparent p-6 pb-8">
-          {/* Status Badge */}
-          {lead.lead_status && (
-            <Badge 
-              className="absolute top-4 right-4 px-3 py-1"
-              style={{ 
-                backgroundColor: `${lead.lead_status.color}20`,
-                borderColor: lead.lead_status.color,
-                color: lead.lead_status.color 
-              }}
-              variant="outline"
-            >
-              {lead.lead_status.name}
-            </Badge>
-          )}
-
           {/* Nome e Avatar */}
           <div className="flex items-start gap-4">
             <div className="w-16 h-16 rounded-full bg-primary/20 border-2 border-primary/30 flex items-center justify-center">
@@ -164,7 +149,20 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
             </div>
             <div className="flex-1 min-w-0">
               <h2 className="text-2xl font-bold text-foreground truncate">{lead.name}</h2>
-              <div className="flex items-center gap-3 mt-2 flex-wrap">
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                {lead.lead_status && (
+                  <Badge 
+                    className="px-2.5 py-0.5"
+                    style={{ 
+                      backgroundColor: `${lead.lead_status.color}20`,
+                      borderColor: lead.lead_status.color,
+                      color: lead.lead_status.color 
+                    }}
+                    variant="outline"
+                  >
+                    {lead.lead_status.name}
+                  </Badge>
+                )}
                 <TemperatureBadge temperature={lead.temperature} size="sm" />
                 <OriginBadge origem={lead.origem} size="sm" />
                 {lead.interesse && (
