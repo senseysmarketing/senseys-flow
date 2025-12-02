@@ -64,8 +64,9 @@ const LeadCustomFields = ({ leadId }: LeadCustomFieldsProps) => {
   const formatValue = (field: CustomField, value: string | null | undefined): string => {
     if (!value) return "Sem informação";
     
-    if (field.field_type === 'boolean') {
-      return value === 'true' ? 'Sim' : 'Não';
+  if (field.field_type === 'boolean') {
+      const trueValues = ['true', 'sim', 'yes', '1', 'verdadeiro'];
+      return trueValues.includes(value.toLowerCase()) ? 'Sim' : 'Não';
     }
     
     if (field.field_type === 'date') {
