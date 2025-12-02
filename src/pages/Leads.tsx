@@ -64,6 +64,10 @@ interface Lead {
     name: string;
     color: string;
   };
+  properties?: {
+    id: string;
+    title: string;
+  } | null;
 }
 
 interface LeadStatus {
@@ -175,6 +179,10 @@ const Leads = () => {
           lead_status (
             name,
             color
+          ),
+          properties (
+            id,
+            title
           )
         `)
         .order('created_at', { ascending: false });
@@ -918,6 +926,12 @@ const Leads = () => {
                                         Interesse: {lead.interesse}
                                       </div>
                                     )}
+                                    {lead.properties && (
+                                      <div className="text-xs flex items-center gap-1">
+                                        <span className="text-muted-foreground">🏠</span>
+                                        <span className="truncate">{lead.properties.title}</span>
+                                      </div>
+                                    )}
                                   </div>
                                   
                                   <div className="flex gap-2 mt-3">
@@ -985,9 +999,16 @@ const Leads = () => {
                       
                       <div>
                         <p className="text-sm">{lead.interesse || '-'}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(lead.created_at).toLocaleDateString('pt-BR')}
-                        </p>
+                        {lead.properties && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            🏠 {lead.properties.title}
+                          </p>
+                        )}
+                        {!lead.properties && (
+                          <p className="text-sm text-muted-foreground">
+                            {new Date(lead.created_at).toLocaleDateString('pt-BR')}
+                          </p>
+                        )}
                       </div>
                       
                       <div className="flex items-center gap-2">
