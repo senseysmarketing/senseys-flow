@@ -7,9 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Building2, Users, Target, Home, Activity, Clock } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/hooks/use-toast";
+import { Building2, Users, Target, Home, Activity, Clock, Plus, Key, Pencil, Trash2, Loader2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { CreateClientModal } from "@/components/agency/CreateClientModal";
+import { EditClientModal } from "@/components/agency/EditClientModal";
+import { DeleteClientDialog } from "@/components/agency/DeleteClientDialog";
 
 interface AccountData {
   id: string;
@@ -40,11 +45,18 @@ interface AgencyData {
 
 const AgencyAdmin = () => {
   const navigate = useNavigate();
-  const { user, session } = useAuth();
+  const { session } = useAuth();
   const { isSuperAdmin, loading: superAdminLoading } = useSuperAdmin();
   const [data, setData] = useState<AgencyData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Modal states
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<AccountData | null>(null);
+  const [accessingAccount, setAccessingAccount] = useState<string | null>(null);
 
   useEffect(() => {
     if (!superAdminLoading && !isSuperAdmin) {
@@ -52,32 +64,76 @@ const AgencyAdmin = () => {
     }
   }, [isSuperAdmin, superAdminLoading, navigate]);
 
+  const fetchData = async () => {
+    if (!session?.access_token || !isSuperAdmin) return;
+
+    try {
+      setLoading(true);
+      const { data: responseData, error: fnError } = await supabase.functions.invoke('agency-admin-data', {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+
+      if (fnError) throw fnError;
+      setData(responseData);
+    } catch (err: any) {
+      console.error('Error fetching agency data:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      if (!session?.access_token || !isSuperAdmin) return;
-
-      try {
-        setLoading(true);
-        const { data: responseData, error: fnError } = await supabase.functions.invoke('agency-admin-data', {
-          headers: {
-            Authorization: `Bearer ${session.access_token}`
-          }
-        });
-
-        if (fnError) throw fnError;
-        setData(responseData);
-      } catch (err: any) {
-        console.error('Error fetching agency data:', err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     if (isSuperAdmin && session) {
       fetchData();
     }
   }, [isSuperAdmin, session]);
+
+  const handleAccessAccount = async (account: AccountData) => {
+    if (!session?.access_token) return;
+    
+    setAccessingAccount(account.id);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-support-session', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: { 
+          account_id: account.id,
+          redirect_to: `${window.location.origin}/dashboard`
+        }
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      // Open in new tab
+      window.open(data.url, '_blank');
+      
+      toast({
+        title: "Sessão de suporte gerada",
+        description: "Uma nova aba foi aberta com acesso à conta"
+      });
+    } catch (err: any) {
+      console.error('Error generating support session:', err);
+      toast({
+        variant: "destructive",
+        title: "Erro ao acessar conta",
+        description: err.message
+      });
+    } finally {
+      setAccessingAccount(null);
+    }
+  };
+
+  const handleEdit = (account: AccountData) => {
+    setSelectedAccount(account);
+    setShowEditModal(true);
+  };
+
+  const handleDelete = (account: AccountData) => {
+    setSelectedAccount(account);
+    setShowDeleteDialog(true);
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -112,14 +168,20 @@ const AgencyAdmin = () => {
   return (
     <div className="min-h-screen p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <div className="p-3 bg-primary/20 rounded-xl">
-          <Building2 className="h-8 w-8 text-primary" />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-primary/20 rounded-xl">
+            <Building2 className="h-8 w-8 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold">Painel da Agência</h1>
+            <p className="text-muted-foreground">Monitoramento de todas as contas do CRM</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-3xl font-bold">Painel da Agência</h1>
-          <p className="text-muted-foreground">Monitoramento de todas as contas do CRM</p>
-        </div>
+        <Button onClick={() => setShowCreateModal(true)} className="gap-2">
+          <Plus className="h-4 w-4" />
+          Novo Cliente
+        </Button>
       </div>
 
       {/* Stats Cards */}
@@ -238,8 +300,8 @@ const AgencyAdmin = () => {
                     <TableHead className="text-center">Leads</TableHead>
                     <TableHead className="text-center">Imóveis</TableHead>
                     <TableHead>Último Lead</TableHead>
-                    <TableHead>Última Atividade</TableHead>
                     <TableHead className="text-center">Status</TableHead>
+                    <TableHead className="text-center">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -265,11 +327,44 @@ const AgencyAdmin = () => {
                       <TableCell className="text-sm text-muted-foreground">
                         {formatDate(account.last_lead_at)}
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {formatDate(account.last_activity_at)}
-                      </TableCell>
                       <TableCell className="text-center">
                         {getStatusBadge(account.status)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
+                            onClick={() => handleAccessAccount(account)}
+                            disabled={accessingAccount === account.id}
+                            title="Acessar conta (modo suporte)"
+                          >
+                            {accessingAccount === account.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Key className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10"
+                            onClick={() => handleEdit(account)}
+                            title="Editar conta"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                            onClick={() => handleDelete(account)}
+                            title="Excluir conta"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -279,6 +374,30 @@ const AgencyAdmin = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Modals */}
+      <CreateClientModal
+        open={showCreateModal}
+        onOpenChange={setShowCreateModal}
+        onSuccess={fetchData}
+        accessToken={session?.access_token || ""}
+      />
+
+      <EditClientModal
+        open={showEditModal}
+        onOpenChange={setShowEditModal}
+        onSuccess={fetchData}
+        accessToken={session?.access_token || ""}
+        account={selectedAccount}
+      />
+
+      <DeleteClientDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        onSuccess={fetchData}
+        accessToken={session?.access_token || ""}
+        account={selectedAccount}
+      />
     </div>
   );
 };
