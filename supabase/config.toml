@@ -11,3 +11,15 @@ verify_jwt = false
 
 [functions.agency-admin-data]
 verify_jwt = true
+
+[functions.create-client-account]
+verify_jwt = true
+
+[functions.generate-support-session]
+verify_jwt = true
+
+[functions.update-client-account]
+verify_jwt = true
+
+[functions.delete-client-account]
+verify_jwt = true
