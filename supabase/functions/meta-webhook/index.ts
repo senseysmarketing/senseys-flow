@@ -33,6 +33,136 @@ async function verifySignature(payload: string, signature: string): Promise<bool
   return computedSignature === expectedSignature;
 }
 
+// Calculate lead temperature based on scoring rules
+async function calculateLeadTemperature(
+  supabase: any,
+  accountId: string,
+  formId: string,
+  fieldData: Record<string, string>
+): Promise<{ temperature: string; score: number; referenceCode: string | null }> {
+  let temperature = 'warm'; // Default
+  let score = 0;
+  let referenceCode: string | null = null;
+
+  try {
+    // Get form config for this account and form
+    const { data: formConfig, error: configError } = await supabase
+      .from('meta_form_configs')
+      .select('*')
+      .eq('account_id', accountId)
+      .eq('form_id', formId)
+      .single();
+
+    if (configError || !formConfig) {
+      console.log(`No form config found for form ${formId}, creating one...`);
+      
+      // Auto-create form config
+      const { data: newConfig, error: createError } = await supabase
+        .from('meta_form_configs')
+        .insert({
+          account_id: accountId,
+          form_id: formId,
+          form_name: null,
+          hot_threshold: 3,
+          warm_threshold: 1,
+          is_configured: false,
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('Error creating form config:', createError);
+      } else if (newConfig) {
+        // Auto-create scoring rules for each field
+        for (const [fieldName, fieldValue] of Object.entries(fieldData)) {
+          if (fieldValue) {
+            await supabase
+              .from('meta_form_scoring_rules')
+              .upsert({
+                form_config_id: newConfig.id,
+                question_name: fieldName,
+                question_label: fieldName.replace(/_/g, ' ').replace(/\?/g, ''),
+                answer_value: fieldValue,
+                score: 0,
+              }, {
+                onConflict: 'form_config_id,question_name,answer_value',
+              });
+          }
+        }
+        console.log(`✅ Auto-created form config and ${Object.keys(fieldData).length} rules`);
+      }
+
+      return { temperature: 'warm', score: 0, referenceCode: null };
+    }
+
+    // Get scoring rules
+    const { data: rules, error: rulesError } = await supabase
+      .from('meta_form_scoring_rules')
+      .select('*')
+      .eq('form_config_id', formConfig.id);
+
+    if (rulesError) {
+      console.error('Error fetching scoring rules:', rulesError);
+      return { temperature: 'warm', score: 0, referenceCode: null };
+    }
+
+    // Check for reference field
+    if (formConfig.reference_field_name && fieldData[formConfig.reference_field_name]) {
+      referenceCode = fieldData[formConfig.reference_field_name];
+      console.log(`Found reference code from field "${formConfig.reference_field_name}": ${referenceCode}`);
+    }
+
+    // Calculate score
+    for (const rule of rules || []) {
+      const fieldValue = fieldData[rule.question_name];
+      if (fieldValue && fieldValue.toLowerCase() === rule.answer_value.toLowerCase()) {
+        score += rule.score;
+        console.log(`Rule match: "${rule.question_name}" = "${fieldValue}" -> +${rule.score} (total: ${score})`);
+      }
+    }
+
+    // Auto-register new answers that aren't in rules yet
+    for (const [fieldName, fieldValue] of Object.entries(fieldData)) {
+      if (!fieldValue) continue;
+      
+      const existingRule = (rules || []).find(
+        r => r.question_name === fieldName && r.answer_value.toLowerCase() === fieldValue.toLowerCase()
+      );
+      
+      if (!existingRule) {
+        await supabase
+          .from('meta_form_scoring_rules')
+          .upsert({
+            form_config_id: formConfig.id,
+            question_name: fieldName,
+            question_label: fieldName.replace(/_/g, ' ').replace(/\?/g, ''),
+            answer_value: fieldValue,
+            score: 0,
+          }, {
+            onConflict: 'form_config_id,question_name,answer_value',
+          });
+        console.log(`Auto-registered new answer: "${fieldName}" = "${fieldValue}"`);
+      }
+    }
+
+    // Determine temperature based on thresholds
+    if (score >= formConfig.hot_threshold) {
+      temperature = 'hot';
+    } else if (score >= formConfig.warm_threshold) {
+      temperature = 'warm';
+    } else {
+      temperature = 'cold';
+    }
+
+    console.log(`Final score: ${score}, Temperature: ${temperature} (hot >= ${formConfig.hot_threshold}, warm >= ${formConfig.warm_threshold})`);
+
+  } catch (error) {
+    console.error('Error calculating temperature:', error);
+  }
+
+  return { temperature, score, referenceCode };
+}
+
 serve(async (req) => {
   const url = new URL(req.url);
   const timestamp = new Date().toISOString();
@@ -224,9 +354,27 @@ serve(async (req) => {
           const name = fieldData['full_name'] || fieldData['nome'] || fieldData['name'] || 'Lead do Facebook';
           const phone = fieldData['phone_number'] || fieldData['telefone'] || fieldData['phone'] || '';
           const email = fieldData['email'] || '';
-          const referenceCode = fieldData['reference_code'] || fieldData['codigo_referencia'] || fieldData['ref'] || '';
 
-          console.log(`Extracted: name=${name}, phone=${phone}, email=${email}, ref=${referenceCode}`);
+          console.log(`Extracted: name=${name}, phone=${phone}, email=${email}`);
+
+          // Calculate temperature and get reference code from scoring system
+          const { temperature, score, referenceCode: scoringRefCode } = await calculateLeadTemperature(
+            supabase,
+            metaConfig.account_id,
+            formId,
+            fieldData
+          );
+
+          // Also check common reference code fields as fallback
+          const referenceCode = scoringRefCode || 
+            fieldData['reference_code'] || 
+            fieldData['codigo_referencia'] || 
+            fieldData['ref'] || 
+            fieldData['código_de_referência'] ||
+            fieldData['codigo_imovel'] ||
+            '';
+
+          console.log(`Temperature: ${temperature}, Score: ${score}, Reference Code: ${referenceCode}`);
 
           // Get ad info if available
           let adName = '';
@@ -304,7 +452,7 @@ serve(async (req) => {
 
           console.log(`Status ID for new lead: ${statusId}`);
 
-          // Create the lead
+          // Create the lead with calculated temperature
           const leadInsert = {
             account_id: metaConfig.account_id,
             name,
@@ -320,7 +468,7 @@ serve(async (req) => {
             meta_campaign_id: campaignId,
             meta_ad_name: adName,
             meta_campaign_name: campaignName,
-            temperature: 'warm',
+            temperature, // Use calculated temperature
           };
 
           console.log('Inserting lead:', JSON.stringify(leadInsert, null, 2));
@@ -339,8 +487,15 @@ serve(async (req) => {
           console.log(`✅ Lead created successfully: ${newLead.id}`);
 
           // Store additional custom fields if any
+          const excludedFields = [
+            'full_name', 'nome', 'name', 
+            'phone_number', 'telefone', 'phone', 
+            'email', 
+            'reference_code', 'codigo_referencia', 'ref', 'código_de_referência', 'codigo_imovel'
+          ];
+
           for (const [key, value] of Object.entries(fieldData)) {
-            if (!['full_name', 'nome', 'name', 'phone_number', 'telefone', 'phone', 'email', 'reference_code', 'codigo_referencia', 'ref'].includes(key) && value) {
+            if (!excludedFields.includes(key) && value) {
               // Check if there's a matching custom field
               const { data: customField } = await supabase
                 .from('custom_fields')
@@ -358,18 +513,43 @@ serve(async (req) => {
                     value,
                   });
                 console.log(`✅ Saved custom field: ${key}=${value}`);
+              } else {
+                // Auto-create custom field if it doesn't exist
+                const { data: newCustomField, error: cfError } = await supabase
+                  .from('custom_fields')
+                  .insert({
+                    account_id: metaConfig.account_id,
+                    name: key.replace(/_/g, ' ').replace(/\?/g, ''),
+                    field_key: key,
+                    field_type: 'text',
+                    is_active: true,
+                    is_required: false,
+                  })
+                  .select('id')
+                  .single();
+
+                if (!cfError && newCustomField) {
+                  await supabase
+                    .from('lead_custom_field_values')
+                    .insert({
+                      lead_id: newLead.id,
+                      custom_field_id: newCustomField.id,
+                      value,
+                    });
+                  console.log(`✅ Auto-created and saved custom field: ${key}=${value}`);
+                }
               }
             }
           }
 
-          // Log activity
+          // Log activity with temperature info
           await supabase
             .from('lead_activities')
             .insert({
               lead_id: newLead.id,
               account_id: metaConfig.account_id,
               activity_type: 'created',
-              description: `Lead criado automaticamente via Facebook Lead Ads${campaignName ? ` (Campanha: ${campaignName})` : ''}`,
+              description: `Lead criado automaticamente via Facebook Lead Ads${campaignName ? ` (Campanha: ${campaignName})` : ''} - Temperatura: ${temperature === 'hot' ? 'Quente' : temperature === 'warm' ? 'Morno' : 'Frio'} (Score: ${score})`,
             });
           console.log('✅ Activity logged');
         }
