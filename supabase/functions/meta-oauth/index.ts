@@ -24,7 +24,207 @@ serve(async (req) => {
     // Initialize Supabase client with service role
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Verify user is super admin
+    // IMPORTANT: Handle OAuth callback FIRST - Facebook doesn't send Authorization header
+    // The callback comes directly from Facebook's redirect, not from our frontend
+    if (action === 'callback') {
+      const code = url.searchParams.get('code');
+      const state = url.searchParams.get('state'); // user_id passed during auth initiation
+      const error = url.searchParams.get('error');
+
+      console.log('OAuth callback received, state (user_id):', state);
+
+      if (error) {
+        console.error('OAuth error from Facebook:', error);
+        return new Response(`
+          <html>
+            <body>
+              <script>
+                window.opener.postMessage({ type: 'META_AUTH_ERROR', error: '${error}' }, '*');
+                window.close();
+              </script>
+            </body>
+          </html>
+        `, {
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      if (!code) {
+        console.error('Missing code in callback');
+        return new Response(`
+          <html>
+            <body>
+              <script>
+                window.opener.postMessage({ type: 'META_AUTH_ERROR', error: 'Código de autorização não recebido' }, '*');
+                window.close();
+              </script>
+            </body>
+          </html>
+        `, {
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      // Validate state (user_id) exists
+      if (!state) {
+        console.error('Missing state parameter');
+        return new Response(`
+          <html>
+            <body>
+              <script>
+                window.opener.postMessage({ type: 'META_AUTH_ERROR', error: 'Estado de sessão inválido' }, '*');
+                window.close();
+              </script>
+            </body>
+          </html>
+        `, {
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      // Verify the user from state is a super admin
+      const { data: superAdminCheck } = await supabase
+        .from('super_admins')
+        .select('id')
+        .eq('user_id', state)
+        .single();
+
+      if (!superAdminCheck) {
+        console.error('State user_id is not a super admin:', state);
+        return new Response(`
+          <html>
+            <body>
+              <script>
+                window.opener.postMessage({ type: 'META_AUTH_ERROR', error: 'Usuário não autorizado' }, '*');
+                window.close();
+              </script>
+            </body>
+          </html>
+        `, {
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      const redirectUri = `${SUPABASE_URL}/functions/v1/meta-oauth?action=callback`;
+
+      // Exchange code for short-lived token
+      console.log('Exchanging code for access token...');
+      const tokenResponse = await fetch(
+        `https://graph.facebook.com/v19.0/oauth/access_token?` +
+        `client_id=${META_APP_ID}` +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&client_secret=${META_APP_SECRET}` +
+        `&code=${code}`
+      );
+
+      const tokenData = await tokenResponse.json();
+      console.log('Token response received');
+
+      if (tokenData.error) {
+        console.error('Token exchange error:', tokenData.error);
+        return new Response(`
+          <html>
+            <body>
+              <script>
+                window.opener.postMessage({ type: 'META_AUTH_ERROR', error: '${tokenData.error.message || 'Erro ao trocar código por token'}' }, '*');
+                window.close();
+              </script>
+            </body>
+          </html>
+        `, {
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      // Exchange for long-lived token
+      console.log('Exchanging for long-lived token...');
+      const longLivedResponse = await fetch(
+        `https://graph.facebook.com/v19.0/oauth/access_token?` +
+        `grant_type=fb_exchange_token` +
+        `&client_id=${META_APP_ID}` +
+        `&client_secret=${META_APP_SECRET}` +
+        `&fb_exchange_token=${tokenData.access_token}`
+      );
+
+      const longLivedData = await longLivedResponse.json();
+      console.log('Long-lived token received');
+
+      if (longLivedData.error) {
+        console.error('Long-lived token error:', longLivedData.error);
+        return new Response(`
+          <html>
+            <body>
+              <script>
+                window.opener.postMessage({ type: 'META_AUTH_ERROR', error: '${longLivedData.error.message || 'Erro ao obter token de longa duração'}' }, '*');
+                window.close();
+              </script>
+            </body>
+          </html>
+        `, {
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      // Get user info
+      console.log('Fetching Meta user info...');
+      const meResponse = await fetch(
+        `https://graph.facebook.com/v19.0/me?access_token=${longLivedData.access_token}`
+      );
+      const meData = await meResponse.json();
+      console.log('Meta user info received:', meData.name);
+
+      // Calculate expiration (long-lived tokens last ~60 days)
+      const expiresAt = new Date();
+      expiresAt.setSeconds(expiresAt.getSeconds() + (longLivedData.expires_in || 5184000));
+
+      // Save token to database (upsert - only one record)
+      const { error: upsertError } = await supabase
+        .from('meta_agency_token')
+        .upsert({
+          id: '00000000-0000-0000-0000-000000000001', // Fixed ID for single record
+          access_token: longLivedData.access_token,
+          token_expires_at: expiresAt.toISOString(),
+          user_id: meData.id,
+          user_name: meData.name,
+          scopes: ['ads_management', 'ads_read', 'pages_manage_ads', 'leads_retrieval', 'pages_read_engagement', 'pages_show_list', 'business_management'],
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'id'
+        });
+
+      if (upsertError) {
+        console.error('Database upsert error:', upsertError);
+        return new Response(`
+          <html>
+            <body>
+              <script>
+                window.opener.postMessage({ type: 'META_AUTH_ERROR', error: 'Erro ao salvar token no banco de dados' }, '*');
+                window.close();
+              </script>
+            </body>
+          </html>
+        `, {
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      console.log('Meta OAuth completed successfully for user:', meData.name);
+
+      return new Response(`
+        <html>
+          <body>
+            <script>
+              window.opener.postMessage({ type: 'META_AUTH_SUCCESS', userName: '${meData.name}' }, '*');
+              window.close();
+            </script>
+          </body>
+        </html>
+      `, {
+        headers: { 'Content-Type': 'text/html' },
+      });
+    }
+
+    // For all other actions, require authentication via Authorization header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -81,150 +281,6 @@ serve(async (req) => {
       
       return new Response(JSON.stringify({ authUrl }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Action: Handle OAuth callback
-    if (action === 'callback') {
-      const code = url.searchParams.get('code');
-      const state = url.searchParams.get('state'); // user_id
-      const error = url.searchParams.get('error');
-
-      if (error) {
-        console.error('OAuth error:', error);
-        return new Response(`
-          <html>
-            <body>
-              <script>
-                window.opener.postMessage({ type: 'META_AUTH_ERROR', error: '${error}' }, '*');
-                window.close();
-              </script>
-            </body>
-          </html>
-        `, {
-          headers: { 'Content-Type': 'text/html' },
-        });
-      }
-
-      if (!code) {
-        return new Response('Missing code', { status: 400 });
-      }
-
-      const redirectUri = `${SUPABASE_URL}/functions/v1/meta-oauth?action=callback`;
-
-      // Exchange code for short-lived token
-      console.log('Exchanging code for access token...');
-      const tokenResponse = await fetch(
-        `https://graph.facebook.com/v19.0/oauth/access_token?` +
-        `client_id=${META_APP_ID}` +
-        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-        `&client_secret=${META_APP_SECRET}` +
-        `&code=${code}`
-      );
-
-      const tokenData = await tokenResponse.json();
-      console.log('Token response received');
-
-      if (tokenData.error) {
-        console.error('Token exchange error:', tokenData.error);
-        return new Response(`
-          <html>
-            <body>
-              <script>
-                window.opener.postMessage({ type: 'META_AUTH_ERROR', error: '${tokenData.error.message}' }, '*');
-                window.close();
-              </script>
-            </body>
-          </html>
-        `, {
-          headers: { 'Content-Type': 'text/html' },
-        });
-      }
-
-      // Exchange for long-lived token
-      console.log('Exchanging for long-lived token...');
-      const longLivedResponse = await fetch(
-        `https://graph.facebook.com/v19.0/oauth/access_token?` +
-        `grant_type=fb_exchange_token` +
-        `&client_id=${META_APP_ID}` +
-        `&client_secret=${META_APP_SECRET}` +
-        `&fb_exchange_token=${tokenData.access_token}`
-      );
-
-      const longLivedData = await longLivedResponse.json();
-      console.log('Long-lived token received');
-
-      if (longLivedData.error) {
-        console.error('Long-lived token error:', longLivedData.error);
-        return new Response(`
-          <html>
-            <body>
-              <script>
-                window.opener.postMessage({ type: 'META_AUTH_ERROR', error: '${longLivedData.error.message}' }, '*');
-                window.close();
-              </script>
-            </body>
-          </html>
-        `, {
-          headers: { 'Content-Type': 'text/html' },
-        });
-      }
-
-      // Get user info
-      console.log('Fetching Meta user info...');
-      const meResponse = await fetch(
-        `https://graph.facebook.com/v19.0/me?access_token=${longLivedData.access_token}`
-      );
-      const meData = await meResponse.json();
-
-      // Calculate expiration (long-lived tokens last ~60 days)
-      const expiresAt = new Date();
-      expiresAt.setSeconds(expiresAt.getSeconds() + (longLivedData.expires_in || 5184000));
-
-      // Save token to database (upsert - only one record)
-      const { error: upsertError } = await supabase
-        .from('meta_agency_token')
-        .upsert({
-          id: '00000000-0000-0000-0000-000000000001', // Fixed ID for single record
-          access_token: longLivedData.access_token,
-          token_expires_at: expiresAt.toISOString(),
-          user_id: meData.id,
-          user_name: meData.name,
-          scopes: ['ads_management', 'ads_read', 'pages_manage_ads', 'leads_retrieval', 'pages_read_engagement', 'pages_show_list', 'business_management'],
-          updated_at: new Date().toISOString(),
-        }, {
-          onConflict: 'id'
-        });
-
-      if (upsertError) {
-        console.error('Database upsert error:', upsertError);
-        return new Response(`
-          <html>
-            <body>
-              <script>
-                window.opener.postMessage({ type: 'META_AUTH_ERROR', error: 'Erro ao salvar token' }, '*');
-                window.close();
-              </script>
-            </body>
-          </html>
-        `, {
-          headers: { 'Content-Type': 'text/html' },
-        });
-      }
-
-      console.log('Meta OAuth completed successfully for user:', meData.name);
-
-      return new Response(`
-        <html>
-          <body>
-            <script>
-              window.opener.postMessage({ type: 'META_AUTH_SUCCESS', userName: '${meData.name}' }, '*');
-              window.close();
-            </script>
-          </body>
-        </html>
-      `, {
-        headers: { 'Content-Type': 'text/html' },
       });
     }
 
