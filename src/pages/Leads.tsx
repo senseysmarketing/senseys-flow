@@ -75,6 +75,7 @@ interface LeadStatus {
   name: string;
   color: string;
   position: number;
+  is_system?: boolean;
 }
 
 const Leads = () => {
