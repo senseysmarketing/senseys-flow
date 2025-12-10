@@ -633,6 +633,86 @@ export type Database = {
         }
         Relationships: []
       }
+      meta_form_configs: {
+        Row: {
+          account_id: string
+          created_at: string
+          form_id: string
+          form_name: string | null
+          hot_threshold: number
+          id: string
+          is_configured: boolean
+          reference_field_name: string | null
+          updated_at: string
+          warm_threshold: number
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          form_id: string
+          form_name?: string | null
+          hot_threshold?: number
+          id?: string
+          is_configured?: boolean
+          reference_field_name?: string | null
+          updated_at?: string
+          warm_threshold?: number
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          form_id?: string
+          form_name?: string | null
+          hot_threshold?: number
+          id?: string
+          is_configured?: boolean
+          reference_field_name?: string | null
+          updated_at?: string
+          warm_threshold?: number
+        }
+        Relationships: []
+      }
+      meta_form_scoring_rules: {
+        Row: {
+          answer_value: string
+          created_at: string
+          form_config_id: string
+          id: string
+          question_label: string | null
+          question_name: string
+          score: number
+          updated_at: string
+        }
+        Insert: {
+          answer_value: string
+          created_at?: string
+          form_config_id: string
+          id?: string
+          question_label?: string | null
+          question_name: string
+          score?: number
+          updated_at?: string
+        }
+        Update: {
+          answer_value?: string
+          created_at?: string
+          form_config_id?: string
+          id?: string
+          question_label?: string | null
+          question_name?: string
+          score?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_form_scoring_rules_form_config_id_fkey"
+            columns: ["form_config_id"]
+            isOneToOne: false
+            referencedRelation: "meta_form_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       permissions: {
         Row: {
           category: Database["public"]["Enums"]["permission_category"]
