@@ -34,6 +34,7 @@ interface Property {
   assigned_broker_id: string | null;
   campaign_cost: number | null;
   campaign_name: string | null;
+  reference_code: string | null;
   created_at: string;
   updated_at: string | null;
 }
@@ -95,6 +96,7 @@ const PropertiesPage = () => {
     status: "disponivel",
     description: "",
     assigned_broker_id: "",
+    reference_code: "",
   });
 
   useEffect(() => {
@@ -171,6 +173,7 @@ const PropertiesPage = () => {
         status: form.status,
         description: form.description || null,
         assigned_broker_id: form.assigned_broker_id || null,
+        reference_code: form.reference_code || null,
         account_id: accountData,
       };
 
@@ -265,6 +268,7 @@ const PropertiesPage = () => {
       status: property.status,
       description: property.description || "",
       assigned_broker_id: property.assigned_broker_id || "",
+      reference_code: property.reference_code || "",
     });
     setIsDialogOpen(true);
   };
