@@ -2,15 +2,12 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, Legend } from "recharts";
-import { DollarSign, Eye, MousePointer, Target, Megaphone, RefreshCw, Clock, AlertCircle, Calendar, ChevronDown } from "lucide-react";
+import { DollarSign, Eye, MousePointer, Target, Megaphone, RefreshCw, Clock, AlertCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { format, formatDistanceToNow, subDays, differenceInDays, parseISO } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 export interface AdStats {
@@ -34,7 +31,8 @@ export interface AdStats {
 
 interface AdInsightsTabProps {
   adStats: AdStats;
-  period: string;
+  dateFrom: string;
+  dateTo: string;
   onRefresh: () => void;
 }
 
@@ -49,15 +47,12 @@ const formatNumber = (value: number) => {
   return new Intl.NumberFormat('pt-BR').format(value);
 };
 
-const AdInsightsTab = ({ adStats, period, onRefresh }: AdInsightsTabProps) => {
+const AdInsightsTab = ({ adStats, dateFrom, dateTo, onRefresh }: AdInsightsTabProps) => {
   const [syncing, setSyncing] = useState(false);
-  const [customDateOpen, setCustomDateOpen] = useState(false);
-  const [customDateFrom, setCustomDateFrom] = useState("");
-  const [customDateTo, setCustomDateTo] = useState("");
   const hasData = adStats.totalSpend > 0 || adStats.totalLeads > 0;
   const isConfigured = adStats.config !== null;
 
-  const handleSync = async (dateFrom?: string, dateTo?: string) => {
+  const handleSync = async () => {
     setSyncing(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -70,16 +65,10 @@ const AdInsightsTab = ({ adStats, period, onRefresh }: AdInsightsTabProps) => {
         return;
       }
 
-      // Calculate date range based on period or custom dates
-      const now = new Date();
-      const startDate = dateFrom || format(subDays(now, parseInt(period)), "yyyy-MM-dd");
-      const endDate = dateTo || format(now, "yyyy-MM-dd");
+      console.log(`Syncing from ${dateFrom} to ${dateTo}`);
 
-      console.log(`Syncing from ${startDate} to ${endDate}`);
-
-      // Call edge function with action=sync via query params
       const response = await fetch(
-        `https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/meta-insights?action=sync&date_from=${startDate}&date_to=${endDate}`,
+        `https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/meta-insights?action=sync&date_from=${dateFrom}&date_to=${dateTo}`,
         {
           method: 'GET',
           headers: {
@@ -123,43 +112,7 @@ const AdInsightsTab = ({ adStats, period, onRefresh }: AdInsightsTabProps) => {
       });
     } finally {
       setSyncing(false);
-      setCustomDateOpen(false);
     }
-  };
-
-  const handleCustomSync = () => {
-    if (!customDateFrom || !customDateTo) {
-      toast({
-        variant: "destructive",
-        title: "Datas inválidas",
-        description: "Selecione as datas de início e fim.",
-      });
-      return;
-    }
-
-    const from = parseISO(customDateFrom);
-    const to = parseISO(customDateTo);
-    const daysDiff = differenceInDays(to, from);
-
-    if (daysDiff < 0) {
-      toast({
-        variant: "destructive",
-        title: "Datas inválidas",
-        description: "A data de início deve ser anterior à data de fim.",
-      });
-      return;
-    }
-
-    if (daysDiff > 90) {
-      toast({
-        variant: "destructive",
-        title: "Período muito longo",
-        description: "O período máximo permitido é de 90 dias.",
-      });
-      return;
-    }
-
-    handleSync(customDateFrom, customDateTo);
   };
 
   if (!isConfigured) {
@@ -205,67 +158,15 @@ const AdInsightsTab = ({ adStats, period, onRefresh }: AdInsightsTabProps) => {
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => handleSync()}
-                disabled={syncing}
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
-                {syncing ? 'Sincronizando...' : `Sincronizar (${period} dias)`}
-              </Button>
-              
-              <Popover open={customDateOpen} onOpenChange={setCustomDateOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" disabled={syncing}>
-                    <Calendar className="h-4 w-4 mr-2" />
-                    Período Personalizado
-                    <ChevronDown className="h-4 w-4 ml-1" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-80" align="end">
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <h4 className="font-medium">Sincronizar Período Personalizado</h4>
-                      <p className="text-sm text-muted-foreground">
-                        Máximo de 90 dias
-                      </p>
-                    </div>
-                    <div className="grid gap-3">
-                      <div className="space-y-1">
-                        <Label htmlFor="date-from">Data Início</Label>
-                        <Input
-                          id="date-from"
-                          type="date"
-                          value={customDateFrom}
-                          onChange={(e) => setCustomDateFrom(e.target.value)}
-                          max={format(new Date(), "yyyy-MM-dd")}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="date-to">Data Fim</Label>
-                        <Input
-                          id="date-to"
-                          type="date"
-                          value={customDateTo}
-                          onChange={(e) => setCustomDateTo(e.target.value)}
-                          max={format(new Date(), "yyyy-MM-dd")}
-                        />
-                      </div>
-                    </div>
-                    <Button 
-                      onClick={handleCustomSync} 
-                      disabled={syncing || !customDateFrom || !customDateTo}
-                      className="w-full"
-                    >
-                      <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
-                      {syncing ? 'Sincronizando...' : 'Sincronizar Período'}
-                    </Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleSync}
+              disabled={syncing}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Sincronizando...' : 'Sincronizar Dados'}
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -297,7 +198,7 @@ const AdInsightsTab = ({ adStats, period, onRefresh }: AdInsightsTabProps) => {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{formatCurrency(adStats.totalSpend)}</div>
-                <p className="text-xs text-muted-foreground">nos últimos {period} dias</p>
+                <p className="text-xs text-muted-foreground">no período selecionado</p>
               </CardContent>
             </Card>
 

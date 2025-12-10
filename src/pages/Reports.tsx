@@ -3,12 +3,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from "recharts";
 import { TrendingUp, TrendingDown, Users, Calendar, Target, DollarSign, Flame, Trophy, Building2, Megaphone, Thermometer, Snowflake } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
-import { format, subDays, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
+import { format, subDays, startOfMonth, endOfMonth, eachDayOfInterval, parseISO, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import BrokerRanking from "@/components/BrokerRanking";
 import AdInsightsTab, { AdStats } from "@/components/reports/AdInsightsTab";
@@ -89,12 +93,72 @@ const ReportsPage = () => {
   });
   const [propertyStats, setPropertyStats] = useState<PropertyStats[]>([]);
   const [period, setPeriod] = useState("30");
+  const [customDateFrom, setCustomDateFrom] = useState("");
+  const [customDateTo, setCustomDateTo] = useState("");
+  const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
+
+  // Calculate date range based on period or custom dates
+  const getDateRange = () => {
+    if (period === "custom" && customDateFrom && customDateTo) {
+      return { from: customDateFrom, to: customDateTo };
+    }
+    const now = new Date();
+    const days = period === "custom" ? 30 : parseInt(period);
+    const from = format(subDays(now, days), "yyyy-MM-dd");
+    const to = format(now, "yyyy-MM-dd");
+    return { from, to };
+  };
+
+  const handlePeriodChange = (value: string) => {
+    if (value === "custom") {
+      setShowCustomDatePicker(true);
+    } else {
+      setPeriod(value);
+      setShowCustomDatePicker(false);
+    }
+  };
+
+  const handleApplyCustomPeriod = () => {
+    if (!customDateFrom || !customDateTo) {
+      toast({
+        variant: "destructive",
+        title: "Datas inválidas",
+        description: "Selecione as datas de início e fim.",
+      });
+      return;
+    }
+
+    const from = parseISO(customDateFrom);
+    const to = parseISO(customDateTo);
+    const daysDiff = differenceInDays(to, from);
+
+    if (daysDiff < 0) {
+      toast({
+        variant: "destructive",
+        title: "Datas inválidas",
+        description: "A data de início deve ser anterior à data de fim.",
+      });
+      return;
+    }
+
+    if (daysDiff > 90) {
+      toast({
+        variant: "destructive",
+        title: "Período muito longo",
+        description: "O período máximo permitido é de 90 dias.",
+      });
+      return;
+    }
+
+    setPeriod("custom");
+    setShowCustomDatePicker(false);
+  };
 
   useEffect(() => {
     if (user) {
       fetchStats();
     }
-  }, [user, period]);
+  }, [user, period, customDateFrom, customDateTo]);
 
   const fetchStats = async () => {
     try {
@@ -462,6 +526,11 @@ const ReportsPage = () => {
     );
   }
 
+  const { from: dateFrom, to: dateTo } = getDateRange();
+  const periodLabel = period === "custom" 
+    ? `${format(parseISO(customDateFrom), "dd/MM")} - ${format(parseISO(customDateTo), "dd/MM")}`
+    : `Últimos ${period} dias`;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -470,16 +539,67 @@ const ReportsPage = () => {
           <p className="text-muted-foreground">Análise completa de performance e métricas</p>
         </div>
         
-        <Select value={period} onValueChange={setPeriod}>
-          <SelectTrigger className="w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="7">Últimos 7 dias</SelectItem>
-            <SelectItem value="30">Últimos 30 dias</SelectItem>
-            <SelectItem value="90">Últimos 90 dias</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <Select value={period === "custom" ? "custom" : period} onValueChange={handlePeriodChange}>
+            <SelectTrigger className="w-48">
+              <SelectValue>
+                {period === "custom" ? periodLabel : undefined}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7">Últimos 7 dias</SelectItem>
+              <SelectItem value="30">Últimos 30 dias</SelectItem>
+              <SelectItem value="90">Últimos 90 dias</SelectItem>
+              <SelectItem value="custom">Personalizado...</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Popover open={showCustomDatePicker} onOpenChange={setShowCustomDatePicker}>
+            <PopoverTrigger asChild>
+              <span></span>
+            </PopoverTrigger>
+            <PopoverContent className="w-80" align="end">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <h4 className="font-medium">Período Personalizado</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Máximo de 90 dias
+                  </p>
+                </div>
+                <div className="grid gap-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="global-date-from">Data Início</Label>
+                    <Input
+                      id="global-date-from"
+                      type="date"
+                      value={customDateFrom}
+                      onChange={(e) => setCustomDateFrom(e.target.value)}
+                      max={format(new Date(), "yyyy-MM-dd")}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="global-date-to">Data Fim</Label>
+                    <Input
+                      id="global-date-to"
+                      type="date"
+                      value={customDateTo}
+                      onChange={(e) => setCustomDateTo(e.target.value)}
+                      max={format(new Date(), "yyyy-MM-dd")}
+                    />
+                  </div>
+                </div>
+                <Button 
+                  onClick={handleApplyCustomPeriod}
+                  disabled={!customDateFrom || !customDateTo}
+                  className="w-full"
+                >
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Aplicar Período
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
 
       {/* KPIs Globais */}
@@ -765,7 +885,7 @@ const ReportsPage = () => {
         </TabsContent>
 
         <TabsContent value="ads">
-          <AdInsightsTab adStats={adStats} period={period} onRefresh={fetchAdStats} />
+          <AdInsightsTab adStats={adStats} dateFrom={dateFrom} dateTo={dateTo} onRefresh={fetchAdStats} />
         </TabsContent>
 
         <TabsContent value="properties">
