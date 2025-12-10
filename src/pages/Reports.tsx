@@ -84,7 +84,8 @@ const ReportsPage = () => {
     avgCPL: 0,
     avgCTR: 0,
     dailyData: [],
-    campaignData: []
+    campaignData: [],
+    config: null
   });
   const [propertyStats, setPropertyStats] = useState<PropertyStats[]>([]);
   const [period, setPeriod] = useState("30");
@@ -318,92 +319,74 @@ const ReportsPage = () => {
     const now = new Date();
     const startDate = subDays(now, parseInt(period));
 
-    const { data: insights, error } = await supabase
-      .from("meta_ad_insights")
-      .select("*")
-      .gte("date", format(startDate, "yyyy-MM-dd"))
-      .order("date", { ascending: true });
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        console.error("No session for ad stats");
+        return;
+      }
 
-    if (error) {
-      console.error("Erro ao buscar insights de anúncios:", error);
-      return;
-    }
-
-    if (!insights || insights.length === 0) {
-      setAdStats({
-        totalSpend: 0,
-        totalImpressions: 0,
-        totalClicks: 0,
-        totalLeads: 0,
-        totalReach: 0,
-        avgCPM: 0,
-        avgCPC: 0,
-        avgCPL: 0,
-        avgCTR: 0,
-        dailyData: [],
-        campaignData: []
+      const response = await supabase.functions.invoke('meta-insights', {
+        body: { 
+          action: 'get',
+          date_from: format(startDate, "yyyy-MM-dd"),
+          date_to: format(now, "yyyy-MM-dd")
+        },
       });
-      return;
-    }
 
-    // Calcular totais
-    const totals = insights.reduce((acc, day) => ({
-      spend: acc.spend + (day.spend || 0),
-      impressions: acc.impressions + (day.impressions || 0),
-      clicks: acc.clicks + (day.clicks || 0),
-      leads: acc.leads + (day.leads_count || 0),
-      reach: acc.reach + (day.reach || 0),
-    }), { spend: 0, impressions: 0, clicks: 0, leads: 0, reach: 0 });
+      if (response.error) {
+        console.error("Erro ao buscar insights:", response.error);
+        return;
+      }
 
-    // Calcular médias
-    const avgCPM = totals.impressions > 0 ? (totals.spend / totals.impressions) * 1000 : 0;
-    const avgCPC = totals.clicks > 0 ? totals.spend / totals.clicks : 0;
-    const avgCPL = totals.leads > 0 ? totals.spend / totals.leads : 0;
-    const avgCTR = totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0;
+      const data = response.data;
 
-    // Dados diários
-    const dailyData = insights.map(day => ({
-      date: format(new Date(day.date), "dd/MM", { locale: ptBR }),
-      spend: day.spend || 0,
-      leads: day.leads_count || 0,
-      clicks: day.clicks || 0,
-    }));
-
-    // Agregar por campanha
-    const campaignMap = new Map<string, { spend: number; leads: number; impressions: number }>();
-    insights.forEach(day => {
-      const campaigns = day.campaign_data as any[] || [];
-      campaigns.forEach((campaign: any) => {
-        const existing = campaignMap.get(campaign.name) || { spend: 0, leads: 0, impressions: 0 };
-        campaignMap.set(campaign.name, {
-          spend: existing.spend + (campaign.spend || 0),
-          leads: existing.leads + (campaign.leads || 0),
-          impressions: existing.impressions + (campaign.impressions || 0),
+      if (data.error) {
+        // Not configured - set empty state with null config
+        setAdStats({
+          totalSpend: 0,
+          totalImpressions: 0,
+          totalClicks: 0,
+          totalLeads: 0,
+          totalReach: 0,
+          avgCPM: 0,
+          avgCPC: 0,
+          avgCPL: 0,
+          avgCTR: 0,
+          dailyData: [],
+          campaignData: [],
+          config: null
         });
+        return;
+      }
+
+      const { insights, totals, campaignData, config } = data;
+
+      // Dados diários
+      const dailyData = (insights || []).map((day: any) => ({
+        date: format(new Date(day.date), "dd/MM", { locale: ptBR }),
+        spend: day.spend || 0,
+        leads: day.leads_count || 0,
+        clicks: day.clicks || 0,
+      }));
+
+      setAdStats({
+        totalSpend: totals?.spend || 0,
+        totalImpressions: totals?.impressions || 0,
+        totalClicks: totals?.clicks || 0,
+        totalLeads: totals?.leads_count || 0,
+        totalReach: totals?.reach || 0,
+        avgCPM: totals?.cpm || 0,
+        avgCPC: totals?.cpc || 0,
+        avgCPL: totals?.cpl || 0,
+        avgCTR: totals?.ctr || 0,
+        dailyData,
+        campaignData: campaignData || [],
+        config: config || null
       });
-    });
-
-    const campaignData = Array.from(campaignMap.entries()).map(([name, data]) => ({
-      name,
-      spend: data.spend,
-      leads: data.leads,
-      impressions: data.impressions,
-      cpl: data.leads > 0 ? data.spend / data.leads : 0,
-    })).sort((a, b) => b.leads - a.leads);
-
-    setAdStats({
-      totalSpend: totals.spend,
-      totalImpressions: totals.impressions,
-      totalClicks: totals.clicks,
-      totalLeads: totals.leads,
-      totalReach: totals.reach,
-      avgCPM,
-      avgCPC,
-      avgCPL,
-      avgCTR,
-      dailyData,
-      campaignData
-    });
+    } catch (error) {
+      console.error("Erro ao buscar insights de anúncios:", error);
+    }
   };
 
   const fetchPropertyStats = async () => {
@@ -782,7 +765,7 @@ const ReportsPage = () => {
         </TabsContent>
 
         <TabsContent value="ads">
-          <AdInsightsTab adStats={adStats} period={period} />
+          <AdInsightsTab adStats={adStats} period={period} onRefresh={fetchAdStats} />
         </TabsContent>
 
         <TabsContent value="properties">
