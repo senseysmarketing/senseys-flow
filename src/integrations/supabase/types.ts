@@ -400,6 +400,7 @@ export type Database = {
           created_at: string
           id: string
           is_default: boolean | null
+          is_system: boolean
           name: string
           position: number
           updated_at: string
@@ -410,6 +411,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_default?: boolean | null
+          is_system?: boolean
           name: string
           position?: number
           updated_at?: string
@@ -420,6 +422,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_default?: boolean | null
+          is_system?: boolean
           name?: string
           position?: number
           updated_at?: string

@@ -32,6 +32,7 @@ interface LeadStatus {
   color: string;
   position: number;
   is_default: boolean;
+  is_system: boolean;
 }
 interface WhatsAppTemplate {
   id: string;
@@ -548,7 +549,7 @@ const SettingsPage = () => {
                           backgroundColor: status.color
                         }} />
                                 <span className="font-medium">{status.name}</span>
-                                {status.is_default && <Badge variant="outline">Padrão</Badge>}
+                                {status.is_system && <Badge variant="outline">Sistema</Badge>}
                               </div>
                               
                               <div className="flex items-center gap-2">
@@ -556,7 +557,7 @@ const SettingsPage = () => {
                                   <Edit2 className="h-4 w-4" />
                                 </Button>
                                 
-                                {!status.is_default && <AlertDialog>
+                                {!status.is_system && <AlertDialog>
                                     <AlertDialogTrigger asChild>
                                       <Button variant="ghost" size="sm">
                                         <Trash2 className="h-4 w-4" />
