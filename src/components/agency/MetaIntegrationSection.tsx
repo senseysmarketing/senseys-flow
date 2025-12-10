@@ -87,12 +87,6 @@ export function MetaIntegrationSection({ accessToken, accounts }: MetaIntegratio
 
   const fetchMetaStatus = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('meta-oauth', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        body: {},
-      });
-
-      // Try with action parameter
       const response = await fetch(
         `https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/meta-oauth?action=status`,
         {
@@ -100,7 +94,12 @@ export function MetaIntegrationSection({ accessToken, accounts }: MetaIntegratio
         }
       );
       const statusData = await response.json();
-      setMetaStatus(statusData);
+      
+      if (statusData.error && statusData.error !== 'Meta not connected') {
+        console.error('Meta status error:', statusData.error);
+      }
+      
+      setMetaStatus(statusData.connected !== undefined ? statusData : { connected: false });
     } catch (err) {
       console.error('Error fetching Meta status:', err);
       setMetaStatus({ connected: false });
