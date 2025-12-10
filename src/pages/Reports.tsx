@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from "recharts";
 import { TrendingUp, TrendingDown, Users, Calendar, Target, DollarSign, Flame, Trophy, Building2, Megaphone, Thermometer, Snowflake } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -554,51 +554,46 @@ const ReportsPage = () => {
             </SelectContent>
           </Select>
 
-          <Popover open={showCustomDatePicker} onOpenChange={setShowCustomDatePicker}>
-            <PopoverTrigger asChild>
-              <span></span>
-            </PopoverTrigger>
-            <PopoverContent className="w-80" align="end">
-              <div className="space-y-4">
+          <Dialog open={showCustomDatePicker} onOpenChange={setShowCustomDatePicker}>
+            <DialogContent className="sm:max-w-[400px]">
+              <DialogHeader>
+                <DialogTitle>Período Personalizado</DialogTitle>
+                <DialogDescription>
+                  Selecione o período desejado (máximo 90 dias)
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
                 <div className="space-y-2">
-                  <h4 className="font-medium">Período Personalizado</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Máximo de 90 dias
-                  </p>
+                  <Label htmlFor="global-date-from">Data Início</Label>
+                  <Input
+                    id="global-date-from"
+                    type="date"
+                    value={customDateFrom}
+                    onChange={(e) => setCustomDateFrom(e.target.value)}
+                    max={format(new Date(), "yyyy-MM-dd")}
+                  />
                 </div>
-                <div className="grid gap-3">
-                  <div className="space-y-1">
-                    <Label htmlFor="global-date-from">Data Início</Label>
-                    <Input
-                      id="global-date-from"
-                      type="date"
-                      value={customDateFrom}
-                      onChange={(e) => setCustomDateFrom(e.target.value)}
-                      max={format(new Date(), "yyyy-MM-dd")}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="global-date-to">Data Fim</Label>
-                    <Input
-                      id="global-date-to"
-                      type="date"
-                      value={customDateTo}
-                      onChange={(e) => setCustomDateTo(e.target.value)}
-                      max={format(new Date(), "yyyy-MM-dd")}
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="global-date-to">Data Fim</Label>
+                  <Input
+                    id="global-date-to"
+                    type="date"
+                    value={customDateTo}
+                    onChange={(e) => setCustomDateTo(e.target.value)}
+                    max={format(new Date(), "yyyy-MM-dd")}
+                  />
                 </div>
-                <Button 
-                  onClick={handleApplyCustomPeriod}
-                  disabled={!customDateFrom || !customDateTo}
-                  className="w-full"
-                >
-                  <Calendar className="h-4 w-4 mr-2" />
-                  Aplicar Período
-                </Button>
               </div>
-            </PopoverContent>
-          </Popover>
+              <Button 
+                onClick={handleApplyCustomPeriod}
+                disabled={!customDateFrom || !customDateTo}
+                className="w-full"
+              >
+                <Calendar className="h-4 w-4 mr-2" />
+                Aplicar Período
+              </Button>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
