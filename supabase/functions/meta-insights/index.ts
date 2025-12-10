@@ -255,8 +255,25 @@ serve(async (req) => {
         .eq('account_id', profile.account_id)
         .single();
 
-      const dateFrom = url.searchParams.get('date_from');
-      const dateTo = url.searchParams.get('date_to');
+      // Read dates from body (POST via invoke) or URL params (GET)
+      let dateFrom: string | null = null;
+      let dateTo: string | null = null;
+      
+      if (req.method === 'POST') {
+        try {
+          const body = await req.json();
+          dateFrom = body.date_from || null;
+          dateTo = body.date_to || null;
+        } catch {
+          // Body already consumed or empty, fall back to URL params
+        }
+      }
+      
+      // Fall back to URL params if not in body
+      if (!dateFrom) dateFrom = url.searchParams.get('date_from');
+      if (!dateTo) dateTo = url.searchParams.get('date_to');
+
+      console.log(`Fetching insights for account ${profile.account_id}, from ${dateFrom} to ${dateTo}`);
 
       let query = supabase
         .from('meta_ad_insights')

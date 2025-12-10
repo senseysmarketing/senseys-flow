@@ -118,8 +118,13 @@ const ReportsPage = () => {
     }
   };
 
+  // Local state for custom date inputs (prevents refetch on every keystroke)
+  const [tempDateFrom, setTempDateFrom] = useState("");
+  const [tempDateTo, setTempDateTo] = useState("");
+  const [fetchTrigger, setFetchTrigger] = useState(0);
+
   const handleApplyCustomPeriod = () => {
-    if (!customDateFrom || !customDateTo) {
+    if (!tempDateFrom || !tempDateTo) {
       toast({
         variant: "destructive",
         title: "Datas inválidas",
@@ -128,8 +133,8 @@ const ReportsPage = () => {
       return;
     }
 
-    const from = parseISO(customDateFrom);
-    const to = parseISO(customDateTo);
+    const from = parseISO(tempDateFrom);
+    const to = parseISO(tempDateTo);
     const daysDiff = differenceInDays(to, from);
 
     if (daysDiff < 0) {
@@ -150,15 +155,27 @@ const ReportsPage = () => {
       return;
     }
 
+    // Only update state and trigger fetch when user clicks "Aplicar"
+    setCustomDateFrom(tempDateFrom);
+    setCustomDateTo(tempDateTo);
     setPeriod("custom");
     setShowCustomDatePicker(false);
+    setFetchTrigger(prev => prev + 1);
   };
 
+  // Fetch when user, period changes (non-custom), or explicit trigger
   useEffect(() => {
-    if (user) {
+    if (user && period !== "custom") {
       fetchStats();
     }
   }, [user, period]);
+
+  // Fetch for custom period only on explicit trigger
+  useEffect(() => {
+    if (user && period === "custom" && customDateFrom && customDateTo && fetchTrigger > 0) {
+      fetchStats();
+    }
+  }, [fetchTrigger]);
 
   const fetchStats = async () => {
     try {
@@ -182,8 +199,9 @@ const ReportsPage = () => {
   };
 
   const fetchLeadStats = async () => {
-    const now = new Date();
-    const startDate = subDays(now, parseInt(period));
+    const { from: dateFrom, to: dateTo } = getDateRange();
+    const startDate = parseISO(dateFrom);
+    const now = parseISO(dateTo);
     const startOfThisMonth = startOfMonth(now);
     const endOfThisMonth = endOfMonth(now);
     const startOfLastMonth = startOfMonth(subDays(startOfThisMonth, 1));
@@ -380,8 +398,7 @@ const ReportsPage = () => {
   };
 
   const fetchAdStats = async () => {
-    const now = new Date();
-    const startDate = subDays(now, parseInt(period));
+    const { from: dateFrom, to: dateTo } = getDateRange();
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -393,8 +410,8 @@ const ReportsPage = () => {
       const response = await supabase.functions.invoke('meta-insights', {
         body: { 
           action: 'get',
-          date_from: format(startDate, "yyyy-MM-dd"),
-          date_to: format(now, "yyyy-MM-dd")
+          date_from: dateFrom,
+          date_to: dateTo
         },
       });
 
@@ -570,8 +587,8 @@ const ReportsPage = () => {
                   <Input
                     id="global-date-from"
                     type="date"
-                    value={customDateFrom}
-                    onChange={(e) => setCustomDateFrom(e.target.value)}
+                    value={tempDateFrom}
+                    onChange={(e) => setTempDateFrom(e.target.value)}
                     max={format(new Date(), "yyyy-MM-dd")}
                   />
                 </div>
@@ -580,15 +597,15 @@ const ReportsPage = () => {
                   <Input
                     id="global-date-to"
                     type="date"
-                    value={customDateTo}
-                    onChange={(e) => setCustomDateTo(e.target.value)}
+                    value={tempDateTo}
+                    onChange={(e) => setTempDateTo(e.target.value)}
                     max={format(new Date(), "yyyy-MM-dd")}
                   />
                 </div>
               </div>
               <Button 
                 onClick={handleApplyCustomPeriod}
-                disabled={!customDateFrom || !customDateTo}
+                disabled={!tempDateFrom || !tempDateTo}
                 className="w-full"
               >
                 <Calendar className="h-4 w-4 mr-2" />
