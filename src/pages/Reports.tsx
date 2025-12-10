@@ -158,7 +158,7 @@ const ReportsPage = () => {
     if (user) {
       fetchStats();
     }
-  }, [user, period, customDateFrom, customDateTo]);
+  }, [user, period]);
 
   const fetchStats = async () => {
     try {
@@ -527,9 +527,11 @@ const ReportsPage = () => {
   }
 
   const { from: dateFrom, to: dateTo } = getDateRange();
-  const periodLabel = period === "custom" 
+  const periodLabel = period === "custom" && customDateFrom && customDateTo
     ? `${format(parseISO(customDateFrom), "dd/MM")} - ${format(parseISO(customDateTo), "dd/MM")}`
-    : `Últimos ${period} dias`;
+    : period === "custom" 
+      ? "Personalizado" 
+      : `Últimos ${period} dias`;
 
   return (
     <div className="space-y-6">
