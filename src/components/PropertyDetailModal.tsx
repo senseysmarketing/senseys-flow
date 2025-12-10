@@ -41,6 +41,7 @@ interface Property {
   assigned_broker_id: string | null;
   campaign_cost: number | null;
   campaign_name: string | null;
+  reference_code: string | null;
   created_at: string;
   updated_at: string | null;
 }

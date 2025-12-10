@@ -8,13 +8,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { Building2, Users, Target, Home, Activity, Clock, Plus, Key, Pencil, Trash2, Loader2 } from "lucide-react";
+import { Building2, Users, Target, Home, Activity, Clock, Plus, Key, Pencil, Trash2, Loader2, Facebook } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CreateClientModal } from "@/components/agency/CreateClientModal";
 import { EditClientModal } from "@/components/agency/EditClientModal";
 import { DeleteClientDialog } from "@/components/agency/DeleteClientDialog";
+import { MetaIntegrationSection } from "@/components/agency/MetaIntegrationSection";
 
 interface AccountData {
   id: string;
@@ -183,6 +185,21 @@ const AgencyAdmin = () => {
           Novo Cliente
         </Button>
       </div>
+
+      {/* Tabs for different sections */}
+      <Tabs defaultValue="accounts" className="space-y-6">
+        <TabsList className="bg-card/50 backdrop-blur">
+          <TabsTrigger value="accounts" className="gap-2">
+            <Building2 className="h-4 w-4" />
+            Contas
+          </TabsTrigger>
+          <TabsTrigger value="meta" className="gap-2">
+            <Facebook className="h-4 w-4" />
+            Integração Meta
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="accounts" className="space-y-6">
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
@@ -374,6 +391,19 @@ const AgencyAdmin = () => {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="meta">
+          <MetaIntegrationSection
+            accessToken={session?.access_token || ""}
+            accounts={data?.accounts.map(a => ({
+              id: a.id,
+              name: a.name,
+              company_name: a.company_name,
+            })) || []}
+          />
+        </TabsContent>
+      </Tabs>
 
       {/* Modals */}
       <CreateClientModal

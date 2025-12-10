@@ -246,6 +246,7 @@ const PropertiesPage = () => {
       status: "disponivel",
       description: "",
       assigned_broker_id: "",
+      reference_code: "",
     });
   };
 
@@ -494,6 +495,19 @@ const PropertiesPage = () => {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="reference_code">Código de Referência</Label>
+                  <Input
+                    id="reference_code"
+                    value={form.reference_code}
+                    onChange={e => setForm({ ...form, reference_code: e.target.value })}
+                    placeholder="Ex: APT-001"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Use este código no formulário do Meta Lead Ads para vincular leads automaticamente
+                  </p>
                 </div>
                 
                 <div className="col-span-2 space-y-2">
