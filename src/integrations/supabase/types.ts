@@ -14,6 +14,59 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_meta_config: {
+        Row: {
+          account_id: string
+          ad_account_id: string
+          ad_account_name: string | null
+          created_at: string | null
+          form_id: string | null
+          form_name: string | null
+          id: string
+          is_active: boolean | null
+          last_sync_at: string | null
+          page_id: string | null
+          page_name: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          account_id: string
+          ad_account_id: string
+          ad_account_name?: string | null
+          created_at?: string | null
+          form_id?: string | null
+          form_name?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_sync_at?: string | null
+          page_id?: string | null
+          page_name?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          account_id?: string
+          ad_account_id?: string
+          ad_account_name?: string | null
+          created_at?: string | null
+          form_id?: string | null
+          form_name?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_sync_at?: string | null
+          page_id?: string | null
+          page_name?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_meta_config_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: true
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       accounts: {
         Row: {
           company_name: string | null
@@ -392,6 +445,12 @@ export type Database = {
           email: string | null
           id: string
           interesse: string | null
+          meta_ad_id: string | null
+          meta_ad_name: string | null
+          meta_campaign_id: string | null
+          meta_campaign_name: string | null
+          meta_form_id: string | null
+          meta_lead_id: string | null
           name: string
           observacoes: string | null
           origem: string | null
@@ -411,6 +470,12 @@ export type Database = {
           email?: string | null
           id?: string
           interesse?: string | null
+          meta_ad_id?: string | null
+          meta_ad_name?: string | null
+          meta_campaign_id?: string | null
+          meta_campaign_name?: string | null
+          meta_form_id?: string | null
+          meta_lead_id?: string | null
           name: string
           observacoes?: string | null
           origem?: string | null
@@ -430,6 +495,12 @@ export type Database = {
           email?: string | null
           id?: string
           interesse?: string | null
+          meta_ad_id?: string | null
+          meta_ad_name?: string | null
+          meta_campaign_id?: string | null
+          meta_campaign_name?: string | null
+          meta_form_id?: string | null
+          meta_lead_id?: string | null
           name?: string
           observacoes?: string | null
           origem?: string | null
@@ -469,6 +540,95 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      meta_ad_insights: {
+        Row: {
+          account_id: string
+          campaign_data: Json | null
+          clicks: number | null
+          cpc: number | null
+          cpl: number | null
+          cpm: number | null
+          created_at: string | null
+          date: string
+          id: string
+          impressions: number | null
+          leads_count: number | null
+          reach: number | null
+          spend: number | null
+        }
+        Insert: {
+          account_id: string
+          campaign_data?: Json | null
+          clicks?: number | null
+          cpc?: number | null
+          cpl?: number | null
+          cpm?: number | null
+          created_at?: string | null
+          date: string
+          id?: string
+          impressions?: number | null
+          leads_count?: number | null
+          reach?: number | null
+          spend?: number | null
+        }
+        Update: {
+          account_id?: string
+          campaign_data?: Json | null
+          clicks?: number | null
+          cpc?: number | null
+          cpl?: number | null
+          cpm?: number | null
+          created_at?: string | null
+          date?: string
+          id?: string
+          impressions?: number | null
+          leads_count?: number | null
+          reach?: number | null
+          spend?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_ad_insights_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meta_agency_token: {
+        Row: {
+          access_token: string
+          created_at: string | null
+          id: string
+          scopes: string[] | null
+          token_expires_at: string | null
+          updated_at: string | null
+          user_id: string | null
+          user_name: string | null
+        }
+        Insert: {
+          access_token: string
+          created_at?: string | null
+          id?: string
+          scopes?: string[] | null
+          token_expires_at?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Update: {
+          access_token?: string
+          created_at?: string | null
+          id?: string
+          scopes?: string[] | null
+          token_expires_at?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Relationships: []
       }
       permissions: {
         Row: {
@@ -558,6 +718,7 @@ export type Database = {
           iptu: number | null
           neighborhood: string | null
           parking_spots: number | null
+          reference_code: string | null
           rent_price: number | null
           sale_price: number | null
           state: string | null
@@ -587,6 +748,7 @@ export type Database = {
           iptu?: number | null
           neighborhood?: string | null
           parking_spots?: number | null
+          reference_code?: string | null
           rent_price?: number | null
           sale_price?: number | null
           state?: string | null
@@ -616,6 +778,7 @@ export type Database = {
           iptu?: number | null
           neighborhood?: string | null
           parking_spots?: number | null
+          reference_code?: string | null
           rent_price?: number | null
           sale_price?: number | null
           state?: string | null

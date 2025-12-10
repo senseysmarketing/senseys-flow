@@ -23,3 +23,15 @@ verify_jwt = true
 
 [functions.delete-client-account]
 verify_jwt = true
+
+[functions.meta-oauth]
+verify_jwt = false
+
+[functions.meta-webhook]
+verify_jwt = false
+
+[functions.meta-accounts]
+verify_jwt = true
+
+[functions.meta-insights]
+verify_jwt = true
