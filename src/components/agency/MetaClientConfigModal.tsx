@@ -256,12 +256,15 @@ export function MetaClientConfigModal({
             {loadingPages ? (
               <Skeleton className="h-10 w-full" />
             ) : (
-              <Select value={selectedPage} onValueChange={setSelectedPage}>
+              <Select 
+                value={selectedPage || "__none__"} 
+                onValueChange={(val) => setSelectedPage(val === "__none__" ? "" : val)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione uma página (opcional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Nenhuma</SelectItem>
+                  <SelectItem value="__none__">Nenhuma</SelectItem>
                   {pages.map((page) => (
                     <SelectItem key={page.id} value={page.id}>
                       <div className="flex flex-col">
@@ -288,12 +291,15 @@ export function MetaClientConfigModal({
               {loadingForms ? (
                 <Skeleton className="h-10 w-full" />
               ) : forms.length > 0 ? (
-                <Select value={selectedForm} onValueChange={setSelectedForm}>
+                <Select 
+                  value={selectedForm || "__none__"} 
+                  onValueChange={(val) => setSelectedForm(val === "__none__" ? "" : val)}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione um formulário (opcional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Todos os formulários</SelectItem>
+                    <SelectItem value="__none__">Todos os formulários</SelectItem>
                     {forms.map((form) => (
                       <SelectItem key={form.id} value={form.id}>
                         {form.name}
