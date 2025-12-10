@@ -138,9 +138,8 @@ serve(async (req) => {
     // Get Forms for a specific page
     if (action === 'forms') {
       const pageId = url.searchParams.get('page_id');
-      if (!pageId) {
-        return new Response(JSON.stringify({ error: 'page_id required' }), {
-          status: 400,
+      if (!pageId || pageId === '__none__') {
+        return new Response(JSON.stringify({ forms: [] }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
@@ -149,17 +148,39 @@ serve(async (req) => {
 
       // We need the page access token
       const pagesResponse = await fetch(
-        `https://graph.facebook.com/v19.0/me/accounts?fields=id,access_token&access_token=${accessToken}`
+        `https://graph.facebook.com/v19.0/me/accounts?fields=id,name,access_token&limit=100&access_token=${accessToken}`
       );
       const pagesData = await pagesResponse.json();
-      const pageToken = pagesData.data?.find((p: any) => p.id === pageId)?.access_token;
-
-      if (!pageToken) {
-        return new Response(JSON.stringify({ error: 'Page not found or no access' }), {
+      
+      console.log(`Found ${pagesData.data?.length || 0} pages, looking for page ID: ${pageId}`);
+      
+      if (pagesData.error) {
+        console.error('Error fetching pages for forms:', pagesData.error);
+        return new Response(JSON.stringify({ error: pagesData.error.message, forms: [] }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+
+      // Log available pages for debugging
+      const availablePages = pagesData.data?.map((p: any) => ({ id: p.id, name: p.name })) || [];
+      console.log('Available pages:', JSON.stringify(availablePages));
+      
+      const page = pagesData.data?.find((p: any) => p.id === pageId);
+      const pageToken = page?.access_token;
+
+      if (!pageToken) {
+        console.error(`Page ${pageId} not found in available pages or no access token`);
+        // Return empty forms instead of error - page might not have leadgen permission
+        return new Response(JSON.stringify({ 
+          forms: [],
+          message: 'Página não encontrada ou sem permissão de acesso a formulários'
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      console.log(`Found page token for ${page.name}, fetching forms...`);
 
       const formsResponse = await fetch(
         `https://graph.facebook.com/v19.0/${pageId}/leadgen_forms?fields=id,name,status&access_token=${pageToken}`
@@ -168,8 +189,11 @@ serve(async (req) => {
 
       if (formsData.error) {
         console.error('Error fetching forms:', formsData.error);
-        return new Response(JSON.stringify({ error: formsData.error.message }), {
-          status: 400,
+        // Return empty forms with message instead of error
+        return new Response(JSON.stringify({ 
+          forms: [],
+          message: formsData.error.message
+        }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
