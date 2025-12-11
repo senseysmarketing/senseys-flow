@@ -1192,6 +1192,10 @@ export type Database = {
     }
     Functions: {
       accept_team_invite: { Args: { p_invite_id: string }; Returns: Json }
+      apply_standard_lead_statuses: {
+        Args: { p_account_id: string }
+        Returns: undefined
+      }
       create_default_roles: {
         Args: { p_account_id: string }
         Returns: undefined
