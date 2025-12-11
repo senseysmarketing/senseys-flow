@@ -90,9 +90,20 @@ const MetaFormScoringManager = () => {
     }
   };
 
+  // Campos de dados básicos do lead que não devem aparecer na qualificação
+  const EXCLUDED_FIELD_NAMES = [
+    'full_name', 'nome', 'name',
+    'email', 'e-mail',
+    'phone_number', 'telefone', 'phone', 'celular', 'whatsapp'
+  ];
+
   const groupRulesByQuestion = (rules: ScoringRule[]): GroupedRules => {
     const grouped: GroupedRules = {};
     for (const rule of rules) {
+      // Filtrar campos de dados básicos do lead
+      if (EXCLUDED_FIELD_NAMES.includes(rule.question_name.toLowerCase())) {
+        continue;
+      }
       if (!grouped[rule.question_name]) {
         grouped[rule.question_name] = {
           label: rule.question_label || rule.question_name,
