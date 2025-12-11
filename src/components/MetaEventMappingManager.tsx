@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { useAccount } from "@/hooks/use-account";
 import { 
   Loader2, Send, RefreshCw, Info, CheckCircle, XCircle, 
   Wifi, WifiOff, Activity, AlertTriangle, Zap 
@@ -70,6 +71,7 @@ const LEAD_TYPES = [
 ];
 
 export default function MetaEventMappingManager() {
+  const { account, loading: accountLoading } = useAccount();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testingSending, setTestingSending] = useState(false);
@@ -78,29 +80,24 @@ export default function MetaEventMappingManager() {
   const [recentLogs, setRecentLogs] = useState<EventLog[]>([]);
   const [metaConfig, setMetaConfig] = useState<MetaConfig | null>(null);
   const [eventStats, setEventStats] = useState<EventStats>({ total: 0, success: 0, failed: 0, successRate: 0 });
-  const [accountId, setAccountId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (account) {
+      fetchData();
+    }
+  }, [account]);
 
   const fetchData = async () => {
+    if (!account) return;
+    
     setLoading(true);
     try {
-      // Get user's account
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('account_id')
-        .single();
-
-      if (!profile) throw new Error('Profile not found');
-      setAccountId(profile.account_id);
 
       // Check if Meta is configured
       const { data: configData } = await supabase
         .from('account_meta_config')
         .select('pixel_id, ad_account_id, ad_account_name, is_active, last_sync_at')
-        .eq('account_id', profile.account_id)
+        .eq('account_id', account.id)
         .single();
 
       setMetaConfig(configData || null);
@@ -147,7 +144,7 @@ export default function MetaEventMappingManager() {
       const { data: allLogs } = await supabase
         .from('meta_capi_events_log')
         .select('status_code')
-        .eq('account_id', profile.account_id);
+        .eq('account_id', account.id);
 
       if (allLogs) {
         const total = allLogs.length;
@@ -190,17 +187,12 @@ export default function MetaEventMappingManager() {
       return;
     }
 
+    if (!account) return;
+
     setSaving(true);
     try {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('account_id')
-        .single();
-
-      if (!profile) throw new Error('Profile not found');
-
       const payload = {
-        account_id: profile.account_id,
+        account_id: account.id,
         status_id: statusId,
         event_name: mapping.event_name,
         lead_type: mapping.lead_type === '__none__' ? null : mapping.lead_type,
@@ -276,7 +268,7 @@ export default function MetaEventMappingManager() {
   };
 
   const sendTestEvent = async () => {
-    if (!accountId) return;
+    if (!account) return;
 
     setTestingSending(true);
     try {
@@ -284,7 +276,7 @@ export default function MetaEventMappingManager() {
       const { data: testLead } = await supabase
         .from('leads')
         .select('id, name')
-        .eq('account_id', accountId)
+        .eq('account_id', account.id)
         .limit(1)
         .single();
 
@@ -347,7 +339,7 @@ export default function MetaEventMappingManager() {
     }
   };
 
-  if (loading) {
+  if (accountLoading || loading) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-8 w-64" />
