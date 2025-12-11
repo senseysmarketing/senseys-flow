@@ -1196,6 +1196,10 @@ export type Database = {
         Args: { p_account_id: string }
         Returns: undefined
       }
+      create_default_meta_mappings: {
+        Args: { p_account_id: string }
+        Returns: undefined
+      }
       create_default_roles: {
         Args: { p_account_id: string }
         Returns: undefined
