@@ -406,6 +406,10 @@ const Leads = () => {
     setLoading(true);
 
     try {
+      // Get the lead data before update for comparison
+      const leadBefore = leads.find(l => l.id === leadId);
+      const oldStatusId = leadBefore?.status_id;
+
       const { error } = await supabase
         .from('leads')
         .update({ status_id: newStatusId })
@@ -417,6 +421,41 @@ const Leads = () => {
         title: "Status atualizado!",
         description: "O status do lead foi alterado com sucesso.",
       });
+
+      // Send Meta CAPI event if mapping exists
+      if (oldStatusId !== newStatusId) {
+        try {
+          // Check if there's a mapping for this status
+          const { data: mapping } = await supabase
+            .from('meta_event_mappings')
+            .select('event_name, lead_type, is_active')
+            .eq('status_id', newStatusId)
+            .eq('is_active', true)
+            .single();
+
+          if (mapping) {
+            console.log(`Sending Meta CAPI event: ${mapping.event_name} for lead ${leadId}`);
+            
+            const { data: session } = await supabase.auth.getSession();
+            
+            await fetch('https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/send-meta-event', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session?.session?.access_token}`,
+              },
+              body: JSON.stringify({
+                lead_id: leadId,
+                event_name: mapping.event_name,
+                custom_data: mapping.lead_type ? { lead_type: mapping.lead_type } : {},
+              }),
+            });
+          }
+        } catch (capiError) {
+          console.error('Error sending Meta CAPI event:', capiError);
+          // Don't fail the status change if CAPI fails
+        }
+      }
 
       fetchData();
 

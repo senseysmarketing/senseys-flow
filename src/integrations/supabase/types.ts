@@ -27,6 +27,7 @@ export type Database = {
           last_sync_at: string | null
           page_id: string | null
           page_name: string | null
+          pixel_id: string | null
           updated_at: string | null
         }
         Insert: {
@@ -41,6 +42,7 @@ export type Database = {
           last_sync_at?: string | null
           page_id?: string | null
           page_name?: string | null
+          pixel_id?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -55,6 +57,7 @@ export type Database = {
           last_sync_at?: string | null
           page_id?: string | null
           page_name?: string | null
+          pixel_id?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -632,6 +635,101 @@ export type Database = {
           user_name?: string | null
         }
         Relationships: []
+      }
+      meta_capi_events_log: {
+        Row: {
+          account_id: string
+          error_message: string | null
+          event_id: string
+          event_name: string
+          id: string
+          lead_id: string | null
+          pixel_id: string | null
+          response_body: Json | null
+          sent_at: string | null
+          status_code: number | null
+        }
+        Insert: {
+          account_id: string
+          error_message?: string | null
+          event_id: string
+          event_name: string
+          id?: string
+          lead_id?: string | null
+          pixel_id?: string | null
+          response_body?: Json | null
+          sent_at?: string | null
+          status_code?: number | null
+        }
+        Update: {
+          account_id?: string
+          error_message?: string | null
+          event_id?: string
+          event_name?: string
+          id?: string
+          lead_id?: string | null
+          pixel_id?: string | null
+          response_body?: Json | null
+          sent_at?: string | null
+          status_code?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_capi_events_log_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meta_event_mappings: {
+        Row: {
+          account_id: string
+          created_at: string | null
+          event_name: string
+          id: string
+          is_active: boolean | null
+          lead_type: string | null
+          status_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          account_id: string
+          created_at?: string | null
+          event_name: string
+          id?: string
+          is_active?: boolean | null
+          lead_type?: string | null
+          status_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          account_id?: string
+          created_at?: string | null
+          event_name?: string
+          id?: string
+          is_active?: boolean | null
+          lead_type?: string | null
+          status_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_event_mappings_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_event_mappings_status_id_fkey"
+            columns: ["status_id"]
+            isOneToOne: false
+            referencedRelation: "lead_status"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       meta_form_configs: {
         Row: {
