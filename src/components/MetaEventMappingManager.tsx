@@ -8,7 +8,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Send, RefreshCw, Info, CheckCircle, XCircle } from "lucide-react";
+import { 
+  Loader2, Send, RefreshCw, Info, CheckCircle, XCircle, 
+  Wifi, WifiOff, Activity, AlertTriangle, Zap 
+} from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -31,7 +34,23 @@ interface EventLog {
   event_name: string;
   status_code: number;
   sent_at: string;
+  error_message: string | null;
   leads?: { name: string } | null;
+}
+
+interface MetaConfig {
+  pixel_id: string | null;
+  ad_account_id: string | null;
+  ad_account_name: string | null;
+  is_active: boolean;
+  last_sync_at: string | null;
+}
+
+interface EventStats {
+  total: number;
+  success: number;
+  failed: number;
+  successRate: number;
 }
 
 const META_EVENTS = [
@@ -53,10 +72,13 @@ const LEAD_TYPES = [
 export default function MetaEventMappingManager() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testingSending, setTestingSending] = useState(false);
   const [statuses, setStatuses] = useState<LeadStatus[]>([]);
   const [mappings, setMappings] = useState<Record<string, EventMapping>>({});
   const [recentLogs, setRecentLogs] = useState<EventLog[]>([]);
-  const [hasPixel, setHasPixel] = useState(false);
+  const [metaConfig, setMetaConfig] = useState<MetaConfig | null>(null);
+  const [eventStats, setEventStats] = useState<EventStats>({ total: 0, success: 0, failed: 0, successRate: 0 });
+  const [accountId, setAccountId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -65,21 +87,23 @@ export default function MetaEventMappingManager() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Check if pixel is configured
+      // Get user's account
       const { data: profile } = await supabase
         .from('profiles')
         .select('account_id')
         .single();
 
-      if (profile) {
-        const { data: metaConfig } = await supabase
-          .from('account_meta_config')
-          .select('pixel_id')
-          .eq('account_id', profile.account_id)
-          .single();
+      if (!profile) throw new Error('Profile not found');
+      setAccountId(profile.account_id);
 
-        setHasPixel(!!metaConfig?.pixel_id);
-      }
+      // Check if Meta is configured
+      const { data: configData } = await supabase
+        .from('account_meta_config')
+        .select('pixel_id, ad_account_id, ad_account_name, is_active, last_sync_at')
+        .eq('account_id', profile.account_id)
+        .single();
+
+      setMetaConfig(configData || null);
 
       // Fetch lead statuses
       const { data: statusData, error: statusError } = await supabase
@@ -110,14 +134,28 @@ export default function MetaEventMappingManager() {
       });
       setMappings(mappingsMap);
 
-      // Fetch recent event logs
+      // Fetch recent event logs with error details
       const { data: logData } = await supabase
         .from('meta_capi_events_log')
-        .select('id, event_name, status_code, sent_at, leads:lead_id(name)')
+        .select('id, event_name, status_code, sent_at, error_message, leads:lead_id(name)')
         .order('sent_at', { ascending: false })
-        .limit(10);
+        .limit(20);
 
       setRecentLogs((logData || []) as EventLog[]);
+
+      // Calculate stats from all logs
+      const { data: allLogs } = await supabase
+        .from('meta_capi_events_log')
+        .select('status_code')
+        .eq('account_id', profile.account_id);
+
+      if (allLogs) {
+        const total = allLogs.length;
+        const success = allLogs.filter(l => l.status_code === 200).length;
+        const failed = total - success;
+        const successRate = total > 0 ? Math.round((success / total) * 100) : 0;
+        setEventStats({ total, success, failed, successRate });
+      }
 
     } catch (error: any) {
       toast({
@@ -170,7 +208,6 @@ export default function MetaEventMappingManager() {
       };
 
       if (mapping.id) {
-        // Update existing
         const { error } = await supabase
           .from('meta_event_mappings')
           .update(payload)
@@ -178,7 +215,6 @@ export default function MetaEventMappingManager() {
 
         if (error) throw error;
       } else {
-        // Insert new
         const { data, error } = await supabase
           .from('meta_event_mappings')
           .insert(payload)
@@ -187,7 +223,6 @@ export default function MetaEventMappingManager() {
 
         if (error) throw error;
 
-        // Update local state with new ID
         setMappings(prev => ({
           ...prev,
           [statusId]: { ...prev[statusId], id: data.id },
@@ -240,6 +275,78 @@ export default function MetaEventMappingManager() {
     }
   };
 
+  const sendTestEvent = async () => {
+    if (!accountId) return;
+
+    setTestingSending(true);
+    try {
+      // Get a random lead to test with
+      const { data: testLead } = await supabase
+        .from('leads')
+        .select('id, name')
+        .eq('account_id', accountId)
+        .limit(1)
+        .single();
+
+      if (!testLead) {
+        toast({
+          variant: "destructive",
+          title: "Sem leads",
+          description: "Crie pelo menos um lead para testar o envio de eventos",
+        });
+        return;
+      }
+
+      // Send test event
+      const response = await fetch(
+        `https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/send-meta-event`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+          },
+          body: JSON.stringify({
+            lead_id: testLead.id,
+            event_name: 'Lead',
+            custom_data: { test: true, lead_event_source: 'Test Event' },
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast({
+          title: "Evento de teste enviado!",
+          description: `Evento Lead enviado para o lead "${testLead.name}"`,
+        });
+        // Refresh logs
+        fetchData();
+      } else if (result.skipped) {
+        toast({
+          variant: "destructive",
+          title: "Evento não enviado",
+          description: result.message || "Pixel não configurado ou conta inativa",
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Erro ao enviar",
+          description: result.error || "Erro desconhecido",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Erro ao testar",
+        description: error.message,
+      });
+    } finally {
+      setTestingSending(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -249,7 +356,7 @@ export default function MetaEventMappingManager() {
     );
   }
 
-  if (!hasPixel) {
+  if (!metaConfig?.pixel_id) {
     return (
       <Card>
         <CardHeader>
@@ -277,6 +384,125 @@ export default function MetaEventMappingManager() {
 
   return (
     <div className="space-y-6">
+      {/* Connection Status & Stats Row */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* Connection Status */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              {metaConfig.is_active ? (
+                <div className="p-2 rounded-full bg-green-500/20">
+                  <Wifi className="h-5 w-5 text-green-500" />
+                </div>
+              ) : (
+                <div className="p-2 rounded-full bg-destructive/20">
+                  <WifiOff className="h-5 w-5 text-destructive" />
+                </div>
+              )}
+              <div>
+                <p className="text-sm font-medium">Status de Conexão</p>
+                <p className="text-xs text-muted-foreground">
+                  {metaConfig.is_active ? 'Conectado' : 'Desconectado'}
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 pt-3 border-t space-y-1">
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium">Pixel ID:</span> {metaConfig.pixel_id}
+              </p>
+              {metaConfig.ad_account_name && (
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-medium">Conta:</span> {metaConfig.ad_account_name}
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Total Events */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-full bg-primary/20">
+                <Activity className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{eventStats.total}</p>
+                <p className="text-xs text-muted-foreground">Total de Eventos</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Success Rate */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-full bg-green-500/20">
+                <CheckCircle className="h-5 w-5 text-green-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{eventStats.successRate}%</p>
+                <p className="text-xs text-muted-foreground">
+                  Taxa de Sucesso ({eventStats.success} ok)
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Failed Events */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-full ${eventStats.failed > 0 ? 'bg-destructive/20' : 'bg-muted'}`}>
+                <AlertTriangle className={`h-5 w-5 ${eventStats.failed > 0 ? 'text-destructive' : 'text-muted-foreground'}`} />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{eventStats.failed}</p>
+                <p className="text-xs text-muted-foreground">Eventos com Erro</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Test Button Card */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Zap className="h-5 w-5" />
+            Testar Conexão
+          </CardTitle>
+          <CardDescription>
+            Envie um evento de teste para verificar se a conexão com o Meta está funcionando
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button 
+            onClick={sendTestEvent} 
+            disabled={testingSending}
+            variant="outline"
+          >
+            {testingSending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Enviando...
+              </>
+            ) : (
+              <>
+                <Send className="h-4 w-4 mr-2" />
+                Enviar Evento de Teste
+              </>
+            )}
+          </Button>
+          <p className="text-xs text-muted-foreground mt-2">
+            Isso enviará um evento "Lead" de teste usando um lead existente da sua conta.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Event Mapping Table */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -394,12 +620,12 @@ export default function MetaEventMappingManager() {
         </CardContent>
       </Card>
 
-      {/* Recent Events Log */}
+      {/* Recent Events Log with Error Details */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle className="text-lg">Eventos Recentes</CardTitle>
-            <CardDescription>Últimos eventos enviados para o Meta</CardDescription>
+            <CardDescription>Últimos eventos enviados para o Meta (com detalhes de erro)</CardDescription>
           </div>
           <Button variant="outline" size="sm" onClick={fetchData}>
             <RefreshCw className="h-4 w-4 mr-2" />
@@ -408,11 +634,15 @@ export default function MetaEventMappingManager() {
         </CardHeader>
         <CardContent>
           {recentLogs.length === 0 ? (
-            <p className="text-center text-muted-foreground py-4">
-              Nenhum evento enviado ainda
-            </p>
+            <div className="p-6 text-center text-muted-foreground">
+              <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p className="text-lg font-medium mb-2">Nenhum evento enviado ainda</p>
+              <p className="text-sm">
+                Quando leads mudarem de status, os eventos aparecerão aqui.
+              </p>
+            </div>
           ) : (
-            <ScrollArea className="h-[200px]">
+            <ScrollArea className="h-[300px]">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -420,6 +650,7 @@ export default function MetaEventMappingManager() {
                     <TableHead>Evento</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Data</TableHead>
+                    <TableHead>Detalhes</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -433,13 +664,37 @@ export default function MetaEventMappingManager() {
                       </TableCell>
                       <TableCell>
                         {log.status_code === 200 ? (
-                          <CheckCircle className="h-4 w-4 text-green-500" />
+                          <div className="flex items-center gap-1">
+                            <CheckCircle className="h-4 w-4 text-green-500" />
+                            <span className="text-xs text-green-600">Sucesso</span>
+                          </div>
                         ) : (
-                          <XCircle className="h-4 w-4 text-destructive" />
+                          <div className="flex items-center gap-1">
+                            <XCircle className="h-4 w-4 text-destructive" />
+                            <span className="text-xs text-destructive">Erro {log.status_code}</span>
+                          </div>
                         )}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm">
                         {new Date(log.sent_at).toLocaleString('pt-BR')}
+                      </TableCell>
+                      <TableCell>
+                        {log.error_message ? (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant="destructive" className="cursor-help text-xs">
+                                  Ver erro
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                <p className="text-xs">{log.error_message}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
