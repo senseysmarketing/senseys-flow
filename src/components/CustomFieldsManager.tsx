@@ -264,7 +264,10 @@ const CustomFieldsManager = () => {
           <div>
             <CardTitle>Campos Personalizados</CardTitle>
             <CardDescription>
-              Crie campos personalizados para capturar informações adicionais dos leads
+              Crie campos personalizados para capturar informações adicionais dos leads via webhook.
+              <span className="block mt-1 text-xs">
+                💡 Leads do Meta Ads já importam as perguntas do formulário automaticamente.
+              </span>
             </CardDescription>
           </div>
           <Button onClick={openCreateDialog}>
