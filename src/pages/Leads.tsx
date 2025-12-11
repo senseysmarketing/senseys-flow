@@ -24,7 +24,6 @@ import {
   Edit,
   Trash,
   Grid,
-  List,
   Bell,
   BellOff,
   Flame,
@@ -87,7 +86,7 @@ const Leads = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [statuses, setStatuses] = useState<LeadStatus[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'kanban' | 'table' | 'database'>('kanban');
+  const [viewMode, setViewMode] = useState<'kanban' | 'database'>('kanban');
   const [searchTerm, setSearchTerm] = useState("");
   const [filters, setFilters] = useState({
     status: "",
@@ -842,15 +841,6 @@ const Leads = () => {
             Kanban
           </Button>
           <Button
-            variant={viewMode === 'table' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setViewMode('table')}
-            className="gap-2"
-          >
-            <List className="h-4 w-4" />
-            Lista
-          </Button>
-          <Button
             variant={viewMode === 'database' ? 'default' : 'outline'}
             size="sm"
             onClick={() => setViewMode('database')}
@@ -1015,133 +1005,6 @@ const Leads = () => {
             </div>
           </div>
         </DragDropContext>
-      ) : viewMode === 'table' ? (
-        // Table View
-        <Card>
-          <CardHeader>
-            <CardTitle>Lista de Leads</CardTitle>
-            <CardDescription>
-              {filteredLeads.length} lead(s) encontrado(s)
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {filteredLeads.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <p>Nenhum lead encontrado</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {filteredLeads.map((lead) => (
-                  <div 
-                    key={lead.id}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
-                    onDoubleClick={() => handleViewDetails(lead)}
-                  >
-                    <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <div>
-                        <h4 className="font-medium">{lead.name}</h4>
-                        <p className="text-sm text-muted-foreground">{formatPhone(lead.phone)}</p>
-                      </div>
-                      
-                      <div>
-                        <p className="text-sm">{lead.email || '-'}</p>
-                        <p className="text-sm text-muted-foreground">{lead.origem || '-'}</p>
-                      </div>
-                      
-                      <div>
-                        <p className="text-sm">{lead.interesse || '-'}</p>
-                        {lead.properties && (
-                          <p className="text-xs text-muted-foreground flex items-center gap-1">
-                            🏠 {lead.properties.title}
-                          </p>
-                        )}
-                        {!lead.properties && (
-                          <p className="text-sm text-muted-foreground">
-                            {new Date(lead.created_at).toLocaleDateString('pt-BR')}
-                          </p>
-                        )}
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        {lead.lead_status && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 px-2 text-xs border gap-1"
-                                style={{ 
-                                  borderColor: lead.lead_status.color,
-                                  color: lead.lead_status.color 
-                                }}
-                              >
-                                {lead.lead_status.name}
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="z-50 bg-background border">
-                              {statuses.map((status) => (
-                                <DropdownMenuItem 
-                                  key={status.id}
-                                  onClick={() => handleStatusChange(lead.id, status.id)}
-                                  className="flex items-center gap-2"
-                                >
-                                  <div 
-                                    className="w-2 h-2 rounded-full" 
-                                    style={{ backgroundColor: status.color }}
-                                  />
-                                  {status.name}
-                                </DropdownMenuItem>
-                              ))}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="flex gap-2">
-                      <WhatsAppMessagePopover 
-                        phone={lead.phone} 
-                        leadName={lead.name}
-                        interesse={lead.interesse}
-                      >
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                        >
-                          <MessageCircle className="h-4 w-4" />
-                        </Button>
-                      </WhatsAppMessagePopover>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="z-50 bg-background border">
-                          <DropdownMenuItem onClick={() => handleViewDetails(lead)}>
-                            <Eye className="h-4 w-4 mr-2" />
-                            Ver detalhes
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleEditLead(lead)}>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Editar lead
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            onClick={() => handleDeleteLead(lead.id)}
-                            className="text-destructive"
-                          >
-                            <Trash className="h-4 w-4 mr-2" />
-                            Deletar
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
       ) : viewMode === 'database' ? (
         // Database View
         <LeadsDatabaseView
