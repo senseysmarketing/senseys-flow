@@ -21,6 +21,7 @@ interface MetaClientConfigModalProps {
     form_id: string | null;
     form_name: string | null;
     is_active: boolean;
+    pixel_id?: string | null;
   } | null;
   onSuccess: () => void;
 }
@@ -64,6 +65,7 @@ export function MetaClientConfigModal({
   const [selectedAdAccount, setSelectedAdAccount] = useState<string>("");
   const [selectedPage, setSelectedPage] = useState<string>("");
   const [selectedForm, setSelectedForm] = useState<string>("");
+  const [pixelId, setPixelId] = useState<string>("");
   const [isActive, setIsActive] = useState(true);
   
   const [loadingAdAccounts, setLoadingAdAccounts] = useState(false);
@@ -80,11 +82,13 @@ export function MetaClientConfigModal({
         setSelectedAdAccount(existingConfig.ad_account_id || "");
         setSelectedPage(existingConfig.page_id || "");
         setSelectedForm(existingConfig.form_id || "");
+        setPixelId(existingConfig.pixel_id || "");
         setIsActive(existingConfig.is_active);
       } else {
         setSelectedAdAccount("");
         setSelectedPage("");
         setSelectedForm("");
+        setPixelId("");
         setIsActive(true);
       }
     }
@@ -186,6 +190,7 @@ export function MetaClientConfigModal({
             page_name: selectedPageData?.name || null,
             form_id: selectedForm || null,
             form_name: selectedFormData?.name || null,
+            pixel_id: pixelId || null,
             is_active: isActive,
           }),
         }
@@ -314,6 +319,21 @@ export function MetaClientConfigModal({
               )}
             </div>
           )}
+
+          {/* Pixel ID Input */}
+          <div className="space-y-2">
+            <Label>Pixel ID (para CAPI)</Label>
+            <input
+              type="text"
+              value={pixelId}
+              onChange={(e) => setPixelId(e.target.value)}
+              placeholder="Ex: 123456789012345"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+            <p className="text-xs text-muted-foreground">
+              ID do Pixel para envio de eventos de conversão (CAPI)
+            </p>
+          </div>
 
           {/* Active Toggle */}
           <div className="flex items-center justify-between pt-2">

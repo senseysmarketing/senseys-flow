@@ -552,6 +552,98 @@ serve(async (req) => {
               description: `Lead criado automaticamente via Facebook Lead Ads${campaignName ? ` (Campanha: ${campaignName})` : ''} - Temperatura: ${temperature === 'hot' ? 'Quente' : temperature === 'warm' ? 'Morno' : 'Frio'} (Score: ${score})`,
             });
           console.log('✅ Activity logged');
+
+          // Send Meta CAPI event for hot leads
+          if (temperature === 'hot') {
+            try {
+              // Check if pixel is configured
+              const { data: metaConfigWithPixel } = await supabase
+                .from('account_meta_config')
+                .select('pixel_id')
+                .eq('account_id', metaConfig.account_id)
+                .single();
+
+              if (metaConfigWithPixel?.pixel_id) {
+                // Generate unique event_id
+                const timestamp = Math.floor(Date.now() / 1000);
+                const eventId = `${newLead.id}_Lead_qualified_${timestamp}`;
+
+                // Hash email and phone
+                const hashData = async (data: string): Promise<string> => {
+                  const encoder = new TextEncoder();
+                  const dataBuffer = encoder.encode(data);
+                  const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
+                  return Array.from(new Uint8Array(hashBuffer))
+                    .map(b => b.toString(16).padStart(2, '0'))
+                    .join('');
+                };
+
+                const userData: Record<string, any> = {};
+                if (leadgenId) userData.lead_id = leadgenId;
+                if (email) userData.em = [await hashData(email.toLowerCase().trim())];
+                if (phone) {
+                  let normalizedPhone = phone.replace(/\D/g, '');
+                  if (normalizedPhone.length === 11 || normalizedPhone.length === 10) {
+                    normalizedPhone = '55' + normalizedPhone;
+                  }
+                  userData.ph = [await hashData(normalizedPhone)];
+                }
+
+                const eventPayload = {
+                  data: [{
+                    event_name: 'Lead',
+                    event_time: timestamp,
+                    event_id: eventId,
+                    action_source: 'system_generated',
+                    user_data: userData,
+                    custom_data: {
+                      lead_event_source: 'Senseys CRM',
+                      event_source: 'crm',
+                      lead_type: 'qualified',
+                      qualification_score: score,
+                    },
+                  }],
+                };
+
+                console.log('Sending CAPI event for hot lead:', JSON.stringify(eventPayload, null, 2));
+
+                const capiResponse = await fetch(
+                  `https://graph.facebook.com/v19.0/${metaConfigWithPixel.pixel_id}/events?access_token=${tokenData.access_token}`,
+                  {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(eventPayload),
+                  }
+                );
+
+                const capiResult = await capiResponse.json();
+                console.log(`CAPI response (${capiResponse.status}):`, JSON.stringify(capiResult, null, 2));
+
+                // Log the event
+                await supabase
+                  .from('meta_capi_events_log')
+                  .insert({
+                    lead_id: newLead.id,
+                    account_id: metaConfig.account_id,
+                    event_name: 'Lead',
+                    event_id: eventId,
+                    pixel_id: metaConfigWithPixel.pixel_id,
+                    status_code: capiResponse.status,
+                    response_body: capiResult,
+                    error_message: capiResult.error?.message || null,
+                  });
+
+                if (capiResult.error) {
+                  console.error('❌ CAPI error:', capiResult.error);
+                } else {
+                  console.log('✅ CAPI event sent successfully for hot lead');
+                }
+              }
+            } catch (capiError) {
+              console.error('❌ Error sending CAPI event:', capiError);
+              // Don't fail the lead creation if CAPI fails
+            }
+          }
         }
       }
 

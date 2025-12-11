@@ -214,7 +214,7 @@ serve(async (req) => {
     // Save account configuration
     if (action === 'save-config') {
       const body = await req.json();
-      const { account_id, ad_account_id, ad_account_name, page_id, page_name, form_id, form_name, is_active } = body;
+      const { account_id, ad_account_id, ad_account_name, page_id, page_name, form_id, form_name, pixel_id, is_active } = body;
 
       if (!account_id || !ad_account_id) {
         return new Response(JSON.stringify({ error: 'account_id and ad_account_id required' }), {
@@ -235,6 +235,7 @@ serve(async (req) => {
           page_name,
           form_id,
           form_name,
+          pixel_id,
           is_active: is_active !== false,
           updated_at: new Date().toISOString(),
         }, {
