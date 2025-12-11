@@ -94,12 +94,15 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Create the new user
+    // Create the new user with team member flag
+    // This tells the handle_new_user trigger NOT to create a new account
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       user_metadata: {
-        full_name
+        full_name,
+        is_team_member: true,
+        target_account_id: profile.account_id
       },
       email_confirm: true // Auto-confirm email for team members
     });
@@ -186,25 +189,8 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error('Usuário criado mas dados não retornados');
     }
 
-    // Update the new user's profile to use the same account_id
-    const { error: updateError } = await supabaseAdmin
-      .from('profiles')
-      .update({
-        account_id: profile.account_id,
-        full_name
-      })
-      .eq('user_id', newUser.user.id);
-
-    if (updateError) {
-      console.error('Error updating profile:', updateError);
-    }
-
-    // Delete any existing user_role (from handle_new_user trigger) and assign the selected role
-    await supabaseAdmin
-      .from('user_roles')
-      .delete()
-      .eq('user_id', newUser.user.id);
-
+    // The trigger already created the profile with correct account_id
+    // Just assign the selected role (trigger doesn't assign roles for team members)
     const { error: roleInsertError } = await supabaseAdmin
       .from('user_roles')
       .insert({
