@@ -43,8 +43,10 @@ const MetaFormScoringManager = () => {
   const [scoringRules, setScoringRules] = useState<Record<string, ScoringRule[]>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
   const [editedConfigs, setEditedConfigs] = useState<Record<string, Partial<FormConfig>>>({});
   const [editedRules, setEditedRules] = useState<Record<string, number>>({});
+  const [updateExistingLeads, setUpdateExistingLeads] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetchData();
@@ -150,9 +152,35 @@ const MetaFormScoringManager = () => {
         if (error) throw error;
       }
 
+      // Recalculate existing leads if option is enabled (default: true)
+      const shouldRecalculate = updateExistingLeads[configId] !== false;
+      let recalculatedCount = 0;
+
+      if (shouldRecalculate) {
+        setRecalculating(true);
+        try {
+          const { data, error: recalcError } = await supabase.functions.invoke(
+            "recalculate-lead-temperatures",
+            { body: { form_config_id: configId } }
+          );
+
+          if (recalcError) {
+            console.error("Erro ao recalcular temperaturas:", recalcError);
+          } else if (data?.stats) {
+            recalculatedCount = data.stats.updated || 0;
+          }
+        } catch (recalcErr) {
+          console.error("Erro ao recalcular:", recalcErr);
+        } finally {
+          setRecalculating(false);
+        }
+      }
+
       toast({
         title: "Sucesso",
-        description: "Configuração salva com sucesso!",
+        description: shouldRecalculate && recalculatedCount > 0
+          ? `Configuração salva! ${recalculatedCount} lead(s) atualizado(s).`
+          : "Configuração salva com sucesso!",
       });
 
       // Clear edited state for this config
@@ -182,6 +210,7 @@ const MetaFormScoringManager = () => {
       });
     } finally {
       setSaving(false);
+      setRecalculating(false);
     }
   };
 
@@ -439,10 +468,22 @@ const MetaFormScoringManager = () => {
                 </div>
 
                 {/* Save Button */}
-                <div className="flex justify-end">
-                  <Button onClick={() => saveConfig(config.id)} disabled={saving || !hasChanges}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id={`update-leads-${config.id}`}
+                      checked={updateExistingLeads[config.id] !== false}
+                      onCheckedChange={(checked) =>
+                        setUpdateExistingLeads((prev) => ({ ...prev, [config.id]: checked }))
+                      }
+                    />
+                    <Label htmlFor={`update-leads-${config.id}`} className="text-sm cursor-pointer">
+                      Atualizar leads existentes
+                    </Label>
+                  </div>
+                  <Button onClick={() => saveConfig(config.id)} disabled={saving || recalculating || !hasChanges}>
                     <Save className="h-4 w-4 mr-2" />
-                    {saving ? "Salvando..." : "Salvar Configuração"}
+                    {recalculating ? "Recalculando..." : saving ? "Salvando..." : "Salvar Configuração"}
                   </Button>
                 </div>
               </AccordionContent>

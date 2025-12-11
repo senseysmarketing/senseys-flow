@@ -35,3 +35,6 @@ verify_jwt = true
 
 [functions.meta-insights]
 verify_jwt = true
+
+[functions.recalculate-lead-temperatures]
+verify_jwt = true
