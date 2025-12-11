@@ -89,7 +89,7 @@ export function AppSidebar() {
   const companyName = account?.company_name || "";
 
   return (
-    <Sidebar className="w-64 border-r-0">
+    <Sidebar className="w-64 border-r-0 z-50">
       <SidebarContent className="bg-sidebar/95 backdrop-blur-xl">
         {/* Logo/Brand */}
         <div className="p-5 border-b border-sidebar-border/50">
