@@ -29,7 +29,8 @@ import {
   BellOff,
   Flame,
   Thermometer,
-  Snowflake
+  Snowflake,
+  Database
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -42,6 +43,7 @@ import OriginBadge from "@/components/OriginBadge";
 import LeadDetailModal from "@/components/LeadDetailModal";
 import BrokerSelect from "@/components/BrokerSelect";
 import PropertySelect from "@/components/PropertySelect";
+import LeadsDatabaseView from "@/components/leads/LeadsDatabaseView";
 
 interface Lead {
   id: string;
@@ -85,7 +87,7 @@ const Leads = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [statuses, setStatuses] = useState<LeadStatus[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
+  const [viewMode, setViewMode] = useState<'kanban' | 'table' | 'database'>('kanban');
   const [searchTerm, setSearchTerm] = useState("");
   const [filters, setFilters] = useState({
     status: "",
@@ -848,6 +850,15 @@ const Leads = () => {
             <List className="h-4 w-4" />
             Lista
           </Button>
+          <Button
+            variant={viewMode === 'database' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setViewMode('database')}
+            className="gap-2"
+          >
+            <Database className="h-4 w-4" />
+            Database
+          </Button>
           
           <Button
             variant={notificationsEnabled ? 'default' : 'outline'}
@@ -1004,7 +1015,7 @@ const Leads = () => {
             </div>
           </div>
         </DragDropContext>
-      ) : (
+      ) : viewMode === 'table' ? (
         // Table View
         <Card>
           <CardHeader>
@@ -1131,7 +1142,19 @@ const Leads = () => {
             )}
           </CardContent>
         </Card>
-      )}
+      ) : viewMode === 'database' ? (
+        // Database View
+        <LeadsDatabaseView
+          leads={leads}
+          statuses={statuses}
+          loading={loading}
+          onViewDetails={handleViewDetails}
+          onEditLead={handleEditLead}
+          onDeleteLead={handleDeleteLead}
+          onStatusChange={handleStatusChange}
+          onRefresh={fetchData}
+        />
+      ) : null}
 
       {/* Edit Lead Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
