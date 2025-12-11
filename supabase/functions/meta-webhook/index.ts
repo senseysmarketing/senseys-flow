@@ -73,9 +73,13 @@ async function calculateLeadTemperature(
       if (createError) {
         console.error('Error creating form config:', createError);
       } else if (newConfig) {
-        // Auto-create scoring rules for each field
+        // Campos de dados básicos do lead que não devem ser criados como regras de scoring
+        const excludedFields = ['full_name', 'nome', 'name', 'email', 'e-mail', 'phone_number', 'telefone', 'phone', 'celular', 'whatsapp'];
+        
+        // Auto-create scoring rules for each field (exceto dados básicos)
+        let rulesCreated = 0;
         for (const [fieldName, fieldValue] of Object.entries(fieldData)) {
-          if (fieldValue) {
+          if (fieldValue && !excludedFields.includes(fieldName.toLowerCase())) {
             await supabase
               .from('meta_form_scoring_rules')
               .upsert({
@@ -87,9 +91,10 @@ async function calculateLeadTemperature(
               }, {
                 onConflict: 'form_config_id,question_name,answer_value',
               });
+            rulesCreated++;
           }
         }
-        console.log(`✅ Auto-created form config and ${Object.keys(fieldData).length} rules`);
+        console.log(`✅ Auto-created form config and ${rulesCreated} rules (excluded basic lead data fields)`);
       }
 
       return { temperature: 'warm', score: 0, referenceCode: null };
@@ -121,9 +126,13 @@ async function calculateLeadTemperature(
       }
     }
 
-    // Auto-register new answers that aren't in rules yet
+    // Campos de dados básicos do lead que não devem ser criados como regras de scoring
+    const excludedFields = ['full_name', 'nome', 'name', 'email', 'e-mail', 'phone_number', 'telefone', 'phone', 'celular', 'whatsapp'];
+
+    // Auto-register new answers that aren't in rules yet (exceto dados básicos)
     for (const [fieldName, fieldValue] of Object.entries(fieldData)) {
       if (!fieldValue) continue;
+      if (excludedFields.includes(fieldName.toLowerCase())) continue;
       
       const existingRule = (rules || []).find(
         r => r.question_name === fieldName && r.answer_value.toLowerCase() === fieldValue.toLowerCase()
