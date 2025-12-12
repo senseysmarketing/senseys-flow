@@ -9,6 +9,7 @@ import {
   Sparkles,
   Shield
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { NavLink, useLocation } from "react-router-dom";
 import { 
   Sidebar, 
@@ -68,21 +69,33 @@ export function AppSidebar() {
   const { account } = useAccount();
   const { isSuperAdmin } = useSuperAdmin();
   const location = useLocation();
+  const navigate = useNavigate();
   
   const handleSignOut = async () => {
-    const { error } = await signOut();
-    if (error) {
-      toast({
-        variant: "destructive",
-        title: "Erro ao sair",
-        description: error.message,
-      });
-    } else {
-      toast({
-        title: "Logout realizado",
-        description: "Até logo!",
-      });
+    try {
+      const { error } = await signOut();
+      
+      // Even if there's a "session not found" error, the user should be logged out
+      // This handles cases where the token is already expired/invalid
+      if (error && !error.message?.includes("Session not found") && !error.message?.includes("Auth session missing")) {
+        toast({
+          variant: "destructive",
+          title: "Erro ao sair",
+          description: error.message,
+        });
+      } else {
+        toast({
+          title: "Até logo!",
+          description: "Logout realizado com sucesso.",
+        });
+      }
+    } catch (e) {
+      // Fallback - always redirect to auth even if signOut fails
+      console.error("Logout error:", e);
     }
+    
+    // Always navigate to auth page after logout attempt
+    navigate("/auth");
   };
 
   const logoSrc = account?.logo_url || logoAlternativaBranca;
