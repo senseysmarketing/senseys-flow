@@ -741,6 +741,7 @@ export type Database = {
           id: string
           is_configured: boolean
           reference_field_name: string | null
+          source_type: string
           updated_at: string
           warm_threshold: number
         }
@@ -753,6 +754,7 @@ export type Database = {
           id?: string
           is_configured?: boolean
           reference_field_name?: string | null
+          source_type?: string
           updated_at?: string
           warm_threshold?: number
         }
@@ -765,6 +767,7 @@ export type Database = {
           id?: string
           is_configured?: boolean
           reference_field_name?: string | null
+          source_type?: string
           updated_at?: string
           warm_threshold?: number
         }
