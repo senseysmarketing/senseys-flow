@@ -510,28 +510,27 @@ const MetaFormScoringManager = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-end">
-        <Button variant="outline" onClick={fetchData} disabled={loading}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Atualizar
-        </Button>
-      </div>
-
+    <div className="space-y-4">
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="all">
-            Todos ({formConfigs.length})
-          </TabsTrigger>
-          <TabsTrigger value="meta" className="flex items-center gap-1">
-            <Facebook className="h-3 w-3" />
-            Meta ({metaCount})
-          </TabsTrigger>
-          <TabsTrigger value="webhook" className="flex items-center gap-1">
-            <Globe className="h-3 w-3" />
-            Webhook ({webhookCount})
-          </TabsTrigger>
-        </TabsList>
+        <div className="flex items-center justify-between">
+          <TabsList>
+            <TabsTrigger value="all">
+              Todos ({formConfigs.length})
+            </TabsTrigger>
+            <TabsTrigger value="meta" className="flex items-center gap-1">
+              <Facebook className="h-3 w-3" />
+              Meta ({metaCount})
+            </TabsTrigger>
+            <TabsTrigger value="webhook" className="flex items-center gap-1">
+              <Globe className="h-3 w-3" />
+              Webhook ({webhookCount})
+            </TabsTrigger>
+          </TabsList>
+          <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Atualizar
+          </Button>
+        </div>
 
         <TabsContent value={activeTab} className="mt-4">
           {filteredConfigs.length === 0 ? (
