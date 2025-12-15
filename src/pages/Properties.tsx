@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Edit2, Trash2, Building2, MapPin, Bed, Car, Bath, Search, Filter, Eye } from "lucide-react";
 import { PropertyDetailModal } from "@/components/PropertyDetailModal";
+import LeadDetailModal from "@/components/LeadDetailModal";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
@@ -78,6 +79,9 @@ const PropertiesPage = () => {
   const [filterType, setFilterType] = useState<string>("all");
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [isLeadDetailOpen, setIsLeadDetailOpen] = useState(false);
+  const [selectedLead, setSelectedLead] = useState<any>(null);
   
   const [form, setForm] = useState({
     title: "",
@@ -317,6 +321,32 @@ const PropertiesPage = () => {
   const getStatusBadge = (status: string) => {
     const statusInfo = STATUS_OPTIONS.find(s => s.value === status);
     return statusInfo || { label: status, color: "bg-gray-500" };
+  };
+
+  const handleOpenLead = async (leadId: string) => {
+    try {
+      const { data: lead, error } = await supabase
+        .from("leads")
+        .select(`
+          *,
+          lead_status:lead_status(id, name, color)
+        `)
+        .eq("id", leadId)
+        .maybeSingle();
+      
+      if (error) throw error;
+      if (lead) {
+        setSelectedLead(lead);
+        setIsLeadDetailOpen(true);
+      }
+    } catch (error) {
+      console.error("Error fetching lead:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Não foi possível carregar os detalhes do lead.",
+      });
+    }
   };
 
   const filteredProperties = properties.filter(property => {
@@ -749,6 +779,7 @@ const PropertiesPage = () => {
           setIsDetailModalOpen(false);
           setSelectedProperty(null);
         }}
+        onOpenLead={handleOpenLead}
         onEdit={(property) => {
           setIsDetailModalOpen(false);
           openEditDialog(property);
@@ -759,6 +790,17 @@ const PropertiesPage = () => {
         onStatusChange={() => {
           fetchProperties();
         }}
+      />
+
+      {/* Lead Detail Modal */}
+      <LeadDetailModal
+        lead={selectedLead}
+        open={isLeadDetailOpen}
+        onOpenChange={(open) => {
+          setIsLeadDetailOpen(open);
+          if (!open) setSelectedLead(null);
+        }}
+        onEdit={() => {}}
       />
     </div>
   );
