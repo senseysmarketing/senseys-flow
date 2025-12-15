@@ -396,6 +396,41 @@ export type Database = {
           },
         ]
       }
+      lead_form_field_values: {
+        Row: {
+          created_at: string
+          field_label: string | null
+          field_name: string
+          field_value: string | null
+          id: string
+          lead_id: string
+        }
+        Insert: {
+          created_at?: string
+          field_label?: string | null
+          field_name: string
+          field_value?: string | null
+          id?: string
+          lead_id: string
+        }
+        Update: {
+          created_at?: string
+          field_label?: string | null
+          field_name?: string
+          field_value?: string | null
+          id?: string
+          lead_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_form_field_values_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_status: {
         Row: {
           account_id: string
