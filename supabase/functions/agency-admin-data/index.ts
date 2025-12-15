@@ -43,15 +43,20 @@ Deno.serve(async (req) => {
     // Create admin client for cross-account queries
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Check if user is super admin using service role
-    const { data: superAdmin, error: superAdminError } = await adminClient
-      .from('super_admins')
-      .select('id')
-      .eq('user_id', user.id)
-      .single();
+    // Check if user is super admin using the database function (which includes agency account members)
+    const { data: isSuperAdmin, error: superAdminError } = await adminClient
+      .rpc('is_super_admin', { _user_id: user.id });
 
-    if (superAdminError || !superAdmin) {
-      console.error('Super admin check failed:', superAdminError);
+    if (superAdminError) {
+      console.error('Super admin check error:', superAdminError);
+      return new Response(JSON.stringify({ error: 'Error checking admin status' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (!isSuperAdmin) {
+      console.error('User is not a super admin:', user.email);
       return new Response(JSON.stringify({ error: 'Not a super admin' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
