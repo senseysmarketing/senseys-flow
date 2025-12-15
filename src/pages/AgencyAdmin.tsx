@@ -108,13 +108,34 @@ const AgencyAdmin = () => {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      // Open in new tab
-      window.open(data.url, '_blank');
+      console.log('Support URL generated:', data.url);
+
+      // Try to open in new tab
+      const newWindow = window.open(data.url, '_blank');
       
-      toast({
-        title: "Sessão de suporte gerada",
-        description: "Uma nova aba foi aberta com acesso à conta"
-      });
+      // If blocked by browser, offer alternatives
+      if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+        const shouldOpenSameTab = confirm(
+          'Popup bloqueado pelo navegador. Deseja abrir na mesma aba?\n\n' +
+          'Clique em "OK" para abrir na mesma aba.\n' +
+          'Clique em "Cancelar" para copiar o link.'
+        );
+        
+        if (shouldOpenSameTab) {
+          window.location.href = data.url;
+        } else {
+          await navigator.clipboard.writeText(data.url);
+          toast({
+            title: "Link copiado!",
+            description: "Cole em uma nova aba para acessar a conta"
+          });
+        }
+      } else {
+        toast({
+          title: "Sessão de suporte gerada",
+          description: "Uma nova aba foi aberta com acesso à conta"
+        });
+      }
     } catch (err: any) {
       console.error('Error generating support session:', err);
       toast({
