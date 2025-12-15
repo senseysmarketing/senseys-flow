@@ -5,6 +5,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Production URL for redirect - hardcoded to ensure consistency
+const PRODUCTION_URL = 'https://e56959d6-20bb-4156-91a4-a054b64c66db.lovableproject.com'
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -85,12 +88,21 @@ Deno.serve(async (req) => {
       )
     }
 
+    // Use production URL as the redirect destination
+    const finalRedirectTo = redirect_to || `${PRODUCTION_URL}/dashboard`
+    
+    console.log('=== Support Session Generation ===')
+    console.log('Account ID:', account_id)
+    console.log('Target user email:', targetUser.user.email)
+    console.log('Requested redirect_to:', redirect_to)
+    console.log('Final redirect_to:', finalRedirectTo)
+
     // Generate magic link for the target user
     const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
       type: 'magiclink',
       email: targetUser.user.email!,
       options: {
-        redirectTo: redirect_to || `${supabaseUrl.replace('.supabase.co', '.lovableproject.com')}/dashboard`
+        redirectTo: finalRedirectTo
       }
     })
 
@@ -102,7 +114,9 @@ Deno.serve(async (req) => {
       )
     }
 
-    console.log('Support session link generated for account:', account_id)
+    console.log('Generated action_link:', linkData.properties.action_link)
+    console.log('Hashed token available:', !!linkData.properties.hashed_token)
+    console.log('=== End Support Session ===')
 
     return new Response(
       JSON.stringify({ 
