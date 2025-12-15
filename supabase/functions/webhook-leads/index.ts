@@ -6,6 +6,49 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+interface FormConfig {
+  id: string;
+  hot_threshold: number;
+  warm_threshold: number;
+  reference_field_name: string | null;
+}
+
+interface ScoringRule {
+  question_name: string;
+  answer_value: string;
+  score: number;
+}
+
+// Calculate lead temperature based on scoring rules
+const calculateLeadTemperature = (
+  formFields: Record<string, string>,
+  rules: ScoringRule[],
+  config: FormConfig
+): string => {
+  let totalScore = 0;
+
+  for (const [fieldName, fieldValue] of Object.entries(formFields)) {
+    const matchingRule = rules.find(
+      (r) => r.question_name.toLowerCase() === fieldName.toLowerCase() &&
+             r.answer_value.toLowerCase() === String(fieldValue).toLowerCase()
+    );
+    if (matchingRule) {
+      totalScore += matchingRule.score;
+      console.log(`Scoring rule matched: ${fieldName}="${fieldValue}" -> +${matchingRule.score}`);
+    }
+  }
+
+  console.log(`Total score: ${totalScore}, Hot threshold: ${config.hot_threshold}, Warm threshold: ${config.warm_threshold}`);
+
+  if (totalScore >= config.hot_threshold) {
+    return 'hot';
+  } else if (totalScore >= config.warm_threshold) {
+    return 'warm';
+  } else {
+    return 'cold';
+  }
+};
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -84,6 +127,153 @@ serve(async (req) => {
       }
     }
 
+    // Handle form-based qualification for webhook leads
+    let calculatedTemperature = 'warm'; // default
+    let formConfigId: string | null = null;
+    const formId = body.form_id;
+    const formName = body.form_name;
+    const formFields = body.form_fields as Record<string, string> | undefined;
+
+    if (formId && formFields && Object.keys(formFields).length > 0) {
+      console.log('Processing form-based qualification:', formId, formFields);
+
+      // Check if form config exists
+      let { data: existingConfig } = await supabase
+        .from('meta_form_configs')
+        .select('id, hot_threshold, warm_threshold, reference_field_name')
+        .eq('form_id', formId)
+        .eq('account_id', accountId)
+        .eq('source_type', 'webhook')
+        .single();
+
+      if (!existingConfig) {
+        // Create new form config for this webhook form
+        console.log('Creating new webhook form config:', formId);
+        const { data: newConfig, error: configError } = await supabase
+          .from('meta_form_configs')
+          .insert({
+            account_id: accountId,
+            form_id: formId,
+            form_name: formName || `Webhook Form ${formId}`,
+            source_type: 'webhook',
+            hot_threshold: 3,
+            warm_threshold: 1,
+            is_configured: false,
+          })
+          .select()
+          .single();
+
+        if (configError) {
+          console.error('Error creating form config:', configError);
+        } else {
+          existingConfig = newConfig;
+          formConfigId = newConfig.id;
+
+          // Auto-create scoring rules for detected fields
+          const rulesToInsert = [];
+          for (const [fieldName, fieldValue] of Object.entries(formFields)) {
+            // Skip basic lead data fields
+            const excludedFields = ['name', 'nome', 'full_name', 'email', 'e-mail', 'phone', 'phone_number', 'telefone', 'celular', 'whatsapp'];
+            if (excludedFields.includes(fieldName.toLowerCase())) continue;
+
+            rulesToInsert.push({
+              form_config_id: newConfig.id,
+              question_name: fieldName,
+              question_label: fieldName,
+              answer_value: String(fieldValue),
+              score: 0, // Default neutral score
+            });
+          }
+
+          if (rulesToInsert.length > 0) {
+            const { error: rulesError } = await supabase
+              .from('meta_form_scoring_rules')
+              .insert(rulesToInsert);
+            if (rulesError) {
+              console.error('Error creating scoring rules:', rulesError);
+            } else {
+              console.log(`Created ${rulesToInsert.length} scoring rules`);
+            }
+          }
+        }
+      } else {
+        formConfigId = existingConfig.id;
+
+        // Check for new field/value combinations and add them as rules
+        const { data: existingRules } = await supabase
+          .from('meta_form_scoring_rules')
+          .select('question_name, answer_value')
+          .eq('form_config_id', existingConfig.id);
+
+        const existingRulesSet = new Set(
+          (existingRules || []).map((r) => `${r.question_name.toLowerCase()}|${r.answer_value.toLowerCase()}`)
+        );
+
+        const newRulesToInsert = [];
+        for (const [fieldName, fieldValue] of Object.entries(formFields)) {
+          const excludedFields = ['name', 'nome', 'full_name', 'email', 'e-mail', 'phone', 'phone_number', 'telefone', 'celular', 'whatsapp'];
+          if (excludedFields.includes(fieldName.toLowerCase())) continue;
+
+          const key = `${fieldName.toLowerCase()}|${String(fieldValue).toLowerCase()}`;
+          if (!existingRulesSet.has(key)) {
+            newRulesToInsert.push({
+              form_config_id: existingConfig.id,
+              question_name: fieldName,
+              question_label: fieldName,
+              answer_value: String(fieldValue),
+              score: 0,
+            });
+          }
+        }
+
+        if (newRulesToInsert.length > 0) {
+          const { error: rulesError } = await supabase
+            .from('meta_form_scoring_rules')
+            .insert(newRulesToInsert);
+          if (rulesError) {
+            console.error('Error creating new scoring rules:', rulesError);
+          } else {
+            console.log(`Added ${newRulesToInsert.length} new scoring rules`);
+          }
+        }
+
+        // Calculate temperature if config exists
+        if (existingConfig.is_configured !== false) {
+          const { data: scoringRules } = await supabase
+            .from('meta_form_scoring_rules')
+            .select('question_name, answer_value, score')
+            .eq('form_config_id', existingConfig.id);
+
+          if (scoringRules && scoringRules.length > 0) {
+            calculatedTemperature = calculateLeadTemperature(
+              formFields,
+              scoringRules,
+              existingConfig as FormConfig
+            );
+            console.log('Calculated temperature:', calculatedTemperature);
+          }
+        }
+
+        // Check for property reference field
+        if (existingConfig.reference_field_name && formFields[existingConfig.reference_field_name]) {
+          const referenceCode = formFields[existingConfig.reference_field_name];
+          console.log('Looking for property with reference code:', referenceCode);
+
+          const { data: matchedProperty } = await supabase
+            .from('properties')
+            .select('id')
+            .eq('account_id', accountId)
+            .eq('reference_code', referenceCode)
+            .single();
+
+          if (matchedProperty) {
+            validPropertyId = matchedProperty.id;
+            console.log('Matched property by reference code:', validPropertyId);
+          }
+        }
+      }
+    }
+
     // Prepare lead data
     const leadData = {
       account_id: accountId,
@@ -98,6 +288,8 @@ serve(async (req) => {
       anuncio: body.anuncio || null,
       status_id: defaultStatus?.id || null,
       property_id: validPropertyId,
+      temperature: calculatedTemperature,
+      meta_form_id: formId || null, // Store form_id for reference
     };
 
     console.log('Inserting lead:', leadData);
@@ -119,7 +311,7 @@ serve(async (req) => {
 
     console.log('Lead created successfully:', lead.id);
 
-    // Handle custom fields if provided
+    // Handle custom fields if provided (legacy support)
     if (body.custom_fields && typeof body.custom_fields === 'object') {
       console.log('Processing custom fields:', body.custom_fields);
       
@@ -169,11 +361,72 @@ serve(async (req) => {
       }
     }
 
+    // Handle form_fields as custom fields too (new approach)
+    if (formFields && typeof formFields === 'object') {
+      console.log('Processing form_fields as custom fields:', formFields);
+      
+      const { data: customFields } = await supabase
+        .from('custom_fields')
+        .select('id, field_key')
+        .eq('account_id', accountId)
+        .eq('is_active', true);
+
+      if (customFields && customFields.length > 0) {
+        const fieldKeyToId = new Map<string, string>();
+        customFields.forEach((field: { id: string; field_key: string }) => {
+          fieldKeyToId.set(field.field_key.toLowerCase(), field.id);
+        });
+
+        const valuesToInsert: { lead_id: string; custom_field_id: string; value: string }[] = [];
+        
+        for (const [key, value] of Object.entries(formFields)) {
+          const fieldId = fieldKeyToId.get(key.toLowerCase());
+          if (fieldId && value !== undefined && value !== null) {
+            valuesToInsert.push({
+              lead_id: lead.id,
+              custom_field_id: fieldId,
+              value: String(value)
+            });
+          }
+        }
+
+        if (valuesToInsert.length > 0) {
+          const { error: valuesError } = await supabase
+            .from('lead_custom_field_values')
+            .insert(valuesToInsert);
+
+          if (valuesError) {
+            console.error('Error inserting form field values:', valuesError);
+          } else {
+            console.log(`Inserted ${valuesToInsert.length} form field values`);
+          }
+        }
+      }
+    }
+
+    // Send CAPI event if lead is hot
+    if (calculatedTemperature === 'hot') {
+      console.log('Lead is HOT, triggering CAPI event');
+      try {
+        await supabase.functions.invoke('send-meta-event', {
+          body: {
+            lead_id: lead.id,
+            event_name: 'Lead',
+            lead_type: 'qualified'
+          }
+        });
+      } catch (capiError) {
+        console.error('Error sending CAPI event:', capiError);
+      }
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true, 
         lead_id: lead.id,
         property_linked: validPropertyId !== null,
+        temperature: calculatedTemperature,
+        form_detected: !!formId,
         message: 'Lead criado com sucesso' 
       }),
       { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
