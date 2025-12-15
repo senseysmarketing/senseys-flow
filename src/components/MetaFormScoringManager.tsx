@@ -511,13 +511,7 @@ const MetaFormScoringManager = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-medium">Qualificação de Formulários</h3>
-          <p className="text-sm text-muted-foreground">
-            Configure a pontuação de cada resposta para qualificar leads automaticamente
-          </p>
-        </div>
+      <div className="flex items-center justify-end">
         <Button variant="outline" onClick={fetchData} disabled={loading}>
           <RefreshCw className="h-4 w-4 mr-2" />
           Atualizar
