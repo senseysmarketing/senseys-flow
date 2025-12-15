@@ -820,16 +820,19 @@ const SettingsPage = () => {
                     size="sm"
                     onClick={() => {
                       const payload = JSON.stringify({
-                        name: "João Silva",
-                        phone: "11999999999",
-                        email: "joao@exemplo.com",
-                        property_id: "id-do-imovel-aqui",
-                        conjunto: "Apartamento 101",
-                        campanha: "Facebook Ads",
-                        interesse: "Compra",
-                        observacoes: "Cliente interessado em imóveis de 2 quartos",
-                        origem: "Site",
-                        anuncio: "Banner Principal"
+                        name: "Maria Santos",
+                        phone: "11988776655",
+                        email: "maria@exemplo.com",
+                        origem: "Landing Page",
+                        form_id: "formulario-interesse",
+                        form_name: "Formulário de Interesse",
+                        form_fields: {
+                          objetivo: "Compra",
+                          prazo: "Até 3 meses",
+                          faixa_orcamento: "500k - 800k",
+                          tipo_imovel: "Apartamento",
+                          regiao_interesse: "Zona Sul"
+                        }
                       }, null, 2);
                       navigator.clipboard.writeText(payload);
                       setCopiedPayload(true);
@@ -844,37 +847,16 @@ const SettingsPage = () => {
                     Copiar
                   </Button>
                 </div>
-                <pre className="bg-muted p-4 rounded-lg text-xs overflow-x-auto">
-{`{
-  "name": "João Silva",          // Obrigatório
-  "phone": "11999999999",       // Obrigatório
-  "email": "joao@exemplo.com",  // Opcional
-  "property_id": "uuid-do-imovel", // Opcional - vincula ao imóvel
-  "conjunto": "Apartamento 101", // Opcional
-  "campanha": "Facebook Ads",    // Opcional
-  "interesse": "Compra",         // Opcional
-  "observacoes": "Cliente interessado...", // Opcional
-  "origem": "Site",              // Opcional
-  "anuncio": "Banner Principal"  // Opcional
-}`}
-                </pre>
-                <p className="text-sm text-muted-foreground">
-                  ⚠️ Campos obrigatórios: <strong>name</strong> e <strong>phone</strong>
-                </p>
-              </div>
-
-              {/* Payload com Qualificação Automática */}
-              <div className="space-y-3">
-                <Label className="text-base font-semibold">Payload com Qualificação Automática</Label>
                 <p className="text-sm text-muted-foreground">
                   Envie campos de formulário para qualificação automática. Os campos serão exibidos nos detalhes do lead e podem ter pontuação configurada na aba "Qualificação".
                 </p>
                 <pre className="bg-muted p-4 rounded-lg text-xs overflow-x-auto">
 {`{
-  "name": "Maria Santos",
-  "phone": "11988776655",
-  "email": "maria@exemplo.com",
-  "origem": "Landing Page",
+  "name": "Maria Santos",           // Obrigatório
+  "phone": "11988776655",           // Obrigatório
+  "email": "maria@exemplo.com",     // Opcional
+  "origem": "Landing Page",         // Opcional
+  "property_id": "uuid-do-imovel",  // Opcional - vincula ao imóvel
   "form_id": "formulario-interesse",  // ID único do formulário
   "form_name": "Formulário de Interesse", // Nome amigável
   "form_fields": {                    // Campos do formulário
@@ -887,6 +869,7 @@ const SettingsPage = () => {
 }`}
                 </pre>
                 <p className="text-sm text-muted-foreground">
+                  ⚠️ Campos obrigatórios: <strong>name</strong> e <strong>phone</strong><br />
                   💡 Após o primeiro lead, configure a pontuação na aba <strong>Qualificação</strong> → <strong>Formulários Webhook</strong>
                 </p>
               </div>
