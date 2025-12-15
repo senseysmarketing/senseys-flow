@@ -100,18 +100,22 @@ const AgencyAdmin = () => {
       const { data, error } = await supabase.functions.invoke('generate-support-session', {
         headers: { Authorization: `Bearer ${session.access_token}` },
         body: { 
-          account_id: account.id,
-          redirect_to: `${window.location.origin}/dashboard`
+          account_id: account.id
         }
       });
 
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      console.log('Support URL generated:', data.url);
+      console.log('Support session data:', data);
+
+      // Build support callback URL with token_hash and email
+      const supportUrl = `${window.location.origin}/auth/support-callback?token_hash=${encodeURIComponent(data.token_hash)}&email=${encodeURIComponent(data.email)}&type=magiclink`;
+      
+      console.log('Opening support URL:', supportUrl);
 
       // Try to open in new tab
-      const newWindow = window.open(data.url, '_blank');
+      const newWindow = window.open(supportUrl, '_blank');
       
       // If blocked by browser, offer alternatives
       if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
@@ -122,9 +126,9 @@ const AgencyAdmin = () => {
         );
         
         if (shouldOpenSameTab) {
-          window.location.href = data.url;
+          window.location.href = supportUrl;
         } else {
-          await navigator.clipboard.writeText(data.url);
+          await navigator.clipboard.writeText(supportUrl);
           toast({
             title: "Link copiado!",
             description: "Cole em uma nova aba para acessar a conta"

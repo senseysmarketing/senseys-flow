@@ -115,12 +115,17 @@ Deno.serve(async (req) => {
     }
 
     console.log('Generated action_link:', linkData.properties.action_link)
-    console.log('Hashed token available:', !!linkData.properties.hashed_token)
+    console.log('Hashed token:', linkData.properties.hashed_token)
     console.log('=== End Support Session ===')
 
+    // Return token_hash and email for direct verifyOtp flow
+    // This bypasses the PKCE flow that causes "Invalid token: signature is invalid"
     return new Response(
       JSON.stringify({ 
         success: true, 
+        token_hash: linkData.properties.hashed_token,
+        email: targetUser.user.email,
+        // Also include action_link as fallback
         url: linkData.properties.action_link
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
