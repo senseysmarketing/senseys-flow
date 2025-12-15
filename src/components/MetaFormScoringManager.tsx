@@ -383,31 +383,33 @@ const MetaFormScoringManager = () => {
             </div>
           </div>
 
-          {/* Reference Field Configuration */}
-          <div className="p-4 bg-muted/30 rounded-lg space-y-3">
-            <Label>Campo de Código de Referência (para vincular a imóveis)</Label>
-            <Select
-              value={editedConfig?.reference_field_name ?? config.reference_field_name ?? "none"}
-              onValueChange={(value) =>
-                handleConfigChange(config.id, "reference_field_name", value === "none" ? null : value)
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione um campo..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Nenhum</SelectItem>
-                {Object.keys(groupedRules).map((questionName) => (
-                  <SelectItem key={questionName} value={questionName}>
-                    {groupedRules[questionName].label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Se selecionado, o valor deste campo será usado para vincular o lead a um imóvel com código de referência correspondente.
-            </p>
-          </div>
+          {/* Reference Field Configuration - Only for Meta forms */}
+          {config.source_type === 'meta' && (
+            <div className="p-4 bg-muted/30 rounded-lg space-y-3">
+              <Label>Campo de Código de Referência (para vincular a imóveis)</Label>
+              <Select
+                value={editedConfig?.reference_field_name ?? config.reference_field_name ?? "none"}
+                onValueChange={(value) =>
+                  handleConfigChange(config.id, "reference_field_name", value === "none" ? null : value)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um campo..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum</SelectItem>
+                  {Object.keys(groupedRules).map((questionName) => (
+                    <SelectItem key={questionName} value={questionName}>
+                      {groupedRules[questionName].label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Se selecionado, o valor deste campo será usado para vincular o lead a um imóvel com código de referência correspondente.
+              </p>
+            </div>
+          )}
 
           {/* Scoring Rules per Question */}
           <div className="space-y-4">
