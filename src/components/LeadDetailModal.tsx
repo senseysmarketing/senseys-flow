@@ -29,6 +29,7 @@ import TemperatureBadge from "@/components/TemperatureBadge";
 import OriginBadge from "@/components/OriginBadge";
 import LeadActivityTimeline from "@/components/LeadActivityTimeline";
 import LeadCustomFields from "@/components/LeadCustomFields";
+import LeadFormFields from "@/components/LeadFormFields";
 import { toast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -302,7 +303,10 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
             </>
           )}
 
-          {/* Campos Personalizados */}
+          {/* Dados do Formulário */}
+          <LeadFormFields leadId={lead.id} />
+          
+          {/* Campos Personalizados (legacy) */}
           <LeadCustomFields leadId={lead.id} />
           <Separator />
 

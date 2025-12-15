@@ -361,45 +361,34 @@ serve(async (req) => {
       }
     }
 
-    // Handle form_fields as custom fields too (new approach)
-    if (formFields && typeof formFields === 'object') {
-      console.log('Processing form_fields as custom fields:', formFields);
+    // Save form_fields to lead_form_field_values table
+    if (formFields && typeof formFields === 'object' && Object.keys(formFields).length > 0) {
+      console.log('Saving form_fields to lead_form_field_values:', formFields);
       
-      const { data: customFields } = await supabase
-        .from('custom_fields')
-        .select('id, field_key')
-        .eq('account_id', accountId)
-        .eq('is_active', true);
-
-      if (customFields && customFields.length > 0) {
-        const fieldKeyToId = new Map<string, string>();
-        customFields.forEach((field: { id: string; field_key: string }) => {
-          fieldKeyToId.set(field.field_key.toLowerCase(), field.id);
-        });
-
-        const valuesToInsert: { lead_id: string; custom_field_id: string; value: string }[] = [];
+      const excludedFields = ['name', 'nome', 'full_name', 'email', 'e-mail', 'phone', 'phone_number', 'telefone', 'celular', 'whatsapp'];
+      const formFieldValues = [];
+      
+      for (const [fieldName, fieldValue] of Object.entries(formFields)) {
+        // Skip basic lead data fields
+        if (excludedFields.includes(fieldName.toLowerCase())) continue;
         
-        for (const [key, value] of Object.entries(formFields)) {
-          const fieldId = fieldKeyToId.get(key.toLowerCase());
-          if (fieldId && value !== undefined && value !== null) {
-            valuesToInsert.push({
-              lead_id: lead.id,
-              custom_field_id: fieldId,
-              value: String(value)
-            });
-          }
-        }
+        formFieldValues.push({
+          lead_id: lead.id,
+          field_name: fieldName,
+          field_label: fieldName, // Use field name as label for now
+          field_value: String(fieldValue),
+        });
+      }
 
-        if (valuesToInsert.length > 0) {
-          const { error: valuesError } = await supabase
-            .from('lead_custom_field_values')
-            .insert(valuesToInsert);
+      if (formFieldValues.length > 0) {
+        const { error: formFieldsError } = await supabase
+          .from('lead_form_field_values')
+          .insert(formFieldValues);
 
-          if (valuesError) {
-            console.error('Error inserting form field values:', valuesError);
-          } else {
-            console.log(`Inserted ${valuesToInsert.length} form field values`);
-          }
+        if (formFieldsError) {
+          console.error('Error inserting form field values:', formFieldsError);
+        } else {
+          console.log(`Saved ${formFieldValues.length} form field values`);
         }
       }
     }
