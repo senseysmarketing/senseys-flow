@@ -168,8 +168,8 @@ const PropertiesPage = () => {
         bedrooms: form.bedrooms ? parseInt(form.bedrooms) : null,
         bathrooms: form.bathrooms ? parseInt(form.bathrooms) : null,
         parking_spots: form.parking_spots ? parseInt(form.parking_spots) : null,
-        sale_price: form.sale_price ? parseFloat(form.sale_price) : null,
-        rent_price: form.rent_price ? parseFloat(form.rent_price) : null,
+        sale_price: form.sale_price ? parseFloat(parseCurrencyToNumber(form.sale_price)) : null,
+        rent_price: form.rent_price ? parseFloat(parseCurrencyToNumber(form.rent_price)) : null,
         status: form.status,
         description: form.description || null,
         assigned_broker_id: form.assigned_broker_id || null,
@@ -264,8 +264,8 @@ const PropertiesPage = () => {
       bedrooms: property.bedrooms?.toString() || "",
       bathrooms: property.bathrooms?.toString() || "",
       parking_spots: property.parking_spots?.toString() || "",
-      sale_price: property.sale_price?.toString() || "",
-      rent_price: property.rent_price?.toString() || "",
+      sale_price: property.sale_price ? formatCurrencyInput((property.sale_price * 100).toString()) : "",
+      rent_price: property.rent_price ? formatCurrencyInput((property.rent_price * 100).toString()) : "",
       status: property.status,
       description: property.description || "",
       assigned_broker_id: property.assigned_broker_id || "",
@@ -286,6 +286,32 @@ const PropertiesPage = () => {
       style: "currency",
       currency: "BRL",
     }).format(value);
+  };
+
+  const formatCurrencyInput = (value: string): string => {
+    // Remove tudo que não é número
+    const numbers = value.replace(/\D/g, "");
+    if (!numbers) return "";
+    
+    // Converte para número e formata
+    const amount = parseInt(numbers, 10) / 100;
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(amount);
+  };
+
+  const parseCurrencyToNumber = (value: string): string => {
+    // Remove tudo exceto números
+    const numbers = value.replace(/\D/g, "");
+    if (!numbers) return "";
+    // Retorna o valor em centavos convertido para reais
+    return (parseInt(numbers, 10) / 100).toString();
+  };
+
+  const handlePriceChange = (field: "sale_price" | "rent_price", value: string) => {
+    const formatted = formatCurrencyInput(value);
+    setForm({ ...form, [field]: formatted });
   };
 
   const getStatusBadge = (status: string) => {
@@ -445,10 +471,10 @@ const PropertiesPage = () => {
                   <Label htmlFor="sale_price">Preço de Venda</Label>
                   <Input
                     id="sale_price"
-                    type="number"
+                    type="text"
                     value={form.sale_price}
-                    onChange={e => setForm({ ...form, sale_price: e.target.value })}
-                    placeholder="R$"
+                    onChange={e => handlePriceChange("sale_price", e.target.value)}
+                    placeholder="R$ 0,00"
                   />
                 </div>
                 
@@ -456,10 +482,10 @@ const PropertiesPage = () => {
                   <Label htmlFor="rent_price">Preço de Aluguel</Label>
                   <Input
                     id="rent_price"
-                    type="number"
+                    type="text"
                     value={form.rent_price}
-                    onChange={e => setForm({ ...form, rent_price: e.target.value })}
-                    placeholder="R$"
+                    onChange={e => handlePriceChange("rent_price", e.target.value)}
+                    placeholder="R$ 0,00"
                   />
                 </div>
                 
