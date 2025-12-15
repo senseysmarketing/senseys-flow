@@ -16,6 +16,7 @@ import Calendar from "./pages/Calendar";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import AgencyAdmin from "./pages/AgencyAdmin";
+import SupportCallback from "./pages/SupportCallback";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => (
               <Routes>
                 <Route path="/" element={<Layout><Index /></Layout>} />
                 <Route path="/auth" element={<Layout><Auth /></Layout>} />
+                <Route path="/auth/support-callback" element={<SupportCallback />} />
                 <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
               <Route path="/leads" element={<Layout><Leads /></Layout>} />
               <Route path="/properties" element={<Layout><Properties /></Layout>} />
