@@ -863,6 +863,34 @@ const SettingsPage = () => {
                 </p>
               </div>
 
+              {/* Payload com Qualificação Automática */}
+              <div className="space-y-3">
+                <Label className="text-base font-semibold">Payload com Qualificação Automática</Label>
+                <p className="text-sm text-muted-foreground">
+                  Envie campos de formulário para qualificação automática. Os campos serão exibidos nos detalhes do lead e podem ter pontuação configurada na aba "Qualificação".
+                </p>
+                <pre className="bg-muted p-4 rounded-lg text-xs overflow-x-auto">
+{`{
+  "name": "Maria Santos",
+  "phone": "11988776655",
+  "email": "maria@exemplo.com",
+  "origem": "Landing Page",
+  "form_id": "formulario-interesse",  // ID único do formulário
+  "form_name": "Formulário de Interesse", // Nome amigável
+  "form_fields": {                    // Campos do formulário
+    "objetivo": "Compra",
+    "prazo": "Até 3 meses",
+    "faixa_orcamento": "500k - 800k",
+    "tipo_imovel": "Apartamento",
+    "regiao_interesse": "Zona Sul"
+  }
+}`}
+                </pre>
+                <p className="text-sm text-muted-foreground">
+                  💡 Após o primeiro lead, configure a pontuação na aba <strong>Qualificação</strong> → <strong>Formulários Webhook</strong>
+                </p>
+              </div>
+
               {/* Imóveis Disponíveis */}
               {properties.length > 0 && (
                 <div className="space-y-3">
