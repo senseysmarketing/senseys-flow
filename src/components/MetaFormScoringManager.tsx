@@ -110,6 +110,9 @@ const MetaFormScoringManager = () => {
     // Telefone
     'phone_number', 'phonenumber', 'phone number', 'telefone', 'phone', 'celular', 'whatsapp',
     'work_phone_number', 'mobile', 'mobile_number', 'tel', 'fone',
+    // Código de referência de imóvel (não é pergunta qualificatória)
+    'ref', 'reference_code', 'codigo_referencia', 'código_de_referência', 
+    'codigo_imovel', 'código_imóvel', 'property_ref', 'imovel_ref',
     // Outros campos de dados pessoais
     'street_address', 'city', 'state', 'zip_code', 'country', 'address',
     'date_of_birth', 'dob', 'birthday', 'gender', 'cpf', 'rg'
