@@ -173,7 +173,8 @@ serve(async (req) => {
           const rulesToInsert = [];
           for (const [fieldName, fieldValue] of Object.entries(formFields)) {
             // Skip basic lead data fields
-            const excludedFields = ['name', 'nome', 'full_name', 'email', 'e-mail', 'phone', 'phone_number', 'telefone', 'celular', 'whatsapp', 'ref', 'reference_code', 'codigo_referencia', 'codigo_imovel'];
+            // Excluir apenas dados básicos do lead (NÃO excluir ref - ele precisa ser detectado para vinculação de imóveis)
+            const excludedFields = ['name', 'nome', 'full_name', 'email', 'e-mail', 'phone', 'phone_number', 'telefone', 'celular', 'whatsapp'];
             if (excludedFields.includes(fieldName.toLowerCase())) continue;
 
             rulesToInsert.push({
@@ -211,7 +212,8 @@ serve(async (req) => {
 
         const newRulesToInsert = [];
         for (const [fieldName, fieldValue] of Object.entries(formFields)) {
-          const excludedFields = ['name', 'nome', 'full_name', 'email', 'e-mail', 'phone', 'phone_number', 'telefone', 'celular', 'whatsapp', 'ref', 'reference_code', 'codigo_referencia', 'codigo_imovel'];
+          // Excluir apenas dados básicos do lead (NÃO excluir ref - ele precisa ser detectado para vinculação de imóveis)
+          const excludedFields = ['name', 'nome', 'full_name', 'email', 'e-mail', 'phone', 'phone_number', 'telefone', 'celular', 'whatsapp'];
           if (excludedFields.includes(fieldName.toLowerCase())) continue;
 
           const key = `${fieldName.toLowerCase()}|${String(fieldValue).toLowerCase()}`;
@@ -392,7 +394,8 @@ serve(async (req) => {
     if (formFields && typeof formFields === 'object' && Object.keys(formFields).length > 0) {
       console.log('Saving form_fields to lead_form_field_values:', formFields);
       
-      const excludedFields = ['name', 'nome', 'full_name', 'email', 'e-mail', 'phone', 'phone_number', 'telefone', 'celular', 'whatsapp', 'ref', 'reference_code', 'codigo_referencia', 'codigo_imovel'];
+      // Excluir apenas dados básicos do lead (manter ref para mostrar no detalhe do lead)
+      const excludedFields = ['name', 'nome', 'full_name', 'email', 'e-mail', 'phone', 'phone_number', 'telefone', 'celular', 'whatsapp'];
       const formFieldValues = [];
       
       for (const [fieldName, fieldValue] of Object.entries(formFields)) {
