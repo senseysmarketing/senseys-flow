@@ -173,7 +173,7 @@ serve(async (req) => {
           const rulesToInsert = [];
           for (const [fieldName, fieldValue] of Object.entries(formFields)) {
             // Skip basic lead data fields
-            const excludedFields = ['name', 'nome', 'full_name', 'email', 'e-mail', 'phone', 'phone_number', 'telefone', 'celular', 'whatsapp'];
+            const excludedFields = ['name', 'nome', 'full_name', 'email', 'e-mail', 'phone', 'phone_number', 'telefone', 'celular', 'whatsapp', 'ref', 'reference_code', 'codigo_referencia', 'codigo_imovel'];
             if (excludedFields.includes(fieldName.toLowerCase())) continue;
 
             rulesToInsert.push({
@@ -211,7 +211,7 @@ serve(async (req) => {
 
         const newRulesToInsert = [];
         for (const [fieldName, fieldValue] of Object.entries(formFields)) {
-          const excludedFields = ['name', 'nome', 'full_name', 'email', 'e-mail', 'phone', 'phone_number', 'telefone', 'celular', 'whatsapp'];
+          const excludedFields = ['name', 'nome', 'full_name', 'email', 'e-mail', 'phone', 'phone_number', 'telefone', 'celular', 'whatsapp', 'ref', 'reference_code', 'codigo_referencia', 'codigo_imovel'];
           if (excludedFields.includes(fieldName.toLowerCase())) continue;
 
           const key = `${fieldName.toLowerCase()}|${String(fieldValue).toLowerCase()}`;
@@ -254,7 +254,7 @@ serve(async (req) => {
           }
         }
 
-        // Check for property reference field
+        // Check for property reference field (configured field first)
         if (existingConfig.reference_field_name && formFields[existingConfig.reference_field_name]) {
           const referenceCode = formFields[existingConfig.reference_field_name];
           console.log('Looking for property with reference code:', referenceCode);
@@ -270,6 +270,33 @@ serve(async (req) => {
             validPropertyId = matchedProperty.id;
             console.log('Matched property by reference code:', validPropertyId);
           }
+        }
+      }
+    }
+
+    // Auto-detect "ref" field for property linking if not already linked
+    if (!validPropertyId && formFields) {
+      const refValue = formFields['ref'] || 
+                       formFields['reference_code'] || 
+                       formFields['codigo_referencia'] ||
+                       formFields['codigo_imovel'] ||
+                       formFields['código_de_referência'] ||
+                       formFields['imovel_ref'];
+      
+      if (refValue) {
+        console.log('Auto-detecting ref field for property linking:', refValue);
+        const { data: matchedProperty } = await supabase
+          .from('properties')
+          .select('id')
+          .eq('account_id', accountId)
+          .eq('reference_code', refValue)
+          .single();
+
+        if (matchedProperty) {
+          validPropertyId = matchedProperty.id;
+          console.log('Auto-matched property by ref field:', validPropertyId);
+        } else {
+          console.log('No property found with reference code:', refValue);
         }
       }
     }
@@ -365,7 +392,7 @@ serve(async (req) => {
     if (formFields && typeof formFields === 'object' && Object.keys(formFields).length > 0) {
       console.log('Saving form_fields to lead_form_field_values:', formFields);
       
-      const excludedFields = ['name', 'nome', 'full_name', 'email', 'e-mail', 'phone', 'phone_number', 'telefone', 'celular', 'whatsapp'];
+      const excludedFields = ['name', 'nome', 'full_name', 'email', 'e-mail', 'phone', 'phone_number', 'telefone', 'celular', 'whatsapp', 'ref', 'reference_code', 'codigo_referencia', 'codigo_imovel'];
       const formFieldValues = [];
       
       for (const [fieldName, fieldValue] of Object.entries(formFields)) {
