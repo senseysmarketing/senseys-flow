@@ -457,6 +457,30 @@ const MetaFormScoringManager = () => {
                 ))}
               </SelectContent>
             </Select>
+            
+            {/* Mostrar valores de referência detectados */}
+            {detectedRefFields.length > 0 && (
+              <div className="mt-3 p-3 bg-background/50 rounded border border-border/50">
+                <p className="text-xs font-medium text-muted-foreground mb-2">
+                  Valores de código de referência recebidos:
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {detectedRefFields.map((fieldName) => {
+                    // Pegar os valores únicos deste campo de referência
+                    const refValues = rules
+                      .filter(r => r.question_name.toLowerCase() === fieldName.toLowerCase())
+                      .map(r => r.answer_value);
+                    
+                    return refValues.map((value, idx) => (
+                      <Badge key={`${fieldName}-${idx}`} variant="secondary" className="text-xs">
+                        {value}
+                      </Badge>
+                    ));
+                  })}
+                </div>
+              </div>
+            )}
+            
             <p className="text-xs text-muted-foreground">
               {effectiveRefField ? (
                 <>O campo "<strong>{effectiveRefField}</strong>" será usado para vincular leads automaticamente aos imóveis com código de referência correspondente.</>
