@@ -29,7 +29,9 @@ import {
   Flame,
   Thermometer,
   Snowflake,
-  Database
+  Database,
+  EyeOff,
+  List
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -94,6 +96,10 @@ const Leads = () => {
     startDate: "",
     endDate: ""
   });
+  const [hiddenColumns, setHiddenColumns] = useState<string[]>(() => {
+    const saved = localStorage.getItem('kanban-hidden-columns');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [notificationsEnabled, setNotificationsEnabled] = useState(
     localStorage.getItem('lead-notifications-enabled') !== 'false'
   );
@@ -115,6 +121,17 @@ const Leads = () => {
       description: newState 
         ? "Você receberá sons e alertas quando novos leads forem adicionados" 
         : "Não receberá mais notificações sonoras de novos leads",
+    });
+  };
+
+  // Função para alternar visibilidade de colunas
+  const toggleColumnVisibility = (statusId: string) => {
+    setHiddenColumns(prev => {
+      const newHidden = prev.includes(statusId)
+        ? prev.filter(id => id !== statusId)
+        : [...prev, statusId];
+      localStorage.setItem('kanban-hidden-columns', JSON.stringify(newHidden));
+      return newHidden;
     });
   };
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -561,7 +578,17 @@ const Leads = () => {
       }
     }
 
-    return matchesSearch && matchesStatus && matchesOrigem && matchesDateRange;
+    // Auto-ocultar leads "Perdido" após 5 dias (apenas no Kanban)
+    const perdidoStatus = statuses.find(s => s.name === "Perdido");
+    let shouldHidePerdido = false;
+    if (viewMode === 'kanban' && perdidoStatus && lead.status_id === perdidoStatus.id) {
+      const leadDate = new Date(lead.updated_at);
+      const fiveDaysAgo = new Date();
+      fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+      shouldHidePerdido = leadDate < fiveDaysAgo;
+    }
+
+    return matchesSearch && matchesStatus && matchesOrigem && matchesDateRange && !shouldHidePerdido;
   });
 
   const getLeadsByStatus = (statusId: string) => {
@@ -878,8 +905,8 @@ const Leads = () => {
             onClick={() => setViewMode('database')}
             className="gap-2"
           >
-            <Database className="h-4 w-4" />
-            Database
+            <List className="h-4 w-4" />
+            Todas Leads
           </Button>
           
           <Button
@@ -904,8 +931,30 @@ const Leads = () => {
         // Kanban View with Drag and Drop
         <DragDropContext onDragEnd={onDragEnd}>
           <div className="overflow-x-auto pb-4">
+            {/* Botões para restaurar colunas ocultas */}
+            {hiddenColumns.length > 0 && (
+              <div className="flex gap-2 mb-4 flex-wrap">
+                <span className="text-sm text-muted-foreground self-center">Colunas ocultas:</span>
+                {hiddenColumns.map(columnId => {
+                  const status = statuses.find(s => s.id === columnId);
+                  if (!status) return null;
+                  return (
+                    <Button
+                      key={columnId}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => toggleColumnVisibility(columnId)}
+                      className="gap-2"
+                    >
+                      <Eye className="h-3 w-3" />
+                      {status.name}
+                    </Button>
+                  );
+                })}
+              </div>
+            )}
             <div className="flex gap-4 min-w-max flex-nowrap">
-              {statuses.map((status) => {
+              {statuses.filter(s => !hiddenColumns.includes(s.id)).map((status) => {
                 const statusLeads = getLeadsByStatus(status.id);
                 return (
                   <div key={status.id} className="kanban-column w-[330px] flex-none">
@@ -925,6 +974,15 @@ const Leads = () => {
                       >
                         {statusLeads.length}
                       </Badge>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 opacity-50 hover:opacity-100"
+                        onClick={() => toggleColumnVisibility(status.id)}
+                        title={`Ocultar coluna ${status.name}`}
+                      >
+                        <EyeOff className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                     
                      <Droppable droppableId={status.id}>
