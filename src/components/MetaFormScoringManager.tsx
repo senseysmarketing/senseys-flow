@@ -101,9 +101,17 @@ const MetaFormScoringManager = () => {
 
   // Campos de dados básicos do lead que não devem aparecer na qualificação
   const EXCLUDED_FIELD_NAMES = [
-    'full_name', 'nome', 'name',
-    'email', 'e-mail',
-    'phone_number', 'telefone', 'phone', 'celular', 'whatsapp'
+    // Nome
+    'full_name', 'fullname', 'nome', 'name', 'first_name', 'firstname', 
+    'last_name', 'lastname', 'nome_completo', 'primeiro_nome', 'sobrenome',
+    // Email
+    'email', 'e-mail', 'e_mail', 'work_email', 'email_address',
+    // Telefone
+    'phone_number', 'phonenumber', 'telefone', 'phone', 'celular', 'whatsapp',
+    'work_phone_number', 'mobile', 'mobile_number', 'tel', 'fone',
+    // Outros campos de dados pessoais
+    'street_address', 'city', 'state', 'zip_code', 'country', 'address',
+    'date_of_birth', 'dob', 'birthday', 'gender', 'cpf', 'rg'
   ];
 
   const groupRulesByQuestion = (rules: ScoringRule[]): GroupedRules => {
