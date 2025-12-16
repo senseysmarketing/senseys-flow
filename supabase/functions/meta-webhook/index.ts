@@ -74,7 +74,8 @@ async function calculateLeadTemperature(
         console.error('Error creating form config:', createError);
       } else if (newConfig) {
         // Campos de dados básicos do lead que não devem ser criados como regras de scoring
-        const excludedFields = ['full_name', 'nome', 'name', 'email', 'e-mail', 'phone_number', 'telefone', 'phone', 'celular', 'whatsapp', 'ref', 'reference_code', 'codigo_referencia', 'codigo_imovel'];
+        // Excluir apenas dados básicos do lead (NÃO excluir ref - ele precisa ser detectado para vinculação de imóveis)
+        const excludedFields = ['full_name', 'nome', 'name', 'email', 'e-mail', 'phone_number', 'telefone', 'phone', 'celular', 'whatsapp'];
         
         // Auto-create scoring rules for each field (exceto dados básicos)
         let rulesCreated = 0;
@@ -127,7 +128,8 @@ async function calculateLeadTemperature(
     }
 
     // Campos de dados básicos do lead que não devem ser criados como regras de scoring
-    const excludedFields = ['full_name', 'nome', 'name', 'email', 'e-mail', 'phone_number', 'telefone', 'phone', 'celular', 'whatsapp', 'ref', 'reference_code', 'codigo_referencia', 'codigo_imovel'];
+    // Excluir apenas dados básicos do lead (NÃO excluir ref - ele precisa ser detectado para vinculação de imóveis)
+    const excludedFields = ['full_name', 'nome', 'name', 'email', 'e-mail', 'phone_number', 'telefone', 'phone', 'celular', 'whatsapp'];
 
     // Auto-register new answers that aren't in rules yet (exceto dados básicos)
     for (const [fieldName, fieldValue] of Object.entries(fieldData)) {

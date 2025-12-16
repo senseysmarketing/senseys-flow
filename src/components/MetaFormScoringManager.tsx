@@ -118,6 +118,12 @@ const MetaFormScoringManager = () => {
     'date_of_birth', 'dob', 'birthday', 'gender', 'cpf', 'rg'
   ];
 
+  // Campos que são códigos de referência (para vincular a imóveis)
+  const REFERENCE_FIELD_NAMES = [
+    'ref', 'reference_code', 'codigo_referencia', 'código_de_referência', 
+    'codigo_imovel', 'código_imóvel', 'property_ref', 'imovel_ref'
+  ];
+
   const groupRulesByQuestion = (rules: ScoringRule[]): GroupedRules => {
     const grouped: GroupedRules = {};
     for (const rule of rules) {
@@ -134,6 +140,21 @@ const MetaFormScoringManager = () => {
       grouped[rule.question_name].answers.push(rule);
     }
     return grouped;
+  };
+
+  // Detectar campos de referência nas regras (antes de serem excluídos)
+  const getDetectedRefFields = (rules: ScoringRule[]): string[] => {
+    const refFields: string[] = [];
+    const seenFields = new Set<string>();
+    
+    for (const rule of rules) {
+      const fieldNameLower = rule.question_name.toLowerCase();
+      if (REFERENCE_FIELD_NAMES.includes(fieldNameLower) && !seenFields.has(fieldNameLower)) {
+        seenFields.add(fieldNameLower);
+        refFields.push(rule.question_name);
+      }
+    }
+    return refFields;
   };
 
   const handleConfigChange = (configId: string, field: keyof FormConfig, value: any) => {
@@ -308,9 +329,15 @@ const MetaFormScoringManager = () => {
   const renderFormConfig = (config: FormConfig) => {
     const rules = scoringRules[config.id] || [];
     const groupedRules = groupRulesByQuestion(rules);
+    const detectedRefFields = getDetectedRefFields(rules);
     const editedConfig = editedConfigs[config.id];
     const { hotThreshold, warmThreshold } = getTemperaturePreview(config, rules);
     const hasChanges = !!editedConfig || rules.some((r) => editedRules[r.id] !== undefined);
+
+    // Determinar o campo de referência atual (configurado ou auto-detectado)
+    const currentRefField = editedConfig?.reference_field_name ?? config.reference_field_name;
+    const autoDetectedRef = detectedRefFields.length > 0 ? detectedRefFields[0] : null;
+    const effectiveRefField = currentRefField || autoDetectedRef;
 
     return (
       <AccordionItem key={config.id} value={config.id} className="border rounded-lg px-4">
@@ -395,33 +422,49 @@ const MetaFormScoringManager = () => {
             </div>
           </div>
 
-          {/* Reference Field Configuration - Only for Meta forms */}
-          {config.source_type === 'meta' && (
-            <div className="p-4 bg-muted/30 rounded-lg space-y-3">
+          {/* Reference Field Configuration - For all forms */}
+          <div className="p-4 bg-muted/30 rounded-lg space-y-3">
+            <div className="flex items-center gap-2">
               <Label>Campo de Código de Referência (para vincular a imóveis)</Label>
-              <Select
-                value={editedConfig?.reference_field_name ?? config.reference_field_name ?? "none"}
-                onValueChange={(value) =>
-                  handleConfigChange(config.id, "reference_field_name", value === "none" ? null : value)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione um campo..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhum</SelectItem>
-                  {Object.keys(groupedRules).map((questionName) => (
-                    <SelectItem key={questionName} value={questionName}>
-                      {groupedRules[questionName].label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Se selecionado, o valor deste campo será usado para vincular o lead a um imóvel com código de referência correspondente.
-              </p>
+              {autoDetectedRef && !currentRefField && (
+                <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/20 text-xs">
+                  Auto-detectado: {autoDetectedRef}
+                </Badge>
+              )}
             </div>
-          )}
+            <Select
+              value={editedConfig?.reference_field_name ?? config.reference_field_name ?? (autoDetectedRef || "none")}
+              onValueChange={(value) =>
+                handleConfigChange(config.id, "reference_field_name", value === "none" ? null : value)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione um campo..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Nenhum (desativar vinculação)</SelectItem>
+                {/* Mostrar campos de referência detectados primeiro */}
+                {detectedRefFields.map((fieldName) => (
+                  <SelectItem key={fieldName} value={fieldName}>
+                    {fieldName} (código de referência)
+                  </SelectItem>
+                ))}
+                {/* Mostrar outros campos qualificatórios como opção */}
+                {Object.keys(groupedRules).map((questionName) => (
+                  <SelectItem key={questionName} value={questionName}>
+                    {groupedRules[questionName].label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {effectiveRefField ? (
+                <>O campo "<strong>{effectiveRefField}</strong>" será usado para vincular leads automaticamente aos imóveis com código de referência correspondente.</>
+              ) : (
+                <>Se selecionado, o valor deste campo será usado para vincular o lead a um imóvel com código de referência correspondente.</>
+              )}
+            </p>
+          </div>
 
           {/* Scoring Rules per Question */}
           <div className="space-y-4">
