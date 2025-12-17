@@ -28,6 +28,15 @@ const LeadCustomFields = ({ leadId }: LeadCustomFieldsProps) => {
     fetchData();
   }, [leadId]);
 
+  // Fields that contain basic lead data and should not be shown here
+  // (they are already displayed in the contact info section)
+  const excludedFieldKeys = [
+    'full_name', 'full name', 'fullname', 'nome', 'name', 'nome_completo', 'nome completo',
+    'phone_number', 'telefone', 'phone', 'celular', 'whatsapp',
+    'email', 'e-mail',
+    'reference_code', 'codigo_referencia', 'ref', 'código_de_referência', 'codigo_imovel', 'imovel_ref'
+  ];
+
   const fetchData = async () => {
     try {
       // Fetch custom fields for the account
@@ -39,6 +48,11 @@ const LeadCustomFields = ({ leadId }: LeadCustomFieldsProps) => {
 
       if (fieldsError) throw fieldsError;
 
+      // Filter out basic lead data fields
+      const filteredFields = (fieldsData || []).filter(field => 
+        !excludedFieldKeys.includes(field.field_key.toLowerCase())
+      );
+
       // Fetch values for this lead
       const { data: valuesData, error: valuesError } = await supabase
         .from("lead_custom_field_values")
@@ -47,7 +61,7 @@ const LeadCustomFields = ({ leadId }: LeadCustomFieldsProps) => {
 
       if (valuesError) throw valuesError;
 
-      setFields(fieldsData || []);
+      setFields(filteredFields);
       
       const valuesMap = new Map<string, string | null>();
       (valuesData || []).forEach((v: CustomFieldValue) => {
