@@ -11,12 +11,14 @@ interface Account {
 
 interface AccountContextType {
   account: Account | null;
+  userFullName: string | null;
   loading: boolean;
   refetchAccount: () => Promise<void>;
 }
 
 const AccountContext = createContext<AccountContextType>({
   account: null,
+  userFullName: null,
   loading: true,
   refetchAccount: async () => {},
 });
@@ -36,24 +38,28 @@ interface AccountProviderProps {
 export const AccountProvider = ({ children }: AccountProviderProps) => {
   const { user } = useAuth();
   const [account, setAccount] = useState<Account | null>(null);
+  const [userFullName, setUserFullName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchAccount = async () => {
     if (!user) {
       setAccount(null);
+      setUserFullName(null);
       setLoading(false);
       return;
     }
 
     try {
-      // Get account_id from profile
+      // Get account_id and full_name from profile
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("account_id")
+        .select("account_id, full_name")
         .eq("user_id", user.id)
         .single();
 
       if (profileError) throw profileError;
+
+      setUserFullName(profile.full_name);
 
       // Get account data
       const { data: accountData, error: accountError } = await supabase
@@ -77,7 +83,7 @@ export const AccountProvider = ({ children }: AccountProviderProps) => {
   }, [user]);
 
   return (
-    <AccountContext.Provider value={{ account, loading, refetchAccount: fetchAccount }}>
+    <AccountContext.Provider value={{ account, userFullName, loading, refetchAccount: fetchAccount }}>
       {children}
     </AccountContext.Provider>
   );
