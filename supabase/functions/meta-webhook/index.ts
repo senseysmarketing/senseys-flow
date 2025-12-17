@@ -75,7 +75,7 @@ async function calculateLeadTemperature(
       } else if (newConfig) {
         // Campos de dados básicos do lead que não devem ser criados como regras de scoring
         // Excluir apenas dados básicos do lead (NÃO excluir ref - ele precisa ser detectado para vinculação de imóveis)
-        const excludedFields = ['full_name', 'nome', 'name', 'email', 'e-mail', 'phone_number', 'telefone', 'phone', 'celular', 'whatsapp'];
+        const excludedFields = ['full_name', 'full name', 'fullname', 'nome', 'name', 'nome_completo', 'nome completo', 'email', 'e-mail', 'phone_number', 'telefone', 'phone', 'celular', 'whatsapp'];
         
         // Auto-create scoring rules for each field (exceto dados básicos)
         let rulesCreated = 0;
@@ -129,7 +129,7 @@ async function calculateLeadTemperature(
 
     // Campos de dados básicos do lead que não devem ser criados como regras de scoring
     // Excluir apenas dados básicos do lead (NÃO excluir ref - ele precisa ser detectado para vinculação de imóveis)
-    const excludedFields = ['full_name', 'nome', 'name', 'email', 'e-mail', 'phone_number', 'telefone', 'phone', 'celular', 'whatsapp'];
+    const excludedFields = ['full_name', 'full name', 'fullname', 'nome', 'name', 'nome_completo', 'nome completo', 'email', 'e-mail', 'phone_number', 'telefone', 'phone', 'celular', 'whatsapp'];
 
     // Auto-register new answers that aren't in rules yet (exceto dados básicos)
     for (const [fieldName, fieldValue] of Object.entries(fieldData)) {
@@ -361,10 +361,17 @@ serve(async (req) => {
           }
           console.log('Parsed field data:', JSON.stringify(fieldData, null, 2));
 
-          // Extract common fields
-          const name = fieldData['full_name'] || fieldData['nome'] || fieldData['name'] || 'Lead do Facebook';
-          const phone = fieldData['phone_number'] || fieldData['telefone'] || fieldData['phone'] || '';
-          const email = fieldData['email'] || '';
+          // Extract common fields - check multiple variations for name
+          const name = fieldData['full_name'] || 
+                       fieldData['full name'] || 
+                       fieldData['fullname'] || 
+                       fieldData['nome'] || 
+                       fieldData['name'] || 
+                       fieldData['nome_completo'] || 
+                       fieldData['nome completo'] || 
+                       'Lead do Facebook';
+          const phone = fieldData['phone_number'] || fieldData['telefone'] || fieldData['phone'] || fieldData['celular'] || fieldData['whatsapp'] || '';
+          const email = fieldData['email'] || fieldData['e-mail'] || '';
 
           console.log(`Extracted: name=${name}, phone=${phone}, email=${email}`);
 
@@ -498,11 +505,12 @@ serve(async (req) => {
           console.log(`✅ Lead created successfully: ${newLead.id}`);
 
           // Store additional custom fields if any
+          // Exclude basic lead data fields that are already stored in the leads table
           const excludedFields = [
-            'full_name', 'nome', 'name', 
-            'phone_number', 'telefone', 'phone', 
-            'email', 
-            'reference_code', 'codigo_referencia', 'ref', 'código_de_referência', 'codigo_imovel'
+            'full_name', 'full name', 'fullname', 'nome', 'name', 'nome_completo', 'nome completo',
+            'phone_number', 'telefone', 'phone', 'celular', 'whatsapp',
+            'email', 'e-mail',
+            'reference_code', 'codigo_referencia', 'ref', 'código_de_referência', 'codigo_imovel', 'imovel_ref'
           ];
 
           for (const [key, value] of Object.entries(fieldData)) {
