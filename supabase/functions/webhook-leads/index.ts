@@ -19,6 +19,15 @@ interface ScoringRule {
   score: number;
 }
 
+// Normalize values for comparison (handles snake_case vs readable format)
+const normalizeForComparison = (value: string): string => {
+  return value
+    .toLowerCase()
+    .replace(/_/g, ' ')  // underscores -> spaces
+    .replace(/\s+/g, ' ') // multiple spaces -> single space
+    .trim();
+};
+
 // Calculate lead temperature based on scoring rules
 const calculateLeadTemperature = (
   formFields: Record<string, string>,
@@ -29,8 +38,8 @@ const calculateLeadTemperature = (
 
   for (const [fieldName, fieldValue] of Object.entries(formFields)) {
     const matchingRule = rules.find(
-      (r) => r.question_name.toLowerCase() === fieldName.toLowerCase() &&
-             r.answer_value.toLowerCase() === String(fieldValue).toLowerCase()
+      (r) => normalizeForComparison(r.question_name) === normalizeForComparison(fieldName) &&
+             normalizeForComparison(r.answer_value) === normalizeForComparison(String(fieldValue))
     );
     if (matchingRule) {
       totalScore += matchingRule.score;

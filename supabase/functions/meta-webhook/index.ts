@@ -33,6 +33,15 @@ async function verifySignature(payload: string, signature: string): Promise<bool
   return computedSignature === expectedSignature;
 }
 
+// Normalize values for comparison (handles snake_case vs readable format)
+function normalizeForComparison(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/_/g, ' ')  // underscores -> spaces
+    .replace(/\s+/g, ' ') // multiple spaces -> single space
+    .trim();
+}
+
 // Calculate lead temperature based on scoring rules
 async function calculateLeadTemperature(
   supabase: any,
@@ -121,7 +130,7 @@ async function calculateLeadTemperature(
     // Calculate score
     for (const rule of rules || []) {
       const fieldValue = fieldData[rule.question_name];
-      if (fieldValue && fieldValue.toLowerCase() === rule.answer_value.toLowerCase()) {
+      if (fieldValue && normalizeForComparison(fieldValue) === normalizeForComparison(rule.answer_value)) {
         score += rule.score;
         console.log(`Rule match: "${rule.question_name}" = "${fieldValue}" -> +${rule.score} (total: ${score})`);
       }
@@ -137,7 +146,7 @@ async function calculateLeadTemperature(
       if (excludedFields.includes(fieldName.toLowerCase())) continue;
       
       const existingRule = (rules || []).find(
-        r => r.question_name === fieldName && r.answer_value.toLowerCase() === fieldValue.toLowerCase()
+        r => r.question_name === fieldName && normalizeForComparison(r.answer_value) === normalizeForComparison(fieldValue)
       );
       
       if (!existingRule) {
