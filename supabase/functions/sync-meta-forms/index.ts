@@ -96,32 +96,39 @@ serve(async (req) => {
     const accessToken = tokenData.access_token;
     const pageId = metaConfig.page_id;
 
-    // Get page access token
-    const pagesResponse = await fetch(
-      `https://graph.facebook.com/v19.0/me/accounts?fields=id,access_token,name&access_token=${accessToken}`
-    );
-    const pagesData = await pagesResponse.json();
+    // Get page access token with full pagination
+    let allPages: any[] = [];
+    let nextUrl: string | null = `https://graph.facebook.com/v19.0/me/accounts?fields=id,access_token,name&limit=100&access_token=${accessToken}`;
     
-    if (pagesData.error) {
-      console.error('Error fetching pages:', pagesData.error);
-      return new Response(JSON.stringify({ error: pagesData.error.message }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    while (nextUrl) {
+      const pagesResponse = await fetch(nextUrl);
+      const pagesData = await pagesResponse.json();
+      
+      if (pagesData.error) {
+        console.error('Error fetching pages:', pagesData.error);
+        return new Response(JSON.stringify({ error: pagesData.error.message }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      allPages = [...allPages, ...(pagesData.data || [])];
+      nextUrl = pagesData.paging?.next || null;
+      
+      console.log(`Fetched ${pagesData.data?.length || 0} pages, total so far: ${allPages.length}`);
     }
 
-    console.log(`Found ${pagesData.data?.length || 0} pages, looking for page ID: ${pageId}`);
-    console.log('Available pages:', JSON.stringify(pagesData.data?.map((p: any) => ({ id: p.id, name: p.name })) || []));
+    console.log(`Found ${allPages.length} total pages, looking for page ID: ${pageId}`);
 
-    const page = pagesData.data?.find((p: any) => p.id === pageId);
+    const page = allPages.find((p: any) => p.id === pageId);
     const pageToken = page?.access_token;
 
     if (!pageToken) {
-      console.error(`Page ${pageId} (${metaConfig.page_name}) not found in available pages`);
+      console.error(`Page ${pageId} (${metaConfig.page_name}) not found in ${allPages.length} available pages`);
       return new Response(JSON.stringify({ 
         error: 'Page token not found',
-        message: `A página "${metaConfig.page_name}" (ID: ${pageId}) não foi encontrada. Isso pode ocorrer se a página foi desconectada ou se as permissões foram alteradas. Peça ao administrador da agência para reconfigurar a integração Meta.`,
-        availablePages: pagesData.data?.map((p: any) => ({ id: p.id, name: p.name })) || []
+        message: `A página "${metaConfig.page_name}" (ID: ${pageId}) não foi encontrada entre ${allPages.length} páginas disponíveis. Isso pode ocorrer se a página foi desconectada ou se as permissões foram alteradas. Peça ao administrador da agência para reconfigurar a integração Meta.`,
+        availablePages: allPages.map((p: any) => ({ id: p.id, name: p.name }))
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
