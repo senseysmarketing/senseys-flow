@@ -98,7 +98,7 @@ serve(async (req) => {
 
     // Get page access token
     const pagesResponse = await fetch(
-      `https://graph.facebook.com/v19.0/me/accounts?fields=id,access_token&access_token=${accessToken}`
+      `https://graph.facebook.com/v19.0/me/accounts?fields=id,access_token,name&access_token=${accessToken}`
     );
     const pagesData = await pagesResponse.json();
     
@@ -110,15 +110,25 @@ serve(async (req) => {
       });
     }
 
+    console.log(`Found ${pagesData.data?.length || 0} pages, looking for page ID: ${pageId}`);
+    console.log('Available pages:', JSON.stringify(pagesData.data?.map((p: any) => ({ id: p.id, name: p.name })) || []));
+
     const page = pagesData.data?.find((p: any) => p.id === pageId);
     const pageToken = page?.access_token;
 
     if (!pageToken) {
-      return new Response(JSON.stringify({ error: 'Page token not found' }), {
+      console.error(`Page ${pageId} (${metaConfig.page_name}) not found in available pages`);
+      return new Response(JSON.stringify({ 
+        error: 'Page token not found',
+        message: `A página "${metaConfig.page_name}" (ID: ${pageId}) não foi encontrada. Isso pode ocorrer se a página foi desconectada ou se as permissões foram alteradas. Peça ao administrador da agência para reconfigurar a integração Meta.`,
+        availablePages: pagesData.data?.map((p: any) => ({ id: p.id, name: p.name })) || []
+      }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    console.log(`Found page token for ${page.name}`);
 
     const url = new URL(req.url);
     let action = url.searchParams.get('action');
