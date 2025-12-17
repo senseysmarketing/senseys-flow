@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
 
+const SUPPORT_MODE_KEY = "support_mode_active";
+
 const SupportCallback = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -42,6 +44,14 @@ const SupportCallback = () => {
 
         if (data?.session) {
           console.log("Session established successfully");
+          
+          // Mark support mode as active if we have a backup session
+          const hasBackupSession = localStorage.getItem('agency_backup_session');
+          if (hasBackupSession) {
+            localStorage.setItem(SUPPORT_MODE_KEY, "true");
+            console.log("Support mode activated");
+          }
+          
           // Redirect to dashboard after successful login
           navigate("/dashboard", { replace: true });
         } else {
