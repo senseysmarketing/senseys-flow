@@ -97,6 +97,15 @@ const AgencyAdmin = () => {
     setAccessingAccount(account.id);
     
     try {
+      // Save current agency session before generating support session
+      const backupSession = {
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+        expires_at: session.expires_at,
+      };
+      localStorage.setItem('agency_backup_session', JSON.stringify(backupSession));
+      localStorage.setItem('support_account_name', account.company_name || account.name);
+
       const { data, error } = await supabase.functions.invoke('generate-support-session', {
         headers: { Authorization: `Bearer ${session.access_token}` },
         body: { 
@@ -114,34 +123,13 @@ const AgencyAdmin = () => {
       
       console.log('Opening support URL:', supportUrl);
 
-      // Try to open in new tab
-      const newWindow = window.open(supportUrl, '_blank');
-      
-      // If blocked by browser, offer alternatives
-      if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
-        const shouldOpenSameTab = confirm(
-          'Popup bloqueado pelo navegador. Deseja abrir na mesma aba?\n\n' +
-          'Clique em "OK" para abrir na mesma aba.\n' +
-          'Clique em "Cancelar" para copiar o link.'
-        );
-        
-        if (shouldOpenSameTab) {
-          window.location.href = supportUrl;
-        } else {
-          await navigator.clipboard.writeText(supportUrl);
-          toast({
-            title: "Link copiado!",
-            description: "Cole em uma nova aba para acessar a conta"
-          });
-        }
-      } else {
-        toast({
-          title: "Sessão de suporte gerada",
-          description: "Uma nova aba foi aberta com acesso à conta"
-        });
-      }
+      // Open in same tab (support mode works best this way)
+      window.location.href = supportUrl;
     } catch (err: any) {
       console.error('Error generating support session:', err);
+      // Clear backup if error occurs
+      localStorage.removeItem('agency_backup_session');
+      localStorage.removeItem('support_account_name');
       toast({
         variant: "destructive",
         title: "Erro ao acessar conta",

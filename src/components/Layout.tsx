@@ -1,11 +1,12 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useAccount } from "@/hooks/use-account";
+import { useSupportMode } from "@/hooks/use-support-mode";
 import { Navigate, useLocation } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import WhatsAppFloat from "@/components/WhatsAppFloat";
 import { Button } from "@/components/ui/button";
-import { Sun, Moon, Bell, Search, Menu } from "lucide-react";
+import { Sun, Moon, Bell, Search, Menu, Wrench, ArrowLeft } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -16,12 +17,19 @@ interface LayoutProps {
 const Layout = ({ children }: LayoutProps) => {
   const { user, loading } = useAuth();
   const { account, userFullName } = useAccount();
+  const { isSupportMode, supportAccountName, exitSupportMode } = useSupportMode();
   const location = useLocation();
   const [isDark, setIsDark] = useState(true);
+  const [isExiting, setIsExiting] = useState(false);
 
   const toggleTheme = () => {
     setIsDark(!isDark);
     document.documentElement.classList.toggle("dark");
+  };
+
+  const handleExitSupportMode = async () => {
+    setIsExiting(true);
+    await exitSupportMode();
   };
 
   if (loading) {
@@ -56,6 +64,30 @@ const Layout = ({ children }: LayoutProps) => {
         <AppSidebar />
 
         <div className="flex-1 flex flex-col">
+          {/* Support Mode Banner */}
+          {isSupportMode && (
+            <div className="bg-amber-500/20 border-b border-amber-500/30 px-4 py-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-amber-400">
+                  <Wrench className="h-4 w-4" />
+                  <span className="text-sm font-medium">
+                    Modo Suporte - Acessando: {supportAccountName || account?.company_name || account?.name}
+                  </span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExitSupportMode}
+                  disabled={isExiting}
+                  className="h-7 gap-1.5 border-amber-500/30 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  {isExiting ? "Saindo..." : "Voltar para Agência"}
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Modern Header */}
           <header className="h-16 border-b border-border/50 bg-background/80 backdrop-blur-xl sticky top-0 z-40">
             <div className="h-full flex items-center justify-between px-4 lg:px-6">
