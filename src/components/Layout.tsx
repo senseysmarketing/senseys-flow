@@ -1,4 +1,5 @@
 import { useAuth } from "@/hooks/use-auth";
+import { useAccount } from "@/hooks/use-account";
 import { Navigate, useLocation } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -12,17 +13,9 @@ interface LayoutProps {
   children: React.ReactNode;
 }
 
-const routeTitles: Record<string, string> = {
-  "/dashboard": "Dashboard",
-  "/leads": "Leads",
-  "/properties": "Imóveis",
-  "/calendar": "Agenda",
-  "/reports": "Relatórios",
-  "/settings": "Configurações",
-};
-
 const Layout = ({ children }: LayoutProps) => {
   const { user, loading } = useAuth();
+  const { account, userFullName } = useAccount();
   const location = useLocation();
   const [isDark, setIsDark] = useState(true);
 
@@ -30,8 +23,6 @@ const Layout = ({ children }: LayoutProps) => {
     setIsDark(!isDark);
     document.documentElement.classList.toggle("dark");
   };
-
-  const currentTitle = routeTitles[location.pathname] || "Senseys CRM";
 
   if (loading) {
     return (
@@ -77,7 +68,8 @@ const Layout = ({ children }: LayoutProps) => {
                 </SidebarTrigger>
 
                 <div className="hidden sm:block">
-                  <h1 className="text-lg font-semibold">{currentTitle}</h1>
+                  <h1 className="text-base font-semibold">{account?.company_name || account?.name || "Carregando..."}</h1>
+                  <p className="text-xs text-muted-foreground">Logado como: {userFullName || "..."}</p>
                 </div>
               </div>
 
