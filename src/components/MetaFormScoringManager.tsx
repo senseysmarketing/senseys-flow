@@ -9,7 +9,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, CheckCircle2, Settings2, Thermometer, Save, RefreshCw, Globe, Facebook, Download, Loader2, CloudDownload } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertCircle, CheckCircle2, Settings2, Thermometer, Save, RefreshCw, Globe, Facebook, Download, Loader2, CloudDownload, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -67,6 +68,7 @@ const MetaFormScoringManager = () => {
   const [selectedForms, setSelectedForms] = useState<Set<string>>(new Set());
   const [showSyncPanel, setShowSyncPanel] = useState(false);
   const [hasMetaConfig, setHasMetaConfig] = useState<boolean | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -424,6 +426,43 @@ const MetaFormScoringManager = () => {
     } finally {
       setSaving(false);
       setRecalculating(false);
+    }
+  };
+
+  const deleteFormConfig = async (configId: string) => {
+    setDeleting(configId);
+    try {
+      // First delete all scoring rules for this config
+      const { error: rulesError } = await supabase
+        .from("meta_form_scoring_rules")
+        .delete()
+        .eq("form_config_id", configId);
+
+      if (rulesError) throw rulesError;
+
+      // Then delete the form config
+      const { error: configError } = await supabase
+        .from("meta_form_configs")
+        .delete()
+        .eq("id", configId);
+
+      if (configError) throw configError;
+
+      toast({
+        title: "Formulário excluído",
+        description: "O formulário e suas regras foram excluídos com sucesso.",
+      });
+
+      fetchData();
+    } catch (error) {
+      console.error("Erro ao excluir:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Não foi possível excluir o formulário.",
+      });
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -856,24 +895,56 @@ const MetaFormScoringManager = () => {
             </div>
           </div>
 
-          {/* Save Button */}
+          {/* Actions */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Switch
-                id={`update-leads-${config.id}`}
-                checked={updateExistingLeads[config.id] !== false}
-                onCheckedChange={(checked) =>
-                  setUpdateExistingLeads((prev) => ({ ...prev, [config.id]: checked }))
-                }
-              />
-              <Label htmlFor={`update-leads-${config.id}`} className="text-sm cursor-pointer">
-                Atualizar leads existentes
-              </Label>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id={`update-leads-${config.id}`}
+                  checked={updateExistingLeads[config.id] !== false}
+                  onCheckedChange={(checked) =>
+                    setUpdateExistingLeads((prev) => ({ ...prev, [config.id]: checked }))
+                  }
+                />
+                <Label htmlFor={`update-leads-${config.id}`} className="text-sm cursor-pointer">
+                  Atualizar leads existentes
+                </Label>
+              </div>
             </div>
-            <Button onClick={() => saveConfig(config.id)} disabled={saving || recalculating || !hasChanges}>
-              <Save className="h-4 w-4 mr-2" />
-              {recalculating ? "Recalculando..." : saving ? "Salvando..." : "Salvar Configuração"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Excluir
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Excluir Formulário</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Tem certeza que deseja excluir o formulário "{config.form_name || config.form_id}"? 
+                      Esta ação removerá todas as regras de qualificação associadas. 
+                      Os leads existentes não serão afetados.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => deleteFormConfig(config.id)}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      disabled={deleting === config.id}
+                    >
+                      {deleting === config.id ? "Excluindo..." : "Excluir"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              <Button onClick={() => saveConfig(config.id)} disabled={saving || recalculating || !hasChanges}>
+                <Save className="h-4 w-4 mr-2" />
+                {recalculating ? "Recalculando..." : saving ? "Salvando..." : "Salvar Configuração"}
+              </Button>
+            </div>
           </div>
         </AccordionContent>
       </AccordionItem>
