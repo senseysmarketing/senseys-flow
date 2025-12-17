@@ -197,8 +197,7 @@ serve(async (req) => {
 
     // SYNC FORM - Sync a specific form's questions
     if (action === 'sync-form') {
-      const body = await req.json();
-      const { form_id } = body;
+      const { form_id } = bodyData;
 
       if (!form_id) {
         return new Response(JSON.stringify({ error: 'form_id required' }), {
