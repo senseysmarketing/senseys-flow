@@ -398,23 +398,45 @@ serve(async (req) => {
           let adName = '';
           let campaignName = '';
           let campaignId = '';
+          let isInstagram = false;
 
           if (adId) {
             try {
               const adResponse = await fetch(
-                `https://graph.facebook.com/v19.0/${adId}?fields=name,campaign{id,name}&access_token=${tokenData.access_token}`
+                `https://graph.facebook.com/v19.0/${adId}?fields=name,campaign{id,name},effective_instagram_media_id&access_token=${tokenData.access_token}`
               );
               const adData = await adResponse.json();
               if (!adData.error) {
                 adName = adData.name || '';
                 campaignName = adData.campaign?.name || '';
                 campaignId = adData.campaign?.id || '';
-                console.log(`✅ Ad info: name=${adName}, campaign=${campaignName}`);
+                // Detect if lead came from Instagram
+                isInstagram = !!adData.effective_instagram_media_id;
+                console.log(`✅ Ad info: name=${adName}, campaign=${campaignName}, isInstagram=${isInstagram}`);
               } else {
                 console.log('⚠️ Could not fetch ad info:', adData.error);
               }
             } catch (e) {
               console.log('⚠️ Error fetching ad info:', e);
+            }
+          }
+
+          // Get ad set (adgroup) info if available
+          let adsetName = '';
+          if (adgroupId) {
+            try {
+              const adsetResponse = await fetch(
+                `https://graph.facebook.com/v19.0/${adgroupId}?fields=name&access_token=${tokenData.access_token}`
+              );
+              const adsetData = await adsetResponse.json();
+              if (!adsetData.error) {
+                adsetName = adsetData.name || '';
+                console.log(`✅ Ad Set info: name=${adsetName}`);
+              } else {
+                console.log('⚠️ Could not fetch ad set info:', adsetData.error);
+              }
+            } catch (e) {
+              console.log('⚠️ Error fetching ad set info:', e);
             }
           }
 
@@ -470,14 +492,16 @@ serve(async (req) => {
 
           console.log(`Status ID for new lead: ${statusId}`);
 
-          // Create the lead with calculated temperature
+          // Create the lead with calculated temperature and enriched origin data
           const leadInsert = {
             account_id: metaConfig.account_id,
             name,
             phone,
             email: email || null,
-            origem: 'Facebook',
+            origem: isInstagram ? 'Instagram' : 'Facebook',
             campanha: campaignName || null,
+            conjunto: adsetName || null,
+            anuncio: adName || null,
             status_id: statusId,
             property_id: propertyId,
             meta_lead_id: leadgenId,
