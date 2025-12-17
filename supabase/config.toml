@@ -41,3 +41,6 @@ verify_jwt = true
 
 [functions.send-meta-event]
 verify_jwt = true
+
+[functions.sync-meta-forms]
+verify_jwt = true

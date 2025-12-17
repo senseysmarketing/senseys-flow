@@ -1,14 +1,15 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, CheckCircle2, Settings2, Thermometer, Save, RefreshCw, Globe, Facebook } from "lucide-react";
+import { AlertCircle, CheckCircle2, Settings2, Thermometer, Save, RefreshCw, Globe, Facebook, Download, Loader2, CloudDownload } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -39,6 +40,15 @@ interface GroupedRules {
   };
 }
 
+interface AvailableForm {
+  id: string;
+  name: string;
+  status: string;
+  questionsCount: number;
+  createdTime: string;
+  isImported: boolean;
+}
+
 const MetaFormScoringManager = () => {
   const [formConfigs, setFormConfigs] = useState<FormConfig[]>([]);
   const [scoringRules, setScoringRules] = useState<Record<string, ScoringRule[]>>({});
@@ -49,10 +59,32 @@ const MetaFormScoringManager = () => {
   const [editedRules, setEditedRules] = useState<Record<string, number>>({});
   const [updateExistingLeads, setUpdateExistingLeads] = useState<Record<string, boolean>>({});
   const [activeTab, setActiveTab] = useState<string>("all");
+  
+  // Sync states
+  const [availableForms, setAvailableForms] = useState<AvailableForm[]>([]);
+  const [loadingForms, setLoadingForms] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [selectedForms, setSelectedForms] = useState<Set<string>>(new Set());
+  const [showSyncPanel, setShowSyncPanel] = useState(false);
+  const [hasMetaConfig, setHasMetaConfig] = useState<boolean | null>(null);
 
   useEffect(() => {
     fetchData();
+    checkMetaConfig();
   }, []);
+
+  const checkMetaConfig = async () => {
+    try {
+      const { data: config } = await supabase
+        .from("account_meta_config")
+        .select("page_id")
+        .single();
+      
+      setHasMetaConfig(!!config?.page_id);
+    } catch {
+      setHasMetaConfig(false);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -97,6 +129,134 @@ const MetaFormScoringManager = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchAvailableForms = async () => {
+    setLoadingForms(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-meta-forms", {
+        body: { action: "list-forms" },
+      });
+
+      if (error) throw error;
+      
+      if (data?.error) {
+        toast({
+          variant: "destructive",
+          title: "Erro",
+          description: data.message || data.error,
+        });
+        return;
+      }
+
+      setAvailableForms(data?.forms || []);
+      setShowSyncPanel(true);
+    } catch (error: any) {
+      console.error("Erro ao buscar formulários:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Não foi possível buscar formulários do Meta.",
+      });
+    } finally {
+      setLoadingForms(false);
+    }
+  };
+
+  const syncSelectedForms = async () => {
+    if (selectedForms.size === 0) {
+      toast({
+        variant: "destructive",
+        title: "Selecione formulários",
+        description: "Selecione ao menos um formulário para importar.",
+      });
+      return;
+    }
+
+    setSyncing(true);
+    let successCount = 0;
+    let totalRules = 0;
+
+    try {
+      for (const formId of selectedForms) {
+        const { data, error } = await supabase.functions.invoke("sync-meta-forms", {
+          body: { action: "sync-form", form_id: formId },
+        });
+
+        if (!error && data?.success) {
+          successCount++;
+          totalRules += data.rulesCreated || 0;
+        }
+      }
+
+      toast({
+        title: "Formulários importados",
+        description: `${successCount} formulário(s) importado(s) com ${totalRules} regra(s) de qualificação.`,
+      });
+
+      setSelectedForms(new Set());
+      setShowSyncPanel(false);
+      fetchData();
+      fetchAvailableForms();
+    } catch (error) {
+      console.error("Erro ao sincronizar:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Erro ao importar formulários.",
+      });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const syncAllForms = async () => {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-meta-forms", {
+        body: { action: "sync-all" },
+      });
+
+      if (error) throw error;
+
+      if (data?.error) {
+        toast({
+          variant: "destructive",
+          title: "Erro",
+          description: data.message || data.error,
+        });
+        return;
+      }
+
+      toast({
+        title: "Sincronização concluída",
+        description: `${data.formsCount} formulário(s) sincronizado(s) com ${data.rulesCreated} nova(s) regra(s).`,
+      });
+
+      setShowSyncPanel(false);
+      fetchData();
+    } catch (error) {
+      console.error("Erro ao sincronizar todos:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Erro ao sincronizar formulários.",
+      });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const toggleFormSelection = (formId: string) => {
+    setSelectedForms(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(formId)) {
+        newSet.delete(formId);
+      } else {
+        newSet.add(formId);
+      }
+      return newSet;
+    });
   };
 
   // Campos de dados básicos do lead que não devem aparecer na qualificação
@@ -309,20 +469,150 @@ const MetaFormScoringManager = () => {
     );
   }
 
-  if (formConfigs.length === 0) {
+  // Sync Panel Component
+  const renderSyncPanel = () => {
+    if (!showSyncPanel) return null;
+
+    const notImportedForms = availableForms.filter(f => !f.isImported);
+    
     return (
-      <Card>
-        <CardContent className="py-8">
-          <div className="text-center text-muted-foreground">
-            <AlertCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p className="text-lg font-medium mb-2">Nenhum formulário detectado</p>
-            <p className="text-sm">
-              Quando leads chegarem via Meta Lead Ads ou Webhook com <code className="bg-muted px-1 rounded">form_id</code> e <code className="bg-muted px-1 rounded">form_fields</code>, 
-              os formulários serão detectados automaticamente e aparecerão aqui para configuração.
+      <Card className="mb-4 border-primary/30 bg-primary/5">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <CloudDownload className="h-5 w-5 text-primary" />
+            Sincronizar Formulários do Meta
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {loadingForms ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <span className="ml-2 text-sm">Buscando formulários...</span>
+            </div>
+          ) : availableForms.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              Nenhum formulário encontrado na página Meta configurada.
             </p>
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  {availableForms.length} formulário(s) disponível(is), {notImportedForms.length} novo(s)
+                </p>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={syncAllForms}
+                  disabled={syncing || notImportedForms.length === 0}
+                >
+                  {syncing ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-2" />
+                  )}
+                  Sincronizar Todos
+                </Button>
+              </div>
+
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                {availableForms.map(form => (
+                  <div
+                    key={form.id}
+                    className={`flex items-center gap-3 p-3 rounded-lg border ${
+                      form.isImported 
+                        ? 'bg-green-500/5 border-green-500/20' 
+                        : 'bg-background border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <Checkbox
+                      checked={selectedForms.has(form.id) || form.isImported}
+                      disabled={form.isImported || syncing}
+                      onCheckedChange={() => toggleFormSelection(form.id)}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{form.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        ID: {form.id.substring(0, 12)}...
+                      </p>
+                    </div>
+                    {form.isImported ? (
+                      <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20 text-xs">
+                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                        Importado
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-xs">
+                        Novo
+                      </Badge>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {selectedForms.size > 0 && (
+                <div className="flex justify-end pt-2 border-t">
+                  <Button
+                    onClick={syncSelectedForms}
+                    disabled={syncing}
+                    size="sm"
+                  >
+                    {syncing ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4 mr-2" />
+                    )}
+                    Importar {selectedForms.size} Selecionado(s)
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+
+          <div className="flex justify-end pt-2">
+            <Button variant="ghost" size="sm" onClick={() => setShowSyncPanel(false)}>
+              Fechar
+            </Button>
           </div>
         </CardContent>
       </Card>
+    );
+  };
+
+  if (formConfigs.length === 0) {
+    return (
+      <div className="space-y-4">
+        {hasMetaConfig && renderSyncPanel()}
+        
+        <Card>
+          <CardContent className="py-8">
+            <div className="text-center text-muted-foreground">
+              <AlertCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p className="text-lg font-medium mb-2">Nenhum formulário detectado</p>
+              <p className="text-sm mb-6">
+                Quando leads chegarem via Meta Lead Ads ou Webhook com <code className="bg-muted px-1 rounded">form_id</code> e <code className="bg-muted px-1 rounded">form_fields</code>, 
+                os formulários serão detectados automaticamente e aparecerão aqui para configuração.
+              </p>
+              
+              {hasMetaConfig && !showSyncPanel && (
+                <Button onClick={fetchAvailableForms} disabled={loadingForms}>
+                  {loadingForms ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <CloudDownload className="h-4 w-4 mr-2" />
+                  )}
+                  Buscar Formulários do Meta
+                </Button>
+              )}
+              
+              {hasMetaConfig === false && (
+                <p className="text-xs text-muted-foreground mt-4">
+                  💡 Configure uma página Meta na aba "Integração" para importar formulários automaticamente.
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
@@ -592,8 +882,10 @@ const MetaFormScoringManager = () => {
 
   return (
     <div className="space-y-4">
+      {hasMetaConfig && renderSyncPanel()}
+      
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <TabsList>
             <TabsTrigger value="all">
               Todos ({formConfigs.length})
@@ -607,10 +899,22 @@ const MetaFormScoringManager = () => {
               Webhook ({webhookCount})
             </TabsTrigger>
           </TabsList>
-          <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Atualizar
-          </Button>
+          <div className="flex items-center gap-2">
+            {hasMetaConfig && !showSyncPanel && (
+              <Button variant="outline" size="sm" onClick={fetchAvailableForms} disabled={loadingForms}>
+                {loadingForms ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <CloudDownload className="h-4 w-4 mr-2" />
+                )}
+                Sincronizar Meta
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Atualizar
+            </Button>
+          </div>
         </div>
 
         <TabsContent value={activeTab} className="mt-4">
