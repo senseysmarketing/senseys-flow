@@ -84,7 +84,7 @@ async function calculateLeadTemperature(
       } else if (newConfig) {
         // Campos de dados básicos do lead que não devem ser criados como regras de scoring
         // Excluir apenas dados básicos do lead (NÃO excluir ref - ele precisa ser detectado para vinculação de imóveis)
-        const excludedFields = ['full_name', 'full name', 'fullname', 'nome', 'name', 'nome_completo', 'nome completo', 'email', 'e-mail', 'phone_number', 'telefone', 'phone', 'celular', 'whatsapp'];
+        const excludedFields = ['full_name', 'full name', 'fullname', 'first_name', 'first name', 'nome', 'name', 'nome_completo', 'nome completo', 'email', 'e-mail', 'phone_number', 'telefone', 'phone', 'celular', 'whatsapp'];
         
         // Auto-create scoring rules for each field (exceto dados básicos)
         let rulesCreated = 0;
@@ -138,7 +138,7 @@ async function calculateLeadTemperature(
 
     // Campos de dados básicos do lead que não devem ser criados como regras de scoring
     // Excluir apenas dados básicos do lead (NÃO excluir ref - ele precisa ser detectado para vinculação de imóveis)
-    const excludedFields = ['full_name', 'full name', 'fullname', 'nome', 'name', 'nome_completo', 'nome completo', 'email', 'e-mail', 'phone_number', 'telefone', 'phone', 'celular', 'whatsapp'];
+    const excludedFields = ['full_name', 'full name', 'fullname', 'first_name', 'first name', 'nome', 'name', 'nome_completo', 'nome completo', 'email', 'e-mail', 'phone_number', 'telefone', 'phone', 'celular', 'whatsapp'];
 
     // Auto-register new answers that aren't in rules yet (exceto dados básicos)
     for (const [fieldName, fieldValue] of Object.entries(fieldData)) {
@@ -374,6 +374,8 @@ serve(async (req) => {
           const name = fieldData['full_name'] || 
                        fieldData['full name'] || 
                        fieldData['fullname'] || 
+                       fieldData['first_name'] || 
+                       fieldData['first name'] || 
                        fieldData['nome'] || 
                        fieldData['name'] || 
                        fieldData['nome_completo'] || 
