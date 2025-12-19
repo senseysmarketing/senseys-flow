@@ -26,6 +26,12 @@ interface LeadStats {
   warmLeads: number;
   coldLeads: number;
   closedLeads: number;
+  // Dados filtrados pelo período selecionado
+  periodTotal: number;
+  periodHotLeads: number;
+  periodWarmLeads: number;
+  periodColdLeads: number;
+  periodClosedLeads: number;
   byStatus: { name: string; count: number; color: string }[];
   bySource: { name: string; count: number }[];
   byInterest: { name: string; count: number }[];
@@ -65,6 +71,11 @@ const ReportsPage = () => {
     warmLeads: 0,
     coldLeads: 0,
     closedLeads: 0,
+    periodTotal: 0,
+    periodHotLeads: 0,
+    periodWarmLeads: 0,
+    periodColdLeads: 0,
+    periodClosedLeads: 0,
     byStatus: [],
     bySource: [],
     byInterest: [],
@@ -201,20 +212,48 @@ const ReportsPage = () => {
   const fetchLeadStats = async () => {
     const { from: dateFrom, to: dateTo } = getDateRange();
     const startDate = parseISO(dateFrom);
-    const now = parseISO(dateTo);
+    const endDate = parseISO(dateTo);
+    const now = new Date();
     const startOfThisMonth = startOfMonth(now);
     const endOfThisMonth = endOfMonth(now);
     const startOfLastMonth = startOfMonth(subDays(startOfThisMonth, 1));
     const endOfLastMonth = endOfMonth(subDays(startOfThisMonth, 1));
 
-    // Total de leads
+    // Buscar status "Fechado" para contagem de conversões
+    const { data: closedStatus } = await supabase
+      .from("lead_status")
+      .select("id")
+      .eq("name", "Fechado")
+      .maybeSingle();
+    
+    const closedStatusId = closedStatus?.id;
+
+    // Total de leads (geral)
     const { data: totalLeads, error: totalError } = await supabase
       .from("leads")
-      .select("id, temperature, meta_campaign_name", { count: "exact" });
+      .select("id, temperature, meta_campaign_name, status_id", { count: "exact" });
 
     if (totalError) throw totalError;
 
-    // Contar por temperatura
+    // Leads do período selecionado
+    const { data: periodLeads, error: periodError } = await supabase
+      .from("leads")
+      .select("id, temperature, status_id")
+      .gte("created_at", startDate.toISOString())
+      .lte("created_at", endDate.toISOString());
+
+    if (periodError) throw periodError;
+
+    // Contagens do período
+    const periodTotal = periodLeads?.length || 0;
+    const periodHotLeads = periodLeads?.filter(l => l.temperature === 'hot').length || 0;
+    const periodWarmLeads = periodLeads?.filter(l => l.temperature === 'warm').length || 0;
+    const periodColdLeads = periodLeads?.filter(l => l.temperature === 'cold').length || 0;
+    const periodClosedLeads = closedStatusId 
+      ? periodLeads?.filter(l => l.status_id === closedStatusId).length || 0 
+      : 0;
+
+    // Contagens gerais por temperatura
     const hotLeads = totalLeads?.filter(l => l.temperature === 'hot').length || 0;
     const warmLeads = totalLeads?.filter(l => l.temperature === 'warm').length || 0;
     const coldLeads = totalLeads?.filter(l => l.temperature === 'cold').length || 0;
@@ -237,13 +276,15 @@ const ReportsPage = () => {
 
     if (lastMonthError) throw lastMonthError;
 
-    // Leads por status
+    // Leads por status (período)
     const { data: leadsByStatus, error: statusError } = await supabase
       .from("leads")
       .select(`
         status_id,
         lead_status!inner(name, color)
-      `);
+      `)
+      .gte("created_at", startDate.toISOString())
+      .lte("created_at", endDate.toISOString());
 
     if (statusError) throw statusError;
 
@@ -263,10 +304,12 @@ const ReportsPage = () => {
 
     const closedLeads = statusCounts.find(s => s.name === 'Fechado')?.count || 0;
 
-    // Leads por origem
+    // Leads por origem (período)
     const { data: leadsBySource, error: sourceError } = await supabase
       .from("leads")
-      .select("origem");
+      .select("origem")
+      .gte("created_at", startDate.toISOString())
+      .lte("created_at", endDate.toISOString());
 
     if (sourceError) throw sourceError;
 
@@ -283,10 +326,12 @@ const ReportsPage = () => {
       return acc;
     }, [] as { name: string; count: number }[]) || [];
 
-    // Leads por interesse
+    // Leads por interesse (período)
     const { data: leadsByInterest, error: interestError } = await supabase
       .from("leads")
-      .select("interesse");
+      .select("interesse")
+      .gte("created_at", startDate.toISOString())
+      .lte("created_at", endDate.toISOString());
 
     if (interestError) throw interestError;
 
@@ -303,8 +348,16 @@ const ReportsPage = () => {
       return acc;
     }, [] as { name: string; count: number }[]) || [];
 
-    // Leads por campanha Meta
-    const campaignCounts = totalLeads?.reduce((acc, lead) => {
+    // Leads por campanha Meta (período)
+    const { data: leadsByCampaign, error: campaignError } = await supabase
+      .from("leads")
+      .select("meta_campaign_name")
+      .gte("created_at", startDate.toISOString())
+      .lte("created_at", endDate.toISOString());
+
+    if (campaignError) throw campaignError;
+
+    const campaignCounts = leadsByCampaign?.reduce((acc, lead) => {
       if (!lead.meta_campaign_name) return acc;
       const existing = acc.find(item => item.name === lead.meta_campaign_name);
       if (existing) {
@@ -315,23 +368,24 @@ const ReportsPage = () => {
       return acc;
     }, [] as { name: string; count: number }[]) || [];
 
-    // Temperatura data
+    // Temperatura data (período)
     const temperatureData = [
-      { name: 'Quentes', count: hotLeads, color: TEMPERATURE_COLORS.hot },
-      { name: 'Mornos', count: warmLeads, color: TEMPERATURE_COLORS.warm },
-      { name: 'Frios', count: coldLeads, color: TEMPERATURE_COLORS.cold },
+      { name: 'Quentes', count: periodHotLeads, color: TEMPERATURE_COLORS.hot },
+      { name: 'Mornos', count: periodWarmLeads, color: TEMPERATURE_COLORS.warm },
+      { name: 'Frios', count: periodColdLeads, color: TEMPERATURE_COLORS.cold },
     ].filter(d => d.count > 0);
 
     // Leads criados por dia
     const daysInterval = eachDayOfInterval({
       start: startDate,
-      end: now
+      end: endDate
     });
 
     const { data: dailyLeads, error: dailyError } = await supabase
       .from("leads")
       .select("created_at")
-      .gte("created_at", startDate.toISOString());
+      .gte("created_at", startDate.toISOString())
+      .lte("created_at", endDate.toISOString());
 
     if (dailyError) throw dailyError;
 
@@ -355,6 +409,11 @@ const ReportsPage = () => {
       warmLeads,
       coldLeads,
       closedLeads,
+      periodTotal,
+      periodHotLeads,
+      periodWarmLeads,
+      periodColdLeads,
+      periodClosedLeads,
       byStatus: statusCounts,
       bySource: sourceCounts,
       byInterest: interestCounts,
@@ -528,12 +587,13 @@ const ReportsPage = () => {
     ? ((leadStats.thisMonth - leadStats.lastMonth) / leadStats.lastMonth * 100)
     : leadStats.thisMonth > 0 ? 100 : 0;
 
-  const conversionRate = leadStats.total > 0 
-    ? (leadStats.closedLeads / leadStats.total * 100)
+  // Usar dados do período selecionado para métricas consistentes
+  const conversionRate = leadStats.periodTotal > 0 
+    ? (leadStats.periodClosedLeads / leadStats.periodTotal * 100)
     : 0;
 
-  const totalInvestment = adStats.totalSpend + propertyStats.reduce((acc, p) => acc + p.campaignCost, 0);
-  const avgCPL = leadStats.total > 0 ? totalInvestment / leadStats.total : 0;
+  const totalInvestment = adStats.totalSpend;
+  const avgCPL = leadStats.periodTotal > 0 ? totalInvestment / leadStats.periodTotal : 0;
 
   if (loading) {
     return (
@@ -626,29 +686,21 @@ const ReportsPage = () => {
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(totalInvestment)}</div>
             <p className="text-xs text-muted-foreground">
-              Meta Ads + Campanhas
+              Meta Ads no período
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Leads</CardTitle>
+            <CardTitle className="text-sm font-medium">Leads no Período</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{leadStats.total}</div>
-            <div className="flex items-center gap-1 text-xs">
-              {growthRate >= 0 ? (
-                <TrendingUp className="h-3 w-3 text-green-600" />
-              ) : (
-                <TrendingDown className="h-3 w-3 text-red-600" />
-              )}
-              <span className={growthRate >= 0 ? 'text-green-600' : 'text-red-600'}>
-                {growthRate >= 0 ? '+' : ''}{growthRate.toFixed(1)}%
-              </span>
-              <span className="text-muted-foreground">vs mês anterior</span>
-            </div>
+            <div className="text-2xl font-bold">{leadStats.periodTotal}</div>
+            <p className="text-xs text-muted-foreground">
+              {leadStats.total} leads no total
+            </p>
           </CardContent>
         </Card>
 
@@ -658,9 +710,9 @@ const ReportsPage = () => {
             <Flame className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{leadStats.hotLeads}</div>
+            <div className="text-2xl font-bold">{leadStats.periodHotLeads}</div>
             <p className="text-xs text-muted-foreground">
-              {leadStats.total > 0 ? ((leadStats.hotLeads / leadStats.total) * 100).toFixed(1) : 0}% do total
+              {leadStats.periodTotal > 0 ? ((leadStats.periodHotLeads / leadStats.periodTotal) * 100).toFixed(1) : 0}% do período
             </p>
           </CardContent>
         </Card>
@@ -673,7 +725,7 @@ const ReportsPage = () => {
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(avgCPL)}</div>
             <p className="text-xs text-muted-foreground">
-              custo por lead
+              custo por lead no período
             </p>
           </CardContent>
         </Card>
@@ -686,7 +738,7 @@ const ReportsPage = () => {
           <CardContent>
             <div className="text-2xl font-bold">{conversionRate.toFixed(1)}%</div>
             <p className="text-xs text-muted-foreground">
-              {leadStats.closedLeads} leads fechados
+              {leadStats.periodClosedLeads} fechados no período
             </p>
           </CardContent>
         </Card>
