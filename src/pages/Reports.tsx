@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from "recharts";
-import { TrendingUp, TrendingDown, Users, Calendar, Target, DollarSign, Flame, Trophy, Building2, Megaphone, Thermometer, Snowflake } from "lucide-react";
+import { TrendingUp, TrendingDown, Users, Calendar, Target, DollarSign, Flame, Trophy, Building2, Megaphone, Thermometer, Snowflake, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
@@ -108,19 +108,53 @@ const ReportsPage = () => {
   const [customDateTo, setCustomDateTo] = useState("");
   const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
 
+  const [syncing, setSyncing] = useState(false);
+  const [hasSyncedOnMount, setHasSyncedOnMount] = useState(false);
+
   // Calculate date range based on period or custom dates
+  // IMPORTANTE: Exclui o dia atual - "últimos 7 dias" significa de ontem até 7 dias atrás
   const getDateRange = () => {
     if (period === "custom" && customDateFrom && customDateTo) {
       return { from: customDateFrom, to: customDateTo };
     }
-    const now = new Date();
+    const yesterday = subDays(new Date(), 1); // Começa de ontem, não inclui hoje
     const days = period === "custom" ? 30 : parseInt(period);
-    const from = format(subDays(now, days), "yyyy-MM-dd");
-    const to = format(now, "yyyy-MM-dd");
+    const from = format(subDays(yesterday, days - 1), "yyyy-MM-dd"); // 7 dias = ontem até 6 dias antes
+    const to = format(yesterday, "yyyy-MM-dd"); // Termina em ontem
     return { from, to };
   };
 
-  const handlePeriodChange = (value: string) => {
+  // Função para sincronizar dados do Meta Ads
+  const syncMetaData = async () => {
+    const { from: dateFrom, to: dateTo } = getDateRange();
+    setSyncing(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(
+        `https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/meta-insights?action=sync&date_from=${dateFrom}&date_to=${dateTo}`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      const data = await response.json();
+      if (!data.error) {
+        console.log(`Sincronizado: ${data.synced} dias de dados`);
+      }
+    } catch (error) {
+      console.error("Erro ao sincronizar Meta:", error);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handlePeriodChange = async (value: string) => {
     if (value === "custom") {
       setShowCustomDatePicker(true);
     } else {
@@ -174,17 +208,25 @@ const ReportsPage = () => {
     setFetchTrigger(prev => prev + 1);
   };
 
-  // Fetch when user, period changes (non-custom), or explicit trigger
+  // Auto-sincronizar ao entrar na página (apenas uma vez)
   useEffect(() => {
-    if (user && period !== "custom") {
-      fetchStats();
+    if (user && !hasSyncedOnMount) {
+      setHasSyncedOnMount(true);
+      syncMetaData().then(() => fetchStats());
     }
-  }, [user, period]);
+  }, [user, hasSyncedOnMount]);
 
-  // Fetch for custom period only on explicit trigger
+  // Fetch e sync quando período muda (non-custom)
+  useEffect(() => {
+    if (user && period !== "custom" && hasSyncedOnMount) {
+      syncMetaData().then(() => fetchStats());
+    }
+  }, [period]);
+
+  // Fetch e sync para período customizado
   useEffect(() => {
     if (user && period === "custom" && customDateFrom && customDateTo && fetchTrigger > 0) {
-      fetchStats();
+      syncMetaData().then(() => fetchStats());
     }
   }, [fetchTrigger]);
 
@@ -615,7 +657,15 @@ const ReportsPage = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Relatórios</h1>
-          <p className="text-muted-foreground">Análise completa de performance e métricas</p>
+          <p className="text-muted-foreground flex items-center gap-2">
+            Análise completa de performance e métricas
+            {syncing && (
+              <span className="flex items-center gap-1 text-xs text-primary">
+                <RefreshCw className="h-3 w-3 animate-spin" />
+                Sincronizando...
+              </span>
+            )}
+          </p>
         </div>
         
         <div className="flex items-center gap-2">
