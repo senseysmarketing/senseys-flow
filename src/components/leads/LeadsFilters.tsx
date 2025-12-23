@@ -152,7 +152,7 @@ const LeadsFilters = ({
           )}
         </Button>
       </SheetTrigger>
-      <SheetContent className="w-[400px] sm:w-[540px]">
+      <SheetContent className="w-full sm:max-w-[580px] flex flex-col">
         <SheetHeader>
           <SheetTitle className="flex items-center justify-between">
             Filtros Avançados
@@ -165,7 +165,7 @@ const LeadsFilters = ({
           </SheetTitle>
         </SheetHeader>
 
-        <ScrollArea className="h-[calc(100vh-180px)] mt-6 pr-4">
+        <ScrollArea className="flex-1 mt-6 pr-4">
           <div className="space-y-6">
             {/* Status */}
             <div className="space-y-3">
@@ -173,7 +173,7 @@ const LeadsFilters = ({
                 <div className="w-3 h-3 rounded-full bg-primary" />
                 Status
               </Label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {statuses.map((status) => (
                   <div
                     key={status.id}
@@ -184,9 +184,9 @@ const LeadsFilters = ({
                     }`}
                     onClick={() => handleStatusToggle(status.id)}
                   >
-                    <Checkbox checked={localFilters.statuses.includes(status.id)} />
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: status.color }} />
-                    <span className="text-sm">{status.name}</span>
+                    <Checkbox checked={localFilters.statuses.includes(status.id)} className="shrink-0" />
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: status.color }} />
+                    <span className="text-sm truncate" title={status.name}>{status.name}</span>
                   </div>
                 ))}
               </div>
@@ -200,7 +200,7 @@ const LeadsFilters = ({
                 <Thermometer className="h-4 w-4" />
                 Temperatura
               </Label>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {[
                   { value: "hot", label: "Quente", icon: Flame, color: "text-red-500" },
                   { value: "warm", label: "Morno", icon: Thermometer, color: "text-yellow-500" },
@@ -208,16 +208,16 @@ const LeadsFilters = ({
                 ].map((temp) => (
                   <div
                     key={temp.value}
-                    className={`flex items-center gap-2 p-2 px-3 rounded-lg border cursor-pointer transition-colors flex-1 ${
+                    className={`flex items-center gap-2 p-2 px-3 rounded-lg border cursor-pointer transition-colors ${
                       localFilters.temperatures.includes(temp.value)
                         ? "bg-primary/10 border-primary"
                         : "hover:bg-muted"
                     }`}
                     onClick={() => handleTemperatureToggle(temp.value)}
                   >
-                    <Checkbox checked={localFilters.temperatures.includes(temp.value)} />
-                    <temp.icon className={`h-4 w-4 ${temp.color}`} />
-                    <span className="text-sm">{temp.label}</span>
+                    <Checkbox checked={localFilters.temperatures.includes(temp.value)} className="shrink-0" />
+                    <temp.icon className={`h-4 w-4 shrink-0 ${temp.color}`} />
+                    <span className="text-sm whitespace-nowrap">{temp.label}</span>
                   </div>
                 ))}
               </div>
@@ -260,10 +260,11 @@ const LeadsFilters = ({
                       <Badge
                         key={campaign}
                         variant={localFilters.campaigns.includes(campaign) ? "default" : "outline"}
-                        className="cursor-pointer"
+                        className="cursor-pointer max-w-full"
+                        title={campaign}
                         onClick={() => handleCampaignToggle(campaign)}
                       >
-                        {campaign}
+                        <span className="truncate">{campaign}</span>
                       </Badge>
                     ))}
                   </div>
@@ -285,10 +286,11 @@ const LeadsFilters = ({
                       <Badge
                         key={ad}
                         variant={localFilters.ads.includes(ad) ? "default" : "outline"}
-                        className="cursor-pointer"
+                        className="cursor-pointer max-w-full"
+                        title={ad}
                         onClick={() => handleAdToggle(ad)}
                       >
-                        {ad}
+                        <span className="truncate">{ad}</span>
                       </Badge>
                     ))}
                   </div>
@@ -426,7 +428,7 @@ const LeadsFilters = ({
           </div>
         </ScrollArea>
 
-        <div className="flex gap-2 pt-4 border-t mt-4">
+        <div className="flex gap-2 pt-4 pb-2 border-t mt-4 bg-background shrink-0">
           <Button variant="outline" className="flex-1" onClick={() => setOpen(false)}>
             Cancelar
           </Button>
