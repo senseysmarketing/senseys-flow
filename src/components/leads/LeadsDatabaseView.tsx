@@ -24,6 +24,8 @@ interface Lead {
   campanha?: string;
   conjunto?: string;
   anuncio?: string;
+  meta_campaign_name?: string | null;
+  meta_ad_name?: string | null;
   created_at: string;
   updated_at: string;
   status_id?: string;
@@ -96,18 +98,41 @@ const LeadsDatabaseView = ({
     statuses: [] as string[],
     temperatures: [] as string[],
     origins: [] as string[],
+    campaigns: [] as string[],
+    ads: [] as string[],
+    interests: [] as string[],
     brokerId: null as string | null,
     propertyId: null as string | null,
     startDate: "",
     endDate: "",
     noBroker: false,
+    noProperty: false,
     noActivity: null as number | null,
   });
 
-  // Get unique origins from leads
+  // Get unique values from leads
   const uniqueOrigins = useMemo(() => {
     const origins = leads.map((l) => l.origem).filter(Boolean) as string[];
     return [...new Set(origins)];
+  }, [leads]);
+
+  const uniqueCampaigns = useMemo(() => {
+    const campaigns = leads
+      .map((l) => l.meta_campaign_name || l.campanha)
+      .filter(Boolean) as string[];
+    return [...new Set(campaigns)];
+  }, [leads]);
+
+  const uniqueAds = useMemo(() => {
+    const ads = leads
+      .map((l) => l.meta_ad_name || l.anuncio)
+      .filter(Boolean) as string[];
+    return [...new Set(ads)];
+  }, [leads]);
+
+  const uniqueInterests = useMemo(() => {
+    const interests = leads.map((l) => l.interesse).filter(Boolean) as string[];
+    return [...new Set(interests)];
   }, [leads]);
 
   // Apply filters
@@ -148,6 +173,26 @@ const LeadsDatabaseView = ({
 
       // Property filter
       if (filters.propertyId && lead.property_id !== filters.propertyId) return false;
+
+      // No property filter
+      if (filters.noProperty && lead.property_id) return false;
+
+      // Campaign filter
+      if (filters.campaigns.length > 0) {
+        const leadCampaign = lead.meta_campaign_name || lead.campanha;
+        if (!leadCampaign || !filters.campaigns.includes(leadCampaign)) return false;
+      }
+
+      // Ad filter
+      if (filters.ads.length > 0) {
+        const leadAd = lead.meta_ad_name || lead.anuncio;
+        if (!leadAd || !filters.ads.includes(leadAd)) return false;
+      }
+
+      // Interest filter
+      if (filters.interests.length > 0) {
+        if (!lead.interesse || !filters.interests.includes(lead.interesse)) return false;
+      }
 
       // Date range filter
       if (filters.startDate || filters.endDate) {
@@ -303,6 +348,9 @@ const LeadsDatabaseView = ({
               filters={filters}
               onFiltersChange={setFilters}
               uniqueOrigins={uniqueOrigins}
+              uniqueCampaigns={uniqueCampaigns}
+              uniqueAds={uniqueAds}
+              uniqueInterests={uniqueInterests}
             />
             <LeadsColumnSelector columns={columns} onColumnsChange={setColumns} />
           </div>

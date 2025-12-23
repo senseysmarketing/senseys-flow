@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Filter, X, Flame, Thermometer, Snowflake, Users, Building2, Calendar } from "lucide-react";
+import { Filter, X, Flame, Thermometer, Snowflake, Users, Building2, Calendar, Megaphone, Target, Heart } from "lucide-react";
 import BrokerSelect from "@/components/BrokerSelect";
 import PropertySelect from "@/components/PropertySelect";
 
@@ -23,18 +23,33 @@ interface LeadsFiltersProps {
     statuses: string[];
     temperatures: string[];
     origins: string[];
+    campaigns: string[];
+    ads: string[];
+    interests: string[];
     brokerId: string | null;
     propertyId: string | null;
     startDate: string;
     endDate: string;
     noBroker: boolean;
+    noProperty: boolean;
     noActivity: number | null;
   };
   onFiltersChange: (filters: LeadsFiltersProps["filters"]) => void;
   uniqueOrigins: string[];
+  uniqueCampaigns: string[];
+  uniqueAds: string[];
+  uniqueInterests: string[];
 }
 
-const LeadsFilters = ({ statuses, filters, onFiltersChange, uniqueOrigins }: LeadsFiltersProps) => {
+const LeadsFilters = ({ 
+  statuses, 
+  filters, 
+  onFiltersChange, 
+  uniqueOrigins,
+  uniqueCampaigns,
+  uniqueAds,
+  uniqueInterests,
+}: LeadsFiltersProps) => {
   const [open, setOpen] = useState(false);
   const [localFilters, setLocalFilters] = useState(filters);
 
@@ -46,11 +61,15 @@ const LeadsFilters = ({ statuses, filters, onFiltersChange, uniqueOrigins }: Lea
     filters.statuses.length +
     filters.temperatures.length +
     filters.origins.length +
+    filters.campaigns.length +
+    filters.ads.length +
+    filters.interests.length +
     (filters.brokerId ? 1 : 0) +
     (filters.propertyId ? 1 : 0) +
     (filters.startDate ? 1 : 0) +
     (filters.endDate ? 1 : 0) +
     (filters.noBroker ? 1 : 0) +
+    (filters.noProperty ? 1 : 0) +
     (filters.noActivity ? 1 : 0);
 
   const handleStatusToggle = (statusId: string) => {
@@ -74,6 +93,27 @@ const LeadsFilters = ({ statuses, filters, onFiltersChange, uniqueOrigins }: Lea
     setLocalFilters({ ...localFilters, origins: updated });
   };
 
+  const handleCampaignToggle = (campaign: string) => {
+    const updated = localFilters.campaigns.includes(campaign)
+      ? localFilters.campaigns.filter((c) => c !== campaign)
+      : [...localFilters.campaigns, campaign];
+    setLocalFilters({ ...localFilters, campaigns: updated });
+  };
+
+  const handleAdToggle = (ad: string) => {
+    const updated = localFilters.ads.includes(ad)
+      ? localFilters.ads.filter((a) => a !== ad)
+      : [...localFilters.ads, ad];
+    setLocalFilters({ ...localFilters, ads: updated });
+  };
+
+  const handleInterestToggle = (interest: string) => {
+    const updated = localFilters.interests.includes(interest)
+      ? localFilters.interests.filter((i) => i !== interest)
+      : [...localFilters.interests, interest];
+    setLocalFilters({ ...localFilters, interests: updated });
+  };
+
   const handleApply = () => {
     onFiltersChange(localFilters);
     setOpen(false);
@@ -84,11 +124,15 @@ const LeadsFilters = ({ statuses, filters, onFiltersChange, uniqueOrigins }: Lea
       statuses: [],
       temperatures: [],
       origins: [],
+      campaigns: [],
+      ads: [],
+      interests: [],
       brokerId: null,
       propertyId: null,
       startDate: "",
       endDate: "",
       noBroker: false,
+      noProperty: false,
       noActivity: null,
     };
     setLocalFilters(cleared);
@@ -203,6 +247,81 @@ const LeadsFilters = ({ statuses, filters, onFiltersChange, uniqueOrigins }: Lea
               </>
             )}
 
+            {/* Campanha */}
+            {uniqueCampaigns.length > 0 && (
+              <>
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium flex items-center gap-2">
+                    <Megaphone className="h-4 w-4" />
+                    Campanha
+                  </Label>
+                  <div className="flex flex-wrap gap-2">
+                    {uniqueCampaigns.map((campaign) => (
+                      <Badge
+                        key={campaign}
+                        variant={localFilters.campaigns.includes(campaign) ? "default" : "outline"}
+                        className="cursor-pointer"
+                        onClick={() => handleCampaignToggle(campaign)}
+                      >
+                        {campaign}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <Separator />
+              </>
+            )}
+
+            {/* Anúncio */}
+            {uniqueAds.length > 0 && (
+              <>
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium flex items-center gap-2">
+                    <Target className="h-4 w-4" />
+                    Anúncio
+                  </Label>
+                  <div className="flex flex-wrap gap-2">
+                    {uniqueAds.map((ad) => (
+                      <Badge
+                        key={ad}
+                        variant={localFilters.ads.includes(ad) ? "default" : "outline"}
+                        className="cursor-pointer"
+                        onClick={() => handleAdToggle(ad)}
+                      >
+                        {ad}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <Separator />
+              </>
+            )}
+
+            {/* Interesse */}
+            {uniqueInterests.length > 0 && (
+              <>
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium flex items-center gap-2">
+                    <Heart className="h-4 w-4" />
+                    Interesse
+                  </Label>
+                  <div className="flex flex-wrap gap-2">
+                    {uniqueInterests.map((interest) => (
+                      <Badge
+                        key={interest}
+                        variant={localFilters.interests.includes(interest) ? "default" : "outline"}
+                        className="cursor-pointer"
+                        onClick={() => handleInterestToggle(interest)}
+                      >
+                        {interest}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <Separator />
+              </>
+            )}
+
             {/* Corretor */}
             <div className="space-y-3">
               <Label className="text-sm font-medium flex items-center gap-2">
@@ -238,6 +357,15 @@ const LeadsFilters = ({ statuses, filters, onFiltersChange, uniqueOrigins }: Lea
                 onValueChange={(value) => setLocalFilters({ ...localFilters, propertyId: value })}
                 placeholder="Todos os imóveis"
               />
+              <div
+                className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
+                  localFilters.noProperty ? "bg-primary/10 border-primary" : "hover:bg-muted"
+                }`}
+                onClick={() => setLocalFilters({ ...localFilters, noProperty: !localFilters.noProperty })}
+              >
+                <Checkbox checked={localFilters.noProperty} />
+                <span className="text-sm">Apenas leads sem imóvel associado</span>
+              </div>
             </div>
 
             <Separator />
