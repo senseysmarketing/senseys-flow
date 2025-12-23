@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,12 +10,12 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { 
   Plus, 
   Search, 
-  Filter, 
+   
   MoreVertical,
   Phone,
   Mail,
@@ -45,6 +45,7 @@ import LeadDetailModal from "@/components/LeadDetailModal";
 import BrokerSelect from "@/components/BrokerSelect";
 import PropertySelect from "@/components/PropertySelect";
 import LeadsDatabaseView from "@/components/leads/LeadsDatabaseView";
+import LeadsFilters from "@/components/leads/LeadsFilters";
 
 interface Lead {
   id: string;
@@ -91,10 +92,19 @@ const Leads = () => {
   const [viewMode, setViewMode] = useState<'kanban' | 'database'>('kanban');
   const [searchTerm, setSearchTerm] = useState("");
   const [filters, setFilters] = useState({
-    status: "",
-    origem: "",
+    statuses: [] as string[],
+    temperatures: [] as string[],
+    origins: [] as string[],
+    campaigns: [] as string[],
+    ads: [] as string[],
+    interests: [] as string[],
+    brokerId: null as string | null,
+    propertyId: null as string | null,
     startDate: "",
-    endDate: ""
+    endDate: "",
+    noBroker: false,
+    noProperty: false,
+    noActivity: null as number | null,
   });
   const [hiddenColumns, setHiddenColumns] = useState<string[]>(() => {
     const saved = localStorage.getItem('kanban-hidden-columns');
@@ -549,6 +559,35 @@ const Leads = () => {
   };
 
 
+  // Extract unique values for filters
+  const uniqueOrigins = useMemo(() => {
+    const origins = leads
+      .map(lead => lead.origem)
+      .filter((origin): origin is string => !!origin);
+    return [...new Set(origins)];
+  }, [leads]);
+
+  const uniqueCampaigns = useMemo(() => {
+    const campaigns = leads
+      .map(lead => (lead as any).meta_campaign_name || lead.campanha)
+      .filter((c): c is string => !!c);
+    return [...new Set(campaigns)];
+  }, [leads]);
+
+  const uniqueAds = useMemo(() => {
+    const ads = leads
+      .map(lead => (lead as any).meta_ad_name || lead.anuncio)
+      .filter((a): a is string => !!a);
+    return [...new Set(ads)];
+  }, [leads]);
+
+  const uniqueInterests = useMemo(() => {
+    const interests = leads
+      .map(lead => lead.interesse)
+      .filter((i): i is string => !!i);
+    return [...new Set(interests)];
+  }, [leads]);
+
   const filteredLeads = leads.filter(lead => {
     // Filtro de busca por texto
     const matchesSearch = searchTerm === "" || 
@@ -556,12 +595,39 @@ const Leads = () => {
       lead.phone.includes(searchTerm) ||
       (lead.email && lead.email.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    // Filtro por status
-    const matchesStatus = filters.status === "" || lead.status_id === filters.status;
+    // Filtro por status (array)
+    const matchesStatus = filters.statuses.length === 0 || 
+      (lead.status_id && filters.statuses.includes(lead.status_id));
+
+    // Filtro por temperatura
+    const matchesTemperature = filters.temperatures.length === 0 ||
+      (lead.temperature && filters.temperatures.includes(lead.temperature));
 
     // Filtro por origem
-    const matchesOrigem = filters.origem === "" || 
-      (lead.origem && lead.origem.toLowerCase().includes(filters.origem.toLowerCase()));
+    const matchesOrigem = filters.origins.length === 0 || 
+      (lead.origem && filters.origins.includes(lead.origem));
+
+    // Filtro por campanha
+    const leadCampaign = (lead as any).meta_campaign_name || lead.campanha;
+    const matchesCampaign = filters.campaigns.length === 0 ||
+      (leadCampaign && filters.campaigns.includes(leadCampaign));
+
+    // Filtro por anúncio
+    const leadAd = (lead as any).meta_ad_name || lead.anuncio;
+    const matchesAd = filters.ads.length === 0 ||
+      (leadAd && filters.ads.includes(leadAd));
+
+    // Filtro por interesse
+    const matchesInterest = filters.interests.length === 0 ||
+      (lead.interesse && filters.interests.includes(lead.interesse));
+
+    // Filtro por corretor
+    const matchesBroker = !filters.brokerId || lead.assigned_broker_id === filters.brokerId;
+    const matchesNoBroker = !filters.noBroker || !lead.assigned_broker_id;
+
+    // Filtro por imóvel
+    const matchesProperty = !filters.propertyId || lead.property_id === filters.propertyId;
+    const matchesNoProperty = !filters.noProperty || !lead.property_id;
 
     // Filtro por período
     let matchesDateRange = true;
@@ -573,9 +639,18 @@ const Leads = () => {
       }
       if (filters.endDate) {
         const endDate = new Date(filters.endDate);
-        endDate.setHours(23, 59, 59, 999); // Incluir todo o dia final
+        endDate.setHours(23, 59, 59, 999);
         matchesDateRange = matchesDateRange && leadDate <= endDate;
       }
+    }
+
+    // Filtro por inatividade
+    let matchesInactivity = true;
+    if (filters.noActivity) {
+      const lastActivityDate = new Date(lead.updated_at);
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - filters.noActivity);
+      matchesInactivity = lastActivityDate < cutoffDate;
     }
 
     // Auto-ocultar leads "Perdido" após 5 dias (apenas no Kanban)
@@ -588,7 +663,9 @@ const Leads = () => {
       shouldHidePerdido = leadDate < fiveDaysAgo;
     }
 
-    return matchesSearch && matchesStatus && matchesOrigem && matchesDateRange && !shouldHidePerdido;
+    return matchesSearch && matchesStatus && matchesOrigem && matchesTemperature && 
+           matchesCampaign && matchesAd && matchesInterest && matchesBroker && matchesNoBroker &&
+           matchesProperty && matchesNoProperty && matchesDateRange && matchesInactivity && !shouldHidePerdido;
   });
 
   const getLeadsByStatus = (statusId: string) => {
@@ -807,86 +884,15 @@ const Leads = () => {
               className="pl-8"
             />
           </div>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-2">
-                <Filter className="h-4 w-4" />
-                Filtros
-                {(filters.status || filters.origem || filters.startDate || filters.endDate) && (
-                  <span className="ml-1 bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 text-xs">
-                    {Object.values(filters).filter(Boolean).length}
-                  </span>
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium">Filtros</h4>
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    onClick={() => setFilters({ status: "", origem: "", startDate: "", endDate: "" })}
-                  >
-                    Limpar
-                  </Button>
-                </div>
-                
-                <div className="space-y-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="filter-status">Status</Label>
-                    <Select
-                      value={filters.status}
-                      onValueChange={(value) => setFilters({...filters, status: value})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Todos os status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {statuses.map((status) => (
-                          <SelectItem key={status.id} value={status.id}>
-                            {status.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="filter-origem">Origem</Label>
-                    <Input
-                      id="filter-origem"
-                      placeholder="Ex: Facebook, Google..."
-                      value={filters.origem}
-                      onChange={(e) => setFilters({...filters, origem: e.target.value})}
-                    />
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="filter-start-date">Data inicial</Label>
-                      <Input
-                        id="filter-start-date"
-                        type="date"
-                        value={filters.startDate}
-                        onChange={(e) => setFilters({...filters, startDate: e.target.value})}
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="filter-end-date">Data final</Label>
-                      <Input
-                        id="filter-end-date"
-                        type="date"
-                        value={filters.endDate}
-                        onChange={(e) => setFilters({...filters, endDate: e.target.value})}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
+          <LeadsFilters
+            statuses={statuses}
+            filters={filters}
+            onFiltersChange={setFilters}
+            uniqueOrigins={uniqueOrigins}
+            uniqueCampaigns={uniqueCampaigns}
+            uniqueAds={uniqueAds}
+            uniqueInterests={uniqueInterests}
+          />
         </div>
         
         <div className="flex gap-2">
