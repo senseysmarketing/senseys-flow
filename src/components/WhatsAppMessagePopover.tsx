@@ -111,7 +111,7 @@ const WhatsAppMessagePopover = ({
   // If no custom templates, render children with direct click handler
   if (hasLoadedTemplates && templates.length === 0) {
     return (
-      <div onClick={handleTriggerClick}>
+      <div className="w-full" onClick={handleTriggerClick}>
         {children}
       </div>
     );
