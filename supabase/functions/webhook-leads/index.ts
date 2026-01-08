@@ -349,6 +349,37 @@ serve(async (req) => {
 
     console.log('Lead created successfully:', lead.id);
 
+    // Fetch property name for notification
+    let propertyName: string | null = null;
+    if (validPropertyId) {
+      const { data: property } = await supabase
+        .from('properties')
+        .select('title')
+        .eq('id', validPropertyId)
+        .single();
+      propertyName = property?.title || null;
+    }
+
+    // Send email notifications
+    try {
+      await supabase.functions.invoke('notify-new-lead', {
+        body: {
+          lead_id: lead.id,
+          lead_name: lead.name,
+          lead_phone: lead.phone,
+          lead_email: lead.email,
+          lead_temperature: calculatedTemperature,
+          lead_origem: leadData.origem,
+          property_name: propertyName,
+          account_id: accountId,
+        }
+      });
+      console.log('Notification function invoked successfully');
+    } catch (notifyError) {
+      console.error('Error invoking notify-new-lead:', notifyError);
+      // Don't fail the webhook if notification fails
+    }
+
     // Handle custom fields if provided (legacy support)
     if (body.custom_fields && typeof body.custom_fields === 'object') {
       console.log('Processing custom fields:', body.custom_fields);
