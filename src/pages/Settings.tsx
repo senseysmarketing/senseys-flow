@@ -22,6 +22,7 @@ import RolePermissionsManager from "@/components/RolePermissionsManager";
 import DistributionRulesManager from "@/components/DistributionRulesManager";
 import MetaFormScoringManager from "@/components/MetaFormScoringManager";
 import MetaEventMappingManager from "@/components/MetaEventMappingManager";
+import { NotificationSettings } from "@/components/NotificationSettings";
 interface Profile {
   id: string;
   full_name: string | null;
@@ -447,6 +448,10 @@ const SettingsPage = () => {
             <MessageCircle className="h-4 w-4 mr-2" />
             Mensagens WhatsApp
           </TabsTrigger>
+          <TabsTrigger value="notifications">
+            <Bell className="h-4 w-4 mr-2" />
+            Notificações
+          </TabsTrigger>
           <TabsTrigger value="followup">
             <Bell className="h-4 w-4 mr-2" />
             Follow-up
@@ -523,6 +528,10 @@ const SettingsPage = () => {
 
         <TabsContent value="team">
           <TeamManagement />
+        </TabsContent>
+
+        <TabsContent value="notifications">
+          <NotificationSettings />
         </TabsContent>
 
         <TabsContent value="statuses">

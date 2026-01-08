@@ -849,6 +849,59 @@ export type Database = {
           },
         ]
       }
+      notification_preferences: {
+        Row: {
+          account_id: string | null
+          created_at: string | null
+          email_enabled: boolean | null
+          email_for_cold: boolean | null
+          email_for_hot: boolean | null
+          email_for_warm: boolean | null
+          id: string
+          notify_email: string | null
+          push_enabled: boolean | null
+          sound_enabled: boolean | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string | null
+          email_enabled?: boolean | null
+          email_for_cold?: boolean | null
+          email_for_hot?: boolean | null
+          email_for_warm?: boolean | null
+          id?: string
+          notify_email?: string | null
+          push_enabled?: boolean | null
+          sound_enabled?: boolean | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string | null
+          email_enabled?: boolean | null
+          email_for_cold?: boolean | null
+          email_for_hot?: boolean | null
+          email_for_warm?: boolean | null
+          id?: string
+          notify_email?: string | null
+          push_enabled?: boolean | null
+          sound_enabled?: boolean | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_preferences_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       permissions: {
         Row: {
           category: Database["public"]["Enums"]["permission_category"]
@@ -1025,6 +1078,50 @@ export type Database = {
           },
         ]
       }
+      push_subscriptions: {
+        Row: {
+          account_id: string | null
+          auth: string
+          created_at: string | null
+          device_name: string | null
+          endpoint: string
+          id: string
+          is_active: boolean | null
+          p256dh: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          auth: string
+          created_at?: string | null
+          device_name?: string | null
+          endpoint: string
+          id?: string
+          is_active?: boolean | null
+          p256dh: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          auth?: string
+          created_at?: string | null
+          device_name?: string | null
+          endpoint?: string
+          id?: string
+          is_active?: boolean | null
+          p256dh?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       role_permissions: {
         Row: {
           created_at: string
@@ -1187,6 +1284,58 @@ export type Database = {
             columns: ["role_id"]
             isOneToOne: false
             referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_message_log: {
+        Row: {
+          account_id: string | null
+          id: string
+          lead_id: string | null
+          message_content: string
+          sent_at: string | null
+          sent_by: string | null
+          template_id: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          id?: string
+          lead_id?: string | null
+          message_content: string
+          sent_at?: string | null
+          sent_by?: string | null
+          template_id?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          id?: string
+          lead_id?: string | null
+          message_content?: string
+          sent_at?: string | null
+          sent_by?: string | null
+          template_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_message_log_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_message_log_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_message_log_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_templates"
             referencedColumns: ["id"]
           },
         ]
