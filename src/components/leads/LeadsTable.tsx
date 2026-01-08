@@ -326,6 +326,8 @@ const LeadsTable = ({
                     <WhatsAppMessagePopover
                       phone={lead.phone}
                       leadName={lead.name}
+                      leadId={lead.id}
+                      propertyName={lead.properties?.title}
                       interesse={lead.interesse}
                     >
                       <Button variant="ghost" size="sm" className="h-8 w-8 p-0">

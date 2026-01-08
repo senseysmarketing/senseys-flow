@@ -371,6 +371,8 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
           <WhatsAppMessagePopover 
             phone={lead.phone} 
             leadName={lead.name}
+            leadId={lead.id}
+            propertyName={propertyInfo?.title}
             interesse={lead.interesse}
           >
             <Button variant="outline" className="gap-2">
