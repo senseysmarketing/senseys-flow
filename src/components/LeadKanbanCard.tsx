@@ -16,6 +16,11 @@ interface Lead {
   origem?: string;
   created_at: string;
   temperature?: string | null;
+  property_id?: string | null;
+  properties?: {
+    id: string;
+    title: string;
+  } | null;
 }
 
 interface LeadKanbanCardProps {
@@ -145,6 +150,8 @@ export function LeadKanbanCard({
       <WhatsAppMessagePopover 
         phone={lead.phone} 
         leadName={lead.name}
+        leadId={lead.id}
+        propertyName={lead.properties?.title}
         interesse={lead.interesse}
       >
         <Button 
