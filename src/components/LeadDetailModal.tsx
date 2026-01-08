@@ -24,7 +24,7 @@ import {
   Building2,
   UserCheck
 } from "lucide-react";
-import WhatsAppMessagePopover from "@/components/WhatsAppMessagePopover";
+import WhatsAppButton from "@/components/WhatsAppButton";
 import TemperatureBadge from "@/components/TemperatureBadge";
 import OriginBadge from "@/components/OriginBadge";
 import LeadActivityTimeline from "@/components/LeadActivityTimeline";
@@ -368,18 +368,15 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
 
         {/* Footer com ações */}
         <div className="p-4 bg-muted/30 border-t flex items-center justify-end gap-3">
-          <WhatsAppMessagePopover 
+          <WhatsAppButton 
             phone={lead.phone} 
             leadName={lead.name}
             leadId={lead.id}
             propertyName={propertyInfo?.title}
             interesse={lead.interesse}
-          >
-            <Button variant="outline" className="gap-2">
-              <MessageCircle className="h-4 w-4" />
-              WhatsApp
-            </Button>
-          </WhatsAppMessagePopover>
+            variant="outline"
+            size="default"
+          />
           <Button 
             onClick={() => {
               onOpenChange(false);

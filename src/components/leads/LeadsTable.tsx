@@ -21,14 +21,13 @@ import {
   Eye,
   Edit,
   Trash,
-  MessageCircle,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
 } from "lucide-react";
 import TemperatureBadge from "@/components/TemperatureBadge";
 import OriginBadge from "@/components/OriginBadge";
-import WhatsAppMessagePopover from "@/components/WhatsAppMessagePopover";
+import WhatsAppButton from "@/components/WhatsAppButton";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface Lead {
@@ -323,17 +322,14 @@ const LeadsTable = ({
                 )}
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center gap-1">
-                    <WhatsAppMessagePopover
+                    <WhatsAppButton
                       phone={lead.phone}
                       leadName={lead.name}
                       leadId={lead.id}
                       propertyName={lead.properties?.title}
                       interesse={lead.interesse}
-                    >
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                        <MessageCircle className="h-4 w-4 text-green-500" />
-                      </Button>
-                    </WhatsAppMessagePopover>
+                      variant="icon"
+                    />
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0">

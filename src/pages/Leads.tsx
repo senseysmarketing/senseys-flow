@@ -38,7 +38,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
 import { useLeadNotifications } from "@/hooks/use-lead-notifications";
 import { usePermissions } from "@/hooks/use-permissions";
-import WhatsAppMessagePopover from "@/components/WhatsAppMessagePopover";
+import WhatsAppButton from "@/components/WhatsAppButton";
 import TemperatureBadge from "@/components/TemperatureBadge";
 import OriginBadge from "@/components/OriginBadge";
 import LeadDetailModal from "@/components/LeadDetailModal";
@@ -1072,20 +1072,14 @@ const Leads = () => {
                                   </div>
                                   
                                   <div className="flex gap-2 mt-3">
-                                    <WhatsAppMessagePopover 
+                                    <WhatsAppButton 
                                       phone={lead.phone} 
                                       leadName={lead.name}
+                                      leadId={lead.id}
+                                      propertyName={lead.properties?.title}
                                       interesse={lead.interesse}
-                                    >
-                                      <Button 
-                                        size="sm" 
-                                        variant="outline" 
-                                        className="flex-1 h-7 text-xs gap-1"
-                                      >
-                                        <MessageCircle className="h-3 w-3" />
-                                        WhatsApp
-                                      </Button>
-                                    </WhatsAppMessagePopover>
+                                      className="flex-1 h-7 text-xs"
+                                    />
                                   </div>
                                 </div>
                               )}

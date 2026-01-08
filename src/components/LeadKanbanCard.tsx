@@ -1,10 +1,10 @@
-import { Phone, Mail, MoreVertical, Eye, Edit, Trash, MessageCircle } from "lucide-react";
+import { Phone, Mail, MoreVertical, Eye, Edit, Trash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AvatarFallbackColored } from "@/components/ui/avatar-fallback-colored";
 import TemperatureBadge from "@/components/TemperatureBadge";
 import OriginBadge from "@/components/OriginBadge";
-import WhatsAppMessagePopover from "@/components/WhatsAppMessagePopover";
+import WhatsAppButton from "@/components/WhatsAppButton";
 import { cn } from "@/lib/utils";
 
 interface Lead {
@@ -147,22 +147,13 @@ export function LeadKanbanCard({
       </div>
 
       {/* Action Button */}
-      <WhatsAppMessagePopover 
+      <WhatsAppButton 
         phone={lead.phone} 
         leadName={lead.name}
         leadId={lead.id}
         propertyName={lead.properties?.title}
         interesse={lead.interesse}
-      >
-        <Button 
-          size="sm" 
-          variant="outline" 
-          className="w-full h-8 text-xs gap-2 hover:bg-success/10 hover:text-success hover:border-success/30 transition-colors"
-        >
-          <MessageCircle className="h-3.5 w-3.5" />
-          WhatsApp
-        </Button>
-      </WhatsAppMessagePopover>
+      />
     </div>
   );
 }
