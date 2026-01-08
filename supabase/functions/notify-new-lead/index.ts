@@ -190,7 +190,7 @@ const handler = async (req: Request): Promise<Response> => {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              from: "Senseys CRM <notificacoes@senseys.com.br>",
+              from: "Senseys CRM <notificacoes@lead.crmsenseys.com.br>",
               to: [notifyEmail],
               subject: `🎉 Novo Lead: ${lead_name}`,
               html: emailHtml,
