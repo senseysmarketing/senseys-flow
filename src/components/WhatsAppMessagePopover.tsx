@@ -119,9 +119,11 @@ const WhatsAppMessagePopover = ({
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
-      <PopoverTrigger asChild>
+    <PopoverTrigger asChild>
+      <div className="w-full">
         {children}
-      </PopoverTrigger>
+      </div>
+    </PopoverTrigger>
       <PopoverContent className="w-80 p-0">
         <div className="p-4 border-b">
           <h4 className="font-medium text-sm">Enviar mensagem via WhatsApp</h4>
