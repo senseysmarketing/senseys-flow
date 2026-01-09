@@ -98,9 +98,9 @@ const handler = async (req: Request): Promise<Response> => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Novo Lead - ${lead_name}</title>
 </head>
-<body style="margin: 0; padding: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0f0f1a;">
+<body style="margin: 0; padding: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #1a1d21;">
   <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-    <div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 16px; padding: 32px; border: 1px solid #2a2a4a;">
+    <div style="background: linear-gradient(135deg, #252a31 0%, #1e2329 100%); border-radius: 16px; padding: 32px; border: 1px solid #353a42;">
       <!-- Header -->
       <div style="text-align: center; margin-bottom: 24px;">
         <h1 style="color: #ffffff; font-size: 24px; margin: 0; font-weight: 700;">
@@ -111,8 +111,8 @@ const handler = async (req: Request): Promise<Response> => {
       <!-- Lead Info Card -->
       <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 24px; margin-bottom: 24px;">
         <div style="display: flex; align-items: center; margin-bottom: 16px;">
-          <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 16px;">
-            <span style="color: white; font-size: 20px; font-weight: 700;">${lead_name.charAt(0).toUpperCase()}</span>
+          <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #81afd1 0%, #a6c8e1 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 16px;">
+            <span style="color: #1a1d21; font-size: 20px; font-weight: 700;">${lead_name.charAt(0).toUpperCase()}</span>
           </div>
           <div>
             <h2 style="color: #ffffff; font-size: 20px; margin: 0; font-weight: 600;">${lead_name}</h2>
@@ -166,7 +166,7 @@ const handler = async (req: Request): Promise<Response> => {
 
       <!-- CTA Button -->
       <div style="text-align: center;">
-        <a href="${appUrl}/leads" style="display: inline-block; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
+        <a href="${appUrl}/leads" style="display: inline-block; background: linear-gradient(135deg, #81afd1 0%, #5a9fc4 100%); color: #1a1d21; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
           Ver Lead no CRM →
         </a>
       </div>
