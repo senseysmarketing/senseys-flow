@@ -1,6 +1,7 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useAccount } from "@/hooks/use-account";
 import { useSupportMode } from "@/hooks/use-support-mode";
+import { useLeadNotifications } from "@/hooks/use-lead-notifications";
 import { Navigate, useLocation } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -24,6 +25,14 @@ const Layout = ({ children }: LayoutProps) => {
   const isMobile = useIsMobile();
   const [isDark, setIsDark] = useState(true);
   const [isExiting, setIsExiting] = useState(false);
+
+  // Global lead notifications - enabled across all pages
+  const [notificationsEnabled] = useState(() => {
+    return localStorage.getItem('lead-notifications-enabled') !== 'false';
+  });
+  
+  // Activate global notification listener for all new leads
+  useLeadNotifications(undefined, notificationsEnabled && !!user);
 
   const toggleTheme = () => {
     setIsDark(!isDark);
