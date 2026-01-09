@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell, Mail, Volume2, Smartphone, Flame, Thermometer, Snowflake, Download } from 'lucide-react';
+import { Bell, Mail, Volume2, Smartphone, Flame, Thermometer, Snowflake, Download, Send, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -9,10 +9,21 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { useNotificationPreferences } from '@/hooks/use-notification-preferences';
 import { useAuth } from '@/hooks/use-auth';
+import { usePushSubscription } from '@/hooks/use-push-subscription';
 
 export const NotificationSettings = () => {
   const { user } = useAuth();
   const { preferences, loading, saving, savePreferences } = useNotificationPreferences();
+  const { 
+    isSupported: isPushSupported, 
+    isSubscribed: isPushSubscribed, 
+    isLoading: isPushLoading,
+    permissionState,
+    subscribe: subscribeToPush, 
+    unsubscribe: unsubscribeFromPush,
+    sendTestNotification
+  } = usePushSubscription();
+  
   const [localPrefs, setLocalPrefs] = useState(preferences);
   const [browserPermission, setBrowserPermission] = useState<NotificationPermission>('default');
   const [isPWA, setIsPWA] = useState(false);
@@ -133,6 +144,94 @@ export const NotificationSettings = () => {
         </Card>
       )}
 
+      {/* Web Push Notifications */}
+      {isPushSupported && (
+        <Card className="border-primary/30">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Send className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">Push Notifications</CardTitle>
+                <CardDescription>
+                  Receba notificações mesmo com o navegador fechado
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>Status do dispositivo</Label>
+                <p className="text-sm text-muted-foreground">
+                  {isPushSubscribed 
+                    ? 'Este dispositivo está recebendo notificações push'
+                    : 'Ative para receber notificações push neste dispositivo'}
+                </p>
+              </div>
+              {isPushLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              ) : isPushSubscribed ? (
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="border-green-500/30 text-green-600 gap-1">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Ativo
+                  </Badge>
+                </div>
+              ) : permissionState === 'denied' ? (
+                <Badge variant="destructive" className="gap-1">
+                  <XCircle className="h-3 w-3" />
+                  Bloqueado
+                </Badge>
+              ) : null}
+            </div>
+
+            <div className="flex gap-2">
+              {isPushSubscribed ? (
+                <>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={unsubscribeFromPush}
+                    disabled={isPushLoading}
+                  >
+                    Desativar Push
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={sendTestNotification}
+                    disabled={isPushLoading}
+                    className="gap-1"
+                  >
+                    <Send className="h-3 w-3" />
+                    Testar
+                  </Button>
+                </>
+              ) : permissionState === 'denied' ? (
+                <p className="text-sm text-muted-foreground">
+                  As notificações foram bloqueadas. Para reativar, acesse as configurações do navegador.
+                </p>
+              ) : (
+                <Button 
+                  onClick={subscribeToPush}
+                  disabled={isPushLoading}
+                  className="gap-2"
+                >
+                  {isPushLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Bell className="h-4 w-4" />
+                  )}
+                  Ativar Push neste Dispositivo
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Browser Notifications */}
       <Card>
         <CardHeader>
@@ -151,7 +250,7 @@ export const NotificationSettings = () => {
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label>Notificações Push</Label>
+              <Label>Notificações Push (navegador aberto)</Label>
               <p className="text-sm text-muted-foreground">
                 {browserPermission === 'granted' 
                   ? 'Notificações ativadas' 
@@ -169,20 +268,6 @@ export const NotificationSettings = () => {
                 Ativar
               </Button>
             )}
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="push_enabled">Push no dispositivo</Label>
-              <p className="text-sm text-muted-foreground">
-                Receber push notifications (requer app instalado)
-              </p>
-            </div>
-            <Switch
-              id="push_enabled"
-              checked={localPrefs.push_enabled}
-              onCheckedChange={(checked) => handleChange('push_enabled', checked)}
-            />
           </div>
 
           <div className="flex items-center justify-between">
