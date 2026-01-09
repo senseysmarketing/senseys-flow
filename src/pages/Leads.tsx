@@ -117,11 +117,11 @@ const Leads = () => {
     localStorage.getItem('lead-notifications-enabled') !== 'false'
   );
 
-  // Ativar notificações de novos leads (apenas se habilitado)
+  // Silent refresh when new leads arrive (notifications are handled globally in Layout.tsx)
   useLeadNotifications(notificationsEnabled ? () => {
-    // Recarregar dados quando um novo lead for adicionado
+    // Only refresh data - sound/toast/browser notification handled by Layout
     fetchData();
-  } : undefined, notificationsEnabled);
+  } : undefined, false); // false = disable notifications here, only use callback for refresh
 
   // Função para alternar notificações
   const toggleNotifications = () => {
