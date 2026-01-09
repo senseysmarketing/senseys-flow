@@ -1,12 +1,12 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { Home, Users, Calendar, Settings, BarChart3 } from "lucide-react";
+import { Home, Users, Building2, Settings, BarChart3 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { to: "/dashboard", icon: Home, label: "Home" },
   { to: "/leads", icon: Users, label: "Leads" },
-  { to: "/calendar", icon: Calendar, label: "Agenda" },
+  { to: "/properties", icon: Building2, label: "Imóveis" },
   { to: "/reports", icon: BarChart3, label: "Relatórios" },
   { to: "/settings", icon: Settings, label: "Config" },
 ];
