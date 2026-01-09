@@ -89,7 +89,7 @@ serve(async (req) => {
       // Make sure it's a full URL
       const fullUrl = url.startsWith('http') 
         ? url 
-        : `https://crm.senseys.com.br${url}`;
+        : `https://crmsenseys.com.br${url}`;
       notificationPayload.url = fullUrl;
     }
 
