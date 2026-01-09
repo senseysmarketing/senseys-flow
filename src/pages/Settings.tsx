@@ -55,6 +55,7 @@ interface Property {
 }
 
 type TabValue = 'profile' | 'team' | 'notifications' | 'statuses' | 'whatsapp' | 'followup' | 'distribution' | 'webhook' | 'qualification' | 'metacapi' | 'permissions' | 'whitelabel';
+type CategoryValue = 'geral' | 'leads' | 'integracoes' | 'avancado';
 
 interface NavItem {
   value: TabValue;
@@ -65,6 +66,7 @@ interface NavItem {
 
 interface NavGroup {
   title: string;
+  category: CategoryValue;
   items: NavItem[];
 }
 
@@ -73,6 +75,7 @@ const SettingsPage = () => {
   const { hasPermission } = usePermissions();
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState<TabValue>('profile');
+  const [activeCategory, setActiveCategory] = useState<CategoryValue>('geral');
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [leadStatuses, setLeadStatuses] = useState<LeadStatus[]>([]);
@@ -100,10 +103,11 @@ const SettingsPage = () => {
   const [copiedPropertyId, setCopiedPropertyId] = useState<string | null>(null);
   const [testingWebhook, setTestingWebhook] = useState(false);
 
-  // Navigation structure
+  // Navigation structure with categories
   const navGroups: NavGroup[] = [
     {
       title: "Geral",
+      category: 'geral',
       items: [
         { value: 'profile', label: 'Perfil', icon: <User className="h-4 w-4" /> },
         { value: 'team', label: 'Equipe', icon: <Users className="h-4 w-4" /> },
@@ -112,6 +116,7 @@ const SettingsPage = () => {
     },
     {
       title: "Gestão de Leads",
+      category: 'leads',
       items: [
         { value: 'statuses', label: 'Status dos Leads', icon: <Palette className="h-4 w-4" /> },
         { value: 'followup', label: 'Follow-up', icon: <Bell className="h-4 w-4" /> },
@@ -121,6 +126,7 @@ const SettingsPage = () => {
     },
     {
       title: "Integrações",
+      category: 'integracoes',
       items: [
         { value: 'whatsapp', label: 'WhatsApp', icon: <MessageCircle className="h-4 w-4" /> },
         { value: 'webhook', label: 'Webhook', icon: <Webhook className="h-4 w-4" /> },
@@ -129,12 +135,29 @@ const SettingsPage = () => {
     },
     {
       title: "Avançado",
+      category: 'avancado',
       items: [
         { value: 'permissions', label: 'Permissões', icon: <Shield className="h-4 w-4" />, permission: 'settings.manage' },
         { value: 'whitelabel', label: 'White Label', icon: <Building2 className="h-4 w-4" /> },
       ]
     }
   ];
+
+  // Get current category group
+  const currentCategoryGroup = navGroups.find(g => g.category === activeCategory);
+  const currentCategoryItems = currentCategoryGroup?.items.filter(item => 
+    !item.permission || hasPermission(item.permission)
+  ) || [];
+
+  // Handle category change
+  const handleCategoryChange = (category: CategoryValue) => {
+    setActiveCategory(category);
+    const group = navGroups.find(g => g.category === category);
+    const visibleItems = group?.items.filter(item => !item.permission || hasPermission(item.permission)) || [];
+    if (visibleItems.length > 0) {
+      setActiveTab(visibleItems[0].value);
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -481,46 +504,60 @@ const SettingsPage = () => {
       </div>;
   }
 
-  // Render sidebar navigation
-  const renderSidebar = () => (
-    <nav className="w-56 shrink-0 space-y-6">
-      {navGroups.map((group) => {
-        const visibleItems = group.items.filter(item => 
-          !item.permission || hasPermission(item.permission)
-        );
-        
-        if (visibleItems.length === 0) return null;
-        
-        return (
-          <div key={group.title}>
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-3">
-              {group.title}
-            </h3>
-            <div className="space-y-1">
-              {visibleItems.map((item) => (
-                <Button
-                  key={item.value}
-                  variant={activeTab === item.value ? 'secondary' : 'ghost'}
-                  className={`w-full justify-start gap-3 h-10 ${
-                    activeTab === item.value ? 'bg-secondary font-medium' : ''
-                  }`}
-                  onClick={() => setActiveTab(item.value)}
-                >
-                  {item.icon}
-                  <span className="flex-1 text-left">{item.label}</span>
-                  {activeTab === item.value && (
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  )}
-                </Button>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-    </nav>
+  // Categories for the main tabs
+  const categories: { value: CategoryValue; label: string }[] = [
+    { value: 'geral', label: 'Geral' },
+    { value: 'leads', label: 'Gestão de Leads' },
+    { value: 'integracoes', label: 'Integrações' },
+    { value: 'avancado', label: 'Avançado' },
+  ];
+
+  // Render desktop two-level tabs
+  const renderDesktopTabs = () => (
+    <div className="space-y-4">
+      {/* Category Tabs (Level 1) */}
+      <div className="flex gap-2 border-b pb-3">
+        {categories.map((cat) => {
+          // Check if category has any visible items
+          const group = navGroups.find(g => g.category === cat.value);
+          const hasVisibleItems = group?.items.some(item => 
+            !item.permission || hasPermission(item.permission)
+          );
+          if (!hasVisibleItems) return null;
+          
+          return (
+            <Button
+              key={cat.value}
+              variant={activeCategory === cat.value ? 'default' : 'outline'}
+              size="sm"
+              className="gap-2"
+              onClick={() => handleCategoryChange(cat.value)}
+            >
+              {cat.label}
+            </Button>
+          );
+        })}
+      </div>
+
+      {/* Sub-tabs (Level 2) */}
+      <div className="flex gap-2 flex-wrap">
+        {currentCategoryItems.map((item) => (
+          <Button
+            key={item.value}
+            variant={activeTab === item.value ? 'secondary' : 'ghost'}
+            size="sm"
+            className="gap-2"
+            onClick={() => setActiveTab(item.value)}
+          >
+            {item.icon}
+            {item.label}
+          </Button>
+        ))}
+      </div>
+    </div>
   );
 
-  // Render mobile tabs
+  // Render mobile tabs (keep simple flat list)
   const renderMobileTabs = () => (
     <ScrollArea className="w-full">
       <div className="flex gap-2 pb-3">
@@ -1062,15 +1099,12 @@ const SettingsPage = () => {
       {/* Mobile: horizontal scrolling tabs */}
       {isMobile && renderMobileTabs()}
 
-      {/* Desktop: sidebar + content layout */}
-      <div className={`${isMobile ? '' : 'flex gap-8'}`}>
-        {/* Desktop sidebar */}
-        {!isMobile && renderSidebar()}
+      {/* Desktop: two-level tabs + content */}
+      {!isMobile && renderDesktopTabs()}
 
-        {/* Content area */}
-        <div className={`${isMobile ? '' : 'flex-1 min-w-0 max-w-4xl'}`}>
-          {renderContent()}
-        </div>
+      {/* Content area */}
+      <div className="max-w-4xl">
+        {renderContent()}
       </div>
 
       {/* Status Dialog */}
