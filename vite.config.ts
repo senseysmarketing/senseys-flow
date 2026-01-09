@@ -50,6 +50,12 @@ export default defineConfig(({ mode }) => ({
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         runtimeCaching: [
           {
+            // Auth requests should always go to network (never cache)
+            urlPattern: /^https:\/\/ujodxlzlfvdwqufkgdnw\.supabase\.co\/auth\/.*/i,
+            handler: "NetworkOnly",
+          },
+          {
+            // Other Supabase requests can use NetworkFirst
             urlPattern: /^https:\/\/ujodxlzlfvdwqufkgdnw\.supabase\.co\/.*/i,
             handler: "NetworkFirst",
             options: {

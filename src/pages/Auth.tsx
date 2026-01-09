@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
 import { signIn, resetPassword } from "@/lib/auth";
 import { useAuth } from "@/hooks/use-auth";
@@ -11,16 +12,27 @@ import { Mail, Lock, ArrowLeft, Sparkles, Loader2 } from "lucide-react";
 import logo from "@/assets/logo-alternativa.png";
 import backgroundImage from "@/assets/background-crm.jpg";
 
+const REMEMBER_ME_KEY = 'senseys-remember-me';
+
 const Auth = () => {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [showResetPassword, setShowResetPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(() => {
+    const saved = localStorage.getItem(REMEMBER_ME_KEY);
+    return saved !== 'false'; // Default to true
+  });
   const [signInData, setSignInData] = useState({
     email: "",
     password: ""
   });
   const [resetEmail, setResetEmail] = useState("");
+
+  // Save remember me preference
+  useEffect(() => {
+    localStorage.setItem(REMEMBER_ME_KEY, String(rememberMe));
+  }, [rememberMe]);
 
   useEffect(() => {
     if (user && !loading) {
@@ -198,6 +210,19 @@ const Auth = () => {
                       required 
                     />
                   </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="remember-me" 
+                    checked={rememberMe} 
+                    onCheckedChange={(checked) => setRememberMe(!!checked)} 
+                  />
+                  <Label 
+                    htmlFor="remember-me" 
+                    className="text-sm text-muted-foreground cursor-pointer select-none"
+                  >
+                    Manter conectado
+                  </Label>
                 </div>
                 <Button 
                   type="submit" 
