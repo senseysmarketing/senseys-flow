@@ -25,7 +25,6 @@ export const NotificationSettings = () => {
   } = useOneSignal();
   
   const [localPrefs, setLocalPrefs] = useState(preferences);
-  const [browserPermission, setBrowserPermission] = useState<NotificationPermission>('default');
   const [isPWA, setIsPWA] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
@@ -34,11 +33,6 @@ export const NotificationSettings = () => {
   }, [preferences]);
 
   useEffect(() => {
-    // Check browser notification permission
-    if ('Notification' in window) {
-      setBrowserPermission(Notification.permission);
-    }
-
     // Check if running as PWA
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
     setIsPWA(isStandalone);
@@ -59,19 +53,6 @@ export const NotificationSettings = () => {
 
   const handleSave = () => {
     savePreferences(localPrefs);
-  };
-
-  const requestBrowserPermission = async () => {
-    if ('Notification' in window) {
-      const permission = await Notification.requestPermission();
-      setBrowserPermission(permission);
-      if (permission === 'granted') {
-        new Notification('Notificações Ativadas! 🎉', {
-          body: 'Você receberá notificações de novos leads.',
-          icon: '/pwa-192x192.png',
-        });
-      }
-    }
   };
 
   const handleInstallPWA = async () => {
@@ -159,122 +140,85 @@ export const NotificationSettings = () => {
             </div>
           </div>
         </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label>Status do dispositivo</Label>
-                <p className="text-sm text-muted-foreground">
-                  {isPushSubscribed 
-                    ? 'Este dispositivo está recebendo notificações push'
-                    : 'Ative para receber notificações push neste dispositivo'}
-                </p>
-              </div>
-              {isPushLoading ? (
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              ) : isPushSubscribed ? (
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="border-green-500/30 text-green-600 gap-1">
-                    <CheckCircle2 className="h-3 w-3" />
-                    Ativo
-                  </Badge>
-                </div>
-              ) : permissionState === 'denied' ? (
-                <Badge variant="destructive" className="gap-1">
-                  <XCircle className="h-3 w-3" />
-                  Bloqueado
-                </Badge>
-              ) : null}
-            </div>
-
-            <div className="flex gap-2">
-              {isPushSubscribed ? (
-                <>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={unsubscribeFromPush}
-                    disabled={isPushLoading}
-                  >
-                    Desativar Push
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={sendTestNotification}
-                    disabled={isPushLoading}
-                    className="gap-1"
-                  >
-                    <Send className="h-3 w-3" />
-                    Testar
-                  </Button>
-                </>
-              ) : permissionState === 'denied' ? (
-                <p className="text-sm text-muted-foreground">
-                  As notificações foram bloqueadas. Para reativar, acesse as configurações do navegador.
-                </p>
-              ) : (
-                <Button 
-                  onClick={subscribeToPush}
-                  disabled={isPushLoading}
-                  className="gap-2"
-                >
-                  {isPushLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Bell className="h-4 w-4" />
-                  )}
-                  Ativar Push neste Dispositivo
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-      {/* Browser Notifications */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Bell className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <CardTitle className="text-lg">Notificações do Navegador</CardTitle>
-              <CardDescription>
-                Receba alertas em tempo real quando novos leads chegarem
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label>Notificações Push (navegador aberto)</Label>
+              <Label>Status do dispositivo</Label>
               <p className="text-sm text-muted-foreground">
-                {browserPermission === 'granted' 
-                  ? 'Notificações ativadas' 
-                  : browserPermission === 'denied'
-                  ? 'Notificações bloqueadas no navegador'
-                  : 'Clique para ativar notificações'}
+                {isPushSubscribed 
+                  ? 'Este dispositivo está recebendo notificações push'
+                  : 'Ative para receber notificações push neste dispositivo'}
               </p>
             </div>
-            {browserPermission === 'granted' ? (
-              <Badge variant="outline" className="border-green-500/30 text-green-600">Ativo</Badge>
-            ) : browserPermission === 'denied' ? (
-              <Badge variant="destructive">Bloqueado</Badge>
+            {isPushLoading ? (
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            ) : isPushSubscribed ? (
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="border-green-500/30 text-green-600 gap-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Ativo
+                </Badge>
+              </div>
+            ) : permissionState === 'denied' ? (
+              <Badge variant="destructive" className="gap-1">
+                <XCircle className="h-3 w-3" />
+                Bloqueado
+              </Badge>
+            ) : null}
+          </div>
+
+          <div className="flex gap-2">
+            {isPushSubscribed ? (
+              <>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={unsubscribeFromPush}
+                  disabled={isPushLoading}
+                >
+                  Desativar Push
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={sendTestNotification}
+                  disabled={isPushLoading}
+                  className="gap-1"
+                >
+                  <Send className="h-3 w-3" />
+                  Testar
+                </Button>
+              </>
+            ) : permissionState === 'denied' ? (
+              <p className="text-sm text-muted-foreground">
+                As notificações foram bloqueadas. Para reativar, acesse as configurações do navegador.
+              </p>
             ) : (
-              <Button variant="outline" size="sm" onClick={requestBrowserPermission}>
-                Ativar
+              <Button 
+                onClick={subscribeToPush}
+                disabled={isPushLoading}
+                className="gap-2"
+              >
+                {isPushLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Bell className="h-4 w-4" />
+                )}
+                Ativar Push neste Dispositivo
               </Button>
             )}
           </div>
 
+          <Separator />
+
+          {/* Sound Notification Option */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Volume2 className="h-4 w-4 text-muted-foreground" />
               <div className="space-y-0.5">
                 <Label htmlFor="sound_enabled">Som de notificação</Label>
                 <p className="text-sm text-muted-foreground">
-                  Tocar som quando novos leads chegarem
+                  Tocar som quando novos leads chegarem (app aberto)
                 </p>
               </div>
             </div>
