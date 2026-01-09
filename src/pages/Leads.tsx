@@ -1078,8 +1078,7 @@ const Leads = () => {
                   })}
                 </div>
               )}
-            )}
-            <div className="flex gap-4 min-w-max flex-nowrap">
+              <div className="flex gap-4 min-w-max flex-nowrap">
               {statuses.filter(s => !hiddenColumns.includes(s.id)).map((status) => {
                 const statusLeads = getLeadsByStatus(status.id);
                 return (
@@ -1215,6 +1214,7 @@ const Leads = () => {
             </div>
           </div>
         </DragDropContext>
+        )
       ) : viewMode === 'database' ? (
         // Database View
         <LeadsDatabaseView
