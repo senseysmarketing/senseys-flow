@@ -10,6 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { 
@@ -38,6 +39,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
 import { useLeadNotifications } from "@/hooks/use-lead-notifications";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useIsMobile } from "@/hooks/use-mobile";
 import WhatsAppButton from "@/components/WhatsAppButton";
 import TemperatureBadge from "@/components/TemperatureBadge";
 import OriginBadge from "@/components/OriginBadge";
@@ -85,6 +87,7 @@ interface LeadStatus {
 const Leads = () => {
   const { user } = useAuth();
   const { hasPermission, isOwner } = usePermissions();
+  const isMobile = useIsMobile();
   const canAssignLeads = hasPermission('leads.assign') || isOwner;
   const [leads, setLeads] = useState<Lead[]>([]);
   const [statuses, setStatuses] = useState<LeadStatus[]>([]);
@@ -873,53 +876,59 @@ const Leads = () => {
       </div>
 
       {/* Filters and Search */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex gap-2 flex-1 max-w-md">
+      <div className="flex flex-col gap-3 sm:gap-4">
+        {/* Search and Filters Row */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative flex-1">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Buscar leads..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8"
+              className="pl-9 h-11 sm:h-10"
             />
           </div>
-          <LeadsFilters
-            statuses={statuses}
-            filters={filters}
-            onFiltersChange={setFilters}
-            uniqueOrigins={uniqueOrigins}
-            uniqueCampaigns={uniqueCampaigns}
-            uniqueAds={uniqueAds}
-            uniqueInterests={uniqueInterests}
-          />
+          <div className="flex gap-2 overflow-x-auto pb-1 sm:pb-0">
+            <LeadsFilters
+              statuses={statuses}
+              filters={filters}
+              onFiltersChange={setFilters}
+              uniqueOrigins={uniqueOrigins}
+              uniqueCampaigns={uniqueCampaigns}
+              uniqueAds={uniqueAds}
+              uniqueInterests={uniqueInterests}
+            />
+          </div>
         </div>
         
-        <div className="flex gap-2">
-          <Button
-            variant={viewMode === 'kanban' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setViewMode('kanban')}
-            className="gap-2"
-          >
-            <Grid className="h-4 w-4" />
-            Kanban
-          </Button>
-          <Button
-            variant={viewMode === 'database' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setViewMode('database')}
-            className="gap-2"
-          >
-            <List className="h-4 w-4" />
-            Todas Leads
-          </Button>
+        {/* View Toggle Row */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex gap-1 sm:gap-2">
+            <Button
+              variant={viewMode === 'kanban' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode('kanban')}
+              className="gap-1.5 h-9 px-3"
+            >
+              <Grid className="h-4 w-4" />
+              <span className="hidden sm:inline">Kanban</span>
+            </Button>
+            <Button
+              variant={viewMode === 'database' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode('database')}
+              className="gap-1.5 h-9 px-3"
+            >
+              <List className="h-4 w-4" />
+              <span className="hidden sm:inline">Lista</span>
+            </Button>
+          </div>
           
           <Button
             variant={notificationsEnabled ? 'default' : 'outline'}
             size="sm"
             onClick={toggleNotifications}
-            className="gap-2"
+            className="gap-1.5 h-9"
             title={notificationsEnabled ? 'Desativar notificações sonoras' : 'Ativar notificações sonoras'}
           >
             {notificationsEnabled ? (
@@ -927,37 +936,148 @@ const Leads = () => {
             ) : (
               <BellOff className="h-4 w-4" />
             )}
-            {notificationsEnabled ? 'Sons On' : 'Sons Off'}
+            <span className="hidden sm:inline">{notificationsEnabled ? 'Sons On' : 'Sons Off'}</span>
           </Button>
         </div>
       </div>
 
       {/* Content */}
       {viewMode === 'kanban' ? (
-        // Kanban View with Drag and Drop
-        <DragDropContext onDragEnd={onDragEnd}>
-          <div className="overflow-x-auto pb-4">
-            {/* Botões para restaurar colunas ocultas */}
-            {hiddenColumns.length > 0 && (
-              <div className="flex gap-2 mb-4 flex-wrap">
-                <span className="text-sm text-muted-foreground self-center">Colunas ocultas:</span>
-                {hiddenColumns.map(columnId => {
-                  const status = statuses.find(s => s.id === columnId);
-                  if (!status) return null;
-                  return (
-                    <Button
-                      key={columnId}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => toggleColumnVisibility(columnId)}
-                      className="gap-2"
-                    >
-                      <Eye className="h-3 w-3" />
-                      {status.name}
-                    </Button>
-                  );
-                })}
-              </div>
+        isMobile ? (
+          // Mobile: Kanban as Accordion
+          <div className="space-y-2">
+            <Accordion type="single" collapsible defaultValue={statuses[0]?.id} className="space-y-2">
+              {statuses.filter(s => !hiddenColumns.includes(s.id)).map((status) => {
+                const statusLeads = getLeadsByStatus(status.id);
+                return (
+                  <AccordionItem 
+                    key={status.id} 
+                    value={status.id}
+                    className="border rounded-xl overflow-hidden bg-card"
+                  >
+                    <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+                      <div className="flex items-center gap-3 flex-1">
+                        <div 
+                          className="w-3 h-3 rounded-full shrink-0" 
+                          style={{ backgroundColor: status.color }}
+                        />
+                        <span className="font-semibold">{status.name}</span>
+                        <Badge 
+                          variant="secondary" 
+                          className="ml-auto mr-2 font-bold"
+                          style={{ backgroundColor: `${status.color}20`, color: status.color }}
+                        >
+                          {statusLeads.length}
+                        </Badge>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-3 pb-3 pt-1">
+                      <div className="space-y-3">
+                        {statusLeads.length === 0 ? (
+                          <p className="text-sm text-muted-foreground text-center py-6">
+                            Nenhum lead neste status
+                          </p>
+                        ) : (
+                          statusLeads.map((lead) => (
+                            <div 
+                              key={lead.id}
+                              className="lead-card cursor-pointer"
+                              onClick={() => handleViewDetails(lead)}
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h4 className="font-medium text-sm">{lead.name}</h4>
+                                    <TemperatureBadge temperature={lead.temperature} showLabel={false} size="sm" />
+                                    <OriginBadge origem={lead.origem} showLabel={false} size="sm" />
+                                  </div>
+                                  <span className="text-xs text-muted-foreground">{formatDate(lead.created_at)}</span>
+                                </div>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                                      <MoreVertical className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleViewDetails(lead); }}>
+                                      <Eye className="h-4 w-4 mr-2" />
+                                      Ver detalhes
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEditLead(lead); }}>
+                                      <Edit className="h-4 w-4 mr-2" />
+                                      Editar
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                      onClick={(e) => { e.stopPropagation(); handleDeleteLead(lead.id); }}
+                                      className="text-destructive"
+                                    >
+                                      <Trash className="h-4 w-4 mr-2" />
+                                      Deletar
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                              
+                              <div className="space-y-1 text-xs text-muted-foreground mb-3">
+                                <div className="flex items-center gap-1">
+                                  <Phone className="h-3 w-3" />
+                                  {formatPhone(lead.phone)}
+                                </div>
+                                {lead.properties && (
+                                  <div className="flex items-center gap-1">
+                                    <span>🏠</span>
+                                    <span className="truncate">{lead.properties.title}</span>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              <div onClick={(e) => e.stopPropagation()}>
+                                <WhatsAppButton 
+                                  phone={lead.phone} 
+                                  leadName={lead.name}
+                                  leadId={lead.id}
+                                  propertyName={lead.properties?.title}
+                                  interesse={lead.interesse}
+                                  className="w-full h-9"
+                                />
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
+          </div>
+        ) : (
+          // Desktop: Kanban View with Drag and Drop
+          <DragDropContext onDragEnd={onDragEnd}>
+            <div className="overflow-x-auto pb-4">
+              {/* Botões para restaurar colunas ocultas */}
+              {hiddenColumns.length > 0 && (
+                <div className="flex gap-2 mb-4 flex-wrap">
+                  <span className="text-sm text-muted-foreground self-center">Colunas ocultas:</span>
+                  {hiddenColumns.map(columnId => {
+                    const status = statuses.find(s => s.id === columnId);
+                    if (!status) return null;
+                    return (
+                      <Button
+                        key={columnId}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => toggleColumnVisibility(columnId)}
+                        className="gap-2"
+                      >
+                        <Eye className="h-3 w-3" />
+                        {status.name}
+                      </Button>
+                    );
+                  })}
+                </div>
+              )}
             )}
             <div className="flex gap-4 min-w-max flex-nowrap">
               {statuses.filter(s => !hiddenColumns.includes(s.id)).map((status) => {
