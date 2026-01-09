@@ -313,36 +313,34 @@ const LeadsDatabaseView = ({
 
   return (
     <Card className="border-border/50">
-      <CardHeader className="pb-4">
-        <div className="flex items-center justify-between">
+      <CardHeader className="pb-4 px-3 sm:px-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle>Banco de Dados de Leads</CardTitle>
+            <CardTitle className="text-lg sm:text-xl">Banco de Dados de Leads</CardTitle>
             <CardDescription>
-              {filteredLeads.length} lead(s) encontrado(s)
+              {filteredLeads.length} lead(s)
               {selectedLeads.length > 0 && ` • ${selectedLeads.length} selecionado(s)`}
             </CardDescription>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="gap-2" onClick={handleExportSelected}>
-              <Download className="h-4 w-4" />
-              Exportar
-            </Button>
-          </div>
+          <Button variant="outline" size="sm" className="gap-2 w-full sm:w-auto" onClick={handleExportSelected}>
+            <Download className="h-4 w-4" />
+            Exportar
+          </Button>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 px-3 sm:px-6">
         {/* Search and Filters Bar */}
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="relative flex-1 max-w-md">
+        <div className="flex flex-col gap-3">
+          <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Buscar por nome, telefone, email..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9"
+              className="pl-9 h-11 sm:h-10"
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
             <LeadsFilters
               statuses={statuses}
               filters={filters}

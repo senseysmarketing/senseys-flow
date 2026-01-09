@@ -29,6 +29,8 @@ import TemperatureBadge from "@/components/TemperatureBadge";
 import OriginBadge from "@/components/OriginBadge";
 import WhatsAppButton from "@/components/WhatsAppButton";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useIsMobile } from "@/hooks/use-mobile";
+import LeadMobileCard from "./LeadMobileCard";
 
 interface Lead {
   id: string;
@@ -101,6 +103,7 @@ const LeadsTable = ({
   sortDirection,
   onSort,
 }: LeadsTableProps) => {
+  const isMobile = useIsMobile();
   const isAllSelected = leads.length > 0 && selectedLeads.length === leads.length;
   const isSomeSelected = selectedLeads.length > 0 && selectedLeads.length < leads.length;
 
@@ -155,7 +158,7 @@ const LeadsTable = ({
     return (
       <div className="space-y-3">
         {[...Array(5)].map((_, i) => (
-          <Skeleton key={i} className="h-16 w-full" />
+          <Skeleton key={i} className="h-16 w-full rounded-xl" />
         ))}
       </div>
     );
@@ -170,6 +173,32 @@ const LeadsTable = ({
     );
   }
 
+  // Mobile: Card-based layout
+  if (isMobile) {
+    return (
+      <div className="space-y-3">
+        {leads.map((lead) => (
+          <LeadMobileCard
+            key={lead.id}
+            lead={lead}
+            onViewDetails={onViewDetails}
+            onEditLead={onEditLead}
+            onDeleteLead={onDeleteLead}
+            isSelected={selectedLeads.includes(lead.id)}
+            onSelect={(id) => {
+              if (selectedLeads.includes(id)) {
+                onSelectionChange(selectedLeads.filter((sid) => sid !== id));
+              } else {
+                onSelectionChange([...selectedLeads, id]);
+              }
+            }}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  // Desktop: Table layout
   return (
     <div className="rounded-lg border bg-card overflow-hidden">
       <div className="overflow-x-auto">

@@ -225,32 +225,32 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       {/* Hero Section */}
-      <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-4 sm:gap-6 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
             Bem-vindo de volta! 👋
           </h1>
-          <p className="text-muted-foreground text-lg">
+          <p className="text-muted-foreground text-base sm:text-lg">
             Aqui está um resumo do seu CRM hoje.
           </p>
         </div>
         
-        <div className="flex gap-3">
-          <Button onClick={() => navigate('/leads')} className="gap-2 shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-shadow">
+        <div className="flex gap-2 sm:gap-3">
+          <Button onClick={() => navigate('/leads')} className="gap-2 flex-1 sm:flex-initial h-11 sm:h-10 shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-shadow">
             <Plus className="h-4 w-4" />
-            Novo Lead
+            <span className="sm:inline">Novo Lead</span>
           </Button>
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2 h-11 sm:h-10">
             <FileDown className="h-4 w-4" />
-            Exportar
+            <span className="hidden sm:inline">Exportar</span>
           </Button>
         </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Total de Leads"
           value={stats.totalLeads}
@@ -273,7 +273,7 @@ const Dashboard = () => {
           variant="success"
         />
         <StatCard
-          title="Taxa de Conversão"
+          title="Conversão"
           value={`${stats.conversionRate}%`}
           subtitle={`${stats.lost} desistências`}
           icon={TrendingUp}
@@ -282,7 +282,7 @@ const Dashboard = () => {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
         {[
           { icon: Plus, label: "Novo Lead", path: "/leads", color: "text-primary" },
           { icon: Calendar, label: "Agendar", path: "/calendar", color: "text-warning" },
@@ -292,11 +292,11 @@ const Dashboard = () => {
           <Button
             key={action.label}
             variant="outline"
-            className="h-20 flex-col gap-2 hover-lift group"
+            className="h-16 sm:h-20 flex-col gap-1 sm:gap-2 hover-lift group"
             onClick={() => navigate(action.path)}
           >
-            <action.icon className={cn("h-6 w-6 transition-transform group-hover:scale-110", action.color)} />
-            <span>{action.label}</span>
+            <action.icon className={cn("h-5 w-5 sm:h-6 sm:w-6 transition-transform group-hover:scale-110", action.color)} />
+            <span className="text-xs sm:text-sm">{action.label}</span>
           </Button>
         ))}
       </div>

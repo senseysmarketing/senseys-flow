@@ -5,10 +5,12 @@ import { Navigate, useLocation } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import WhatsAppFloat from "@/components/WhatsAppFloat";
+import BottomNav from "@/components/BottomNav";
 import { Button } from "@/components/ui/button";
 import { Sun, Moon, Bell, Search, Menu, Wrench, ArrowLeft } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -19,6 +21,7 @@ const Layout = ({ children }: LayoutProps) => {
   const { account, userFullName } = useAccount();
   const { isSupportMode, supportAccountName, exitSupportMode } = useSupportMode();
   const location = useLocation();
+  const isMobile = useIsMobile();
   const [isDark, setIsDark] = useState(true);
   const [isExiting, setIsExiting] = useState(false);
 
@@ -89,12 +92,12 @@ const Layout = ({ children }: LayoutProps) => {
           )}
 
           {/* Modern Header */}
-          <header className="h-16 border-b border-border/50 bg-background/80 backdrop-blur-xl sticky top-0 z-40">
-            <div className="h-full flex items-center justify-between px-4 lg:px-6">
+          <header className="h-14 sm:h-16 border-b border-border/50 bg-background/80 backdrop-blur-xl sticky top-0 z-40">
+            <div className="h-full flex items-center justify-between px-3 sm:px-4 lg:px-6">
               {/* Left side */}
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 sm:gap-4">
                 <SidebarTrigger className="lg:hidden">
-                  <Button variant="ghost" size="icon" className="h-9 w-9">
+                  <Button variant="ghost" size="icon" className="h-10 w-10 sm:h-9 sm:w-9">
                     <Menu className="h-5 w-5" />
                   </Button>
                 </SidebarTrigger>
@@ -103,11 +106,18 @@ const Layout = ({ children }: LayoutProps) => {
                   <h1 className="text-base font-semibold">{account?.company_name || account?.name || "Carregando..."}</h1>
                   <p className="text-xs text-muted-foreground">Logado como: {userFullName || "..."}</p>
                 </div>
+                
+                {/* Mobile: Show only company name, truncated */}
+                <div className="sm:hidden">
+                  <h1 className="text-sm font-semibold truncate max-w-[150px]">
+                    {account?.company_name || account?.name || "..."}
+                  </h1>
+                </div>
               </div>
 
               {/* Right side */}
-              <div className="flex items-center gap-2">
-                {/* Search button */}
+              <div className="flex items-center gap-1 sm:gap-2">
+                {/* Search button - hidden on mobile */}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -124,10 +134,10 @@ const Layout = ({ children }: LayoutProps) => {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-9 w-9 relative"
+                  className="h-10 w-10 sm:h-9 sm:w-9 relative"
                 >
-                  <Bell className="h-4 w-4" />
-                  <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary animate-pulse" />
+                  <Bell className="h-5 w-5 sm:h-4 sm:w-4" />
+                  <span className="absolute top-2 right-2 sm:top-1.5 sm:right-1.5 h-2 w-2 rounded-full bg-primary animate-pulse" />
                 </Button>
 
                 {/* Theme toggle */}
@@ -136,14 +146,14 @@ const Layout = ({ children }: LayoutProps) => {
                   size="icon"
                   onClick={toggleTheme}
                   className={cn(
-                    "h-9 w-9 transition-all duration-300",
+                    "h-10 w-10 sm:h-9 sm:w-9 transition-all duration-300",
                     !isDark && "bg-warning/10 text-warning"
                   )}
                 >
                   {isDark ? (
-                    <Sun className="h-4 w-4" />
+                    <Sun className="h-5 w-5 sm:h-4 sm:w-4" />
                   ) : (
-                    <Moon className="h-4 w-4" />
+                    <Moon className="h-5 w-5 sm:h-4 sm:w-4" />
                   )}
                 </Button>
               </div>
@@ -151,12 +161,16 @@ const Layout = ({ children }: LayoutProps) => {
           </header>
 
           {/* Main Content */}
-          <main className="flex-1 p-4 lg:p-6 overflow-auto custom-scrollbar">
+          <main className={cn(
+            "flex-1 p-4 lg:p-6 overflow-auto custom-scrollbar",
+            isMobile && "pb-20" // Space for bottom nav
+          )}>
             <div className="animate-in">{children}</div>
           </main>
         </div>
 
         <WhatsAppFloat />
+        <BottomNav />
       </div>
     </SidebarProvider>
   );
