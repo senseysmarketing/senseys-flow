@@ -875,69 +875,71 @@ const Leads = () => {
         </div>
       </div>
 
-      {/* Filters and Search */}
-      <div className="flex flex-col gap-3 sm:gap-4">
-        {/* Search and Filters Row */}
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar leads..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 h-11 sm:h-10"
-            />
-          </div>
-          <div className="flex gap-2 overflow-x-auto pb-1 sm:pb-0">
-            <LeadsFilters
-              statuses={statuses}
-              filters={filters}
-              onFiltersChange={setFilters}
-              uniqueOrigins={uniqueOrigins}
-              uniqueCampaigns={uniqueCampaigns}
-              uniqueAds={uniqueAds}
-              uniqueInterests={uniqueInterests}
-            />
-          </div>
-        </div>
-        
-        {/* View Toggle Row */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex gap-1 sm:gap-2">
-            <Button
-              variant={viewMode === 'kanban' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setViewMode('kanban')}
-              className="gap-1.5 h-9 px-3"
-            >
-              <Grid className="h-4 w-4" />
-              <span className="hidden sm:inline">Kanban</span>
-            </Button>
-            <Button
-              variant={viewMode === 'database' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setViewMode('database')}
-              className="gap-1.5 h-9 px-3"
-            >
-              <List className="h-4 w-4" />
-              <span className="hidden sm:inline">Lista</span>
-            </Button>
+      {/* Filters and Search - Sticky Header */}
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 -mx-4 px-4 sm:-mx-6 sm:px-6 pb-4 pt-1 border-b mb-4">
+        <div className="flex flex-col gap-3 sm:gap-4">
+          {/* Search and Filters Row */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar leads..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 h-11 sm:h-10"
+              />
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1 sm:pb-0">
+              <LeadsFilters
+                statuses={statuses}
+                filters={filters}
+                onFiltersChange={setFilters}
+                uniqueOrigins={uniqueOrigins}
+                uniqueCampaigns={uniqueCampaigns}
+                uniqueAds={uniqueAds}
+                uniqueInterests={uniqueInterests}
+              />
+            </div>
           </div>
           
-          <Button
-            variant={notificationsEnabled ? 'default' : 'outline'}
-            size="sm"
-            onClick={toggleNotifications}
-            className="gap-1.5 h-9"
-            title={notificationsEnabled ? 'Desativar notificações sonoras' : 'Ativar notificações sonoras'}
-          >
-            {notificationsEnabled ? (
-              <Bell className="h-4 w-4" />
-            ) : (
-              <BellOff className="h-4 w-4" />
-            )}
-            <span className="hidden sm:inline">{notificationsEnabled ? 'Sons On' : 'Sons Off'}</span>
-          </Button>
+          {/* View Toggle Row */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex gap-1 sm:gap-2">
+              <Button
+                variant={viewMode === 'kanban' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode('kanban')}
+                className="gap-1.5 h-9 px-3"
+              >
+                <Grid className="h-4 w-4" />
+                <span className="hidden sm:inline">Kanban</span>
+              </Button>
+              <Button
+                variant={viewMode === 'database' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode('database')}
+                className="gap-1.5 h-9 px-3"
+              >
+                <List className="h-4 w-4" />
+                <span className="hidden sm:inline">Lista</span>
+              </Button>
+            </div>
+            
+            <Button
+              variant={notificationsEnabled ? 'default' : 'outline'}
+              size="sm"
+              onClick={toggleNotifications}
+              className="gap-1.5 h-9"
+              title={notificationsEnabled ? 'Desativar notificações sonoras' : 'Ativar notificações sonoras'}
+            >
+              {notificationsEnabled ? (
+                <Bell className="h-4 w-4" />
+              ) : (
+                <BellOff className="h-4 w-4" />
+              )}
+              <span className="hidden sm:inline">{notificationsEnabled ? 'Sons On' : 'Sons Off'}</span>
+            </Button>
+          </div>
         </div>
       </div>
 

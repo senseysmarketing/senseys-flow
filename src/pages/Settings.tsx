@@ -6,23 +6,24 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Edit2, Trash2, Move, User, Settings as SettingsIcon, Palette, MessageCircle, Bell, Users, Webhook, Copy, Check, Building2, Shield, Shuffle, Target, Send } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Plus, Edit2, Trash2, Move, User, Settings as SettingsIcon, Palette, MessageCircle, Bell, Users, Webhook, Copy, Check, Building2, Shield, Shuffle, Target, Send, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
 import { toast } from "@/hooks/use-toast";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import { useIsMobile } from "@/hooks/use-mobile";
 import FollowUpSettings from "@/components/FollowUpSettings";
 import TeamManagement from "@/components/TeamManagement";
 import WhiteLabelSettings from "@/components/WhiteLabelSettings";
 import RolePermissionsManager from "@/components/RolePermissionsManager";
-
 import DistributionRulesManager from "@/components/DistributionRulesManager";
 import MetaFormScoringManager from "@/components/MetaFormScoringManager";
 import MetaEventMappingManager from "@/components/MetaEventMappingManager";
 import { NotificationSettings } from "@/components/NotificationSettings";
+
 interface Profile {
   id: string;
   full_name: string | null;
@@ -45,6 +46,7 @@ interface WhatsAppTemplate {
   is_active: boolean;
 }
 const PRESET_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "#22c55e", "#10b981", "#14b8a6", "#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#d946ef", "#ec4899", "#f43f5e", "#64748b", "#374151", "#111827"];
+
 interface Property {
   id: string;
   title: string;
@@ -52,9 +54,25 @@ interface Property {
   city: string | null;
 }
 
+type TabValue = 'profile' | 'team' | 'notifications' | 'statuses' | 'whatsapp' | 'followup' | 'distribution' | 'webhook' | 'qualification' | 'metacapi' | 'permissions' | 'whitelabel';
+
+interface NavItem {
+  value: TabValue;
+  label: string;
+  icon: React.ReactNode;
+  permission?: string;
+}
+
+interface NavGroup {
+  title: string;
+  items: NavItem[];
+}
+
 const SettingsPage = () => {
   const { user } = useAuth();
   const { hasPermission } = usePermissions();
+  const isMobile = useIsMobile();
+  const [activeTab, setActiveTab] = useState<TabValue>('profile');
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [leadStatuses, setLeadStatuses] = useState<LeadStatus[]>([]);
@@ -81,6 +99,43 @@ const SettingsPage = () => {
   const [copiedPayload, setCopiedPayload] = useState(false);
   const [copiedPropertyId, setCopiedPropertyId] = useState<string | null>(null);
   const [testingWebhook, setTestingWebhook] = useState(false);
+
+  // Navigation structure
+  const navGroups: NavGroup[] = [
+    {
+      title: "Geral",
+      items: [
+        { value: 'profile', label: 'Perfil', icon: <User className="h-4 w-4" /> },
+        { value: 'team', label: 'Equipe', icon: <Users className="h-4 w-4" /> },
+        { value: 'notifications', label: 'Notificações', icon: <Bell className="h-4 w-4" /> },
+      ]
+    },
+    {
+      title: "Gestão de Leads",
+      items: [
+        { value: 'statuses', label: 'Status dos Leads', icon: <Palette className="h-4 w-4" /> },
+        { value: 'followup', label: 'Follow-up', icon: <Bell className="h-4 w-4" /> },
+        { value: 'distribution', label: 'Distribuição', icon: <Shuffle className="h-4 w-4" /> },
+        { value: 'qualification', label: 'Qualificação', icon: <Target className="h-4 w-4" /> },
+      ]
+    },
+    {
+      title: "Integrações",
+      items: [
+        { value: 'whatsapp', label: 'WhatsApp', icon: <MessageCircle className="h-4 w-4" /> },
+        { value: 'webhook', label: 'Webhook', icon: <Webhook className="h-4 w-4" /> },
+        { value: 'metacapi', label: 'Eventos Meta', icon: <Send className="h-4 w-4" /> },
+      ]
+    },
+    {
+      title: "Avançado",
+      items: [
+        { value: 'permissions', label: 'Permissões', icon: <Shield className="h-4 w-4" />, permission: 'settings.manage' },
+        { value: 'whitelabel', label: 'White Label', icon: <Building2 className="h-4 w-4" /> },
+      ]
+    }
+  ];
+
   useEffect(() => {
     if (user) {
       fetchProfile();
@@ -119,6 +174,7 @@ const SettingsPage = () => {
       console.error("Erro ao buscar account_id:", error);
     }
   };
+
   const fetchProfile = async () => {
     try {
       const {
@@ -135,6 +191,7 @@ const SettingsPage = () => {
       console.error("Erro ao buscar perfil:", error);
     }
   };
+
   const fetchLeadStatuses = async () => {
     try {
       const {
@@ -156,6 +213,7 @@ const SettingsPage = () => {
       setLoading(false);
     }
   };
+
   const fetchWhatsAppTemplates = async () => {
     try {
       const {
@@ -175,6 +233,7 @@ const SettingsPage = () => {
       });
     }
   };
+
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -199,6 +258,7 @@ const SettingsPage = () => {
       });
     }
   };
+
   const handleStatusSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!statusForm.name.trim()) {
@@ -211,7 +271,6 @@ const SettingsPage = () => {
     }
     try {
       if (editingStatus) {
-        // Atualizar status existente
         const {
           error
         } = await supabase.from("lead_status").update({
@@ -224,10 +283,7 @@ const SettingsPage = () => {
           description: "Status atualizado com sucesso!"
         });
       } else {
-        // Criar novo status
         const maxPosition = Math.max(...leadStatuses.map(s => s.position), -1);
-
-        // Get user's account_id
         const {
           data: accountData,
           error: accountError
@@ -264,6 +320,7 @@ const SettingsPage = () => {
       });
     }
   };
+
   const handleDeleteStatus = async (statusId: string) => {
     try {
       const {
@@ -284,6 +341,7 @@ const SettingsPage = () => {
       });
     }
   };
+
   const handleTemplateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!templateForm.name.trim() || !templateForm.template.trim()) {
@@ -296,7 +354,6 @@ const SettingsPage = () => {
     }
     try {
       if (editingTemplate) {
-        // Atualizar template existente
         const {
           error
         } = await supabase.from("whatsapp_templates").update({
@@ -309,10 +366,7 @@ const SettingsPage = () => {
           description: "Mensagem atualizada com sucesso!"
         });
       } else {
-        // Criar novo template
         const maxPosition = Math.max(...whatsappTemplates.map(t => t.position), -1);
-
-        // Get user's account_id
         const {
           data: accountData,
           error: accountError
@@ -349,6 +403,7 @@ const SettingsPage = () => {
       });
     }
   };
+
   const handleDeleteTemplate = async (templateId: string) => {
     try {
       const {
@@ -369,20 +424,19 @@ const SettingsPage = () => {
       });
     }
   };
+
   const handleDragEnd = async (result: any) => {
     if (!result.destination) return;
     const items = Array.from(leadStatuses);
     const [reorderedItem] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, reorderedItem);
 
-    // Atualizar positions
     const updatedItems = items.map((item, index) => ({
       ...item,
       position: index
     }));
     setLeadStatuses(updatedItems);
 
-    // Salvar no banco
     try {
       const updates = updatedItems.map(item => supabase.from("lead_status").update({
         position: item.position
@@ -399,10 +453,10 @@ const SettingsPage = () => {
         title: "Erro",
         description: "Não foi possível atualizar a ordem."
       });
-      // Reverter mudanças em caso de erro
       fetchLeadStatuses();
     }
   };
+
   const openEditDialog = (status: LeadStatus) => {
     setEditingStatus(status);
     setStatusForm({
@@ -411,6 +465,7 @@ const SettingsPage = () => {
     });
     setIsStatusDialogOpen(true);
   };
+
   const openCreateDialog = () => {
     setEditingStatus(null);
     setStatusForm({
@@ -419,72 +474,79 @@ const SettingsPage = () => {
     });
     setIsStatusDialogOpen(true);
   };
+
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>;
   }
-  return <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Configurações</h1>
-        <p className="text-muted-foreground">Gerencie suas preferências do sistema</p>
+
+  // Render sidebar navigation
+  const renderSidebar = () => (
+    <nav className="w-56 shrink-0 space-y-6">
+      {navGroups.map((group) => {
+        const visibleItems = group.items.filter(item => 
+          !item.permission || hasPermission(item.permission)
+        );
+        
+        if (visibleItems.length === 0) return null;
+        
+        return (
+          <div key={group.title}>
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-3">
+              {group.title}
+            </h3>
+            <div className="space-y-1">
+              {visibleItems.map((item) => (
+                <Button
+                  key={item.value}
+                  variant={activeTab === item.value ? 'secondary' : 'ghost'}
+                  className={`w-full justify-start gap-3 h-10 ${
+                    activeTab === item.value ? 'bg-secondary font-medium' : ''
+                  }`}
+                  onClick={() => setActiveTab(item.value)}
+                >
+                  {item.icon}
+                  <span className="flex-1 text-left">{item.label}</span>
+                  {activeTab === item.value && (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </nav>
+  );
+
+  // Render mobile tabs
+  const renderMobileTabs = () => (
+    <ScrollArea className="w-full">
+      <div className="flex gap-2 pb-3">
+        {navGroups.flatMap(group => 
+          group.items.filter(item => !item.permission || hasPermission(item.permission))
+        ).map((item) => (
+          <Button
+            key={item.value}
+            variant={activeTab === item.value ? 'default' : 'outline'}
+            size="sm"
+            className="whitespace-nowrap gap-2"
+            onClick={() => setActiveTab(item.value)}
+          >
+            {item.icon}
+            {item.label}
+          </Button>
+        ))}
       </div>
+    </ScrollArea>
+  );
 
-      <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="profile">
-            <User className="h-4 w-4 mr-2" />
-            Perfil
-          </TabsTrigger>
-          <TabsTrigger value="team">
-            <Users className="h-4 w-4 mr-2" />
-            Equipe
-          </TabsTrigger>
-          <TabsTrigger value="statuses">
-            <SettingsIcon className="h-4 w-4 mr-2" />
-            Status dos Leads
-          </TabsTrigger>
-          <TabsTrigger value="whatsapp">
-            <MessageCircle className="h-4 w-4 mr-2" />
-            Mensagens WhatsApp
-          </TabsTrigger>
-          <TabsTrigger value="notifications">
-            <Bell className="h-4 w-4 mr-2" />
-            Notificações
-          </TabsTrigger>
-          <TabsTrigger value="followup">
-            <Bell className="h-4 w-4 mr-2" />
-            Follow-up
-          </TabsTrigger>
-          <TabsTrigger value="distribution">
-            <Shuffle className="h-4 w-4 mr-2" />
-            Distribuição
-          </TabsTrigger>
-          <TabsTrigger value="webhook">
-            <Webhook className="h-4 w-4 mr-2" />
-            Webhook
-          </TabsTrigger>
-          <TabsTrigger value="qualification">
-            <Target className="h-4 w-4 mr-2" />
-            Qualificação
-          </TabsTrigger>
-          <TabsTrigger value="metacapi">
-            <Send className="h-4 w-4 mr-2" />
-            Eventos Meta
-          </TabsTrigger>
-          {hasPermission('settings.manage') && (
-            <TabsTrigger value="permissions">
-              <Shield className="h-4 w-4 mr-2" />
-              Permissões
-            </TabsTrigger>
-          )}
-          <TabsTrigger value="whitelabel">
-            <Building2 className="h-4 w-4 mr-2" />
-            White Label
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="profile">
+  // Render content based on active tab
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'profile':
+        return (
           <Card>
             <CardHeader>
               <CardTitle>Informações Pessoais</CardTitle>
@@ -524,17 +586,16 @@ const SettingsPage = () => {
               </form>
             </CardContent>
           </Card>
-        </TabsContent>
+        );
 
-        <TabsContent value="team">
-          <TeamManagement />
-        </TabsContent>
+      case 'team':
+        return <TeamManagement />;
 
-        <TabsContent value="notifications">
-          <NotificationSettings />
-        </TabsContent>
+      case 'notifications':
+        return <NotificationSettings />;
 
-        <TabsContent value="statuses">
+      case 'statuses':
+        return (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -603,9 +664,10 @@ const SettingsPage = () => {
               </DragDropContext>
             </CardContent>
           </Card>
-        </TabsContent>
+        );
 
-        <TabsContent value="whatsapp">
+      case 'whatsapp':
+        return (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -694,10 +756,11 @@ const SettingsPage = () => {
                 </div>}
             </CardContent>
           </Card>
-        </TabsContent>
+        );
 
-        <TabsContent value="followup">
-          <div className="grid gap-6 md:grid-cols-2">
+      case 'followup':
+        return (
+          <div className="grid gap-6 lg:grid-cols-2">
             <FollowUpSettings />
             
             <Card>
@@ -762,10 +825,13 @@ const SettingsPage = () => {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
+        );
 
+      case 'distribution':
+        return <DistributionRulesManager />;
 
-        <TabsContent value="webhook">
+      case 'webhook':
+        return (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -804,135 +870,127 @@ const SettingsPage = () => {
                     {copiedUrl ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                   </Button>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  Esta URL é única para sua conta. Use-a para enviar leads de sistemas externos.
-                </p>
               </div>
 
               {/* Método e Headers */}
               <div className="space-y-3">
-                <Label className="text-base font-semibold">Como Enviar</Label>
-                <div className="bg-muted p-4 rounded-lg space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Badge>POST</Badge>
-                    <span className="text-sm font-mono">Content-Type: application/json</span>
-                  </div>
-                </div>
+                <Label className="text-base font-semibold">Método HTTP</Label>
+                <Badge variant="secondary" className="font-mono">POST</Badge>
               </div>
 
-              {/* Payload de Exemplo */}
+              {/* Exemplo de Payload */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <Label className="text-base font-semibold">Payload de Exemplo (JSON)</Label>
+                  <Label className="text-base font-semibold">Exemplo de Payload (JSON)</Label>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => {
                       const payload = JSON.stringify({
-                        name: "Maria Santos",
-                        phone: "11988776655",
-                        email: "maria@exemplo.com",
-                        origem: "Landing Page",
-                        form_id: "formulario-interesse",
-                        form_name: "Formulário de Interesse",
-                        form_fields: {
-                          objetivo: "Compra",
-                          prazo: "Até 3 meses",
-                          faixa_orcamento: "500k - 800k",
-                          tipo_imovel: "Apartamento",
-                          regiao_interesse: "Zona Sul"
-                        }
+                        name: "João Silva",
+                        phone: "11999999999",
+                        email: "joao@email.com",
+                        interesse: "Apartamento 3 quartos",
+                        origem: "Site",
+                        campanha: "Campanha Verão",
+                        anuncio: "Anúncio Principal",
+                        property_id: "uuid-do-imovel (opcional)"
                       }, null, 2);
                       navigator.clipboard.writeText(payload);
                       setCopiedPayload(true);
                       setTimeout(() => setCopiedPayload(false), 2000);
                       toast({
                         title: "Copiado!",
-                        description: "Payload copiado para a área de transferência",
+                        description: "Exemplo de payload copiado",
                       });
                     }}
                   >
-                    {copiedPayload ? <Check className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
+                    {copiedPayload ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
                     Copiar
                   </Button>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  Envie campos de formulário para qualificação automática. Os campos serão exibidos nos detalhes do lead e podem ter pontuação configurada na aba "Qualificação".
-                </p>
-                <pre className="bg-muted p-4 rounded-lg text-xs overflow-x-auto">
+                <pre className="bg-muted p-4 rounded-lg text-sm font-mono overflow-x-auto">
 {`{
-  "name": "Maria Santos",           // Obrigatório
-  "phone": "11988776655",           // Obrigatório
-  "email": "maria@exemplo.com",     // Opcional
-  "origem": "Landing Page",         // Opcional
-  "property_id": "uuid-do-imovel",  // Opcional - vincula ao imóvel
-  "form_id": "formulario-interesse",  // ID único do formulário
-  "form_name": "Formulário de Interesse", // Nome amigável
-  "form_fields": {                    // Campos do formulário
-    "objetivo": "Compra",
-    "prazo": "Até 3 meses",
-    "faixa_orcamento": "500k - 800k",
-    "tipo_imovel": "Apartamento",
-    "regiao_interesse": "Zona Sul"
-  }
+  "name": "João Silva",
+  "phone": "11999999999",
+  "email": "joao@email.com",
+  "interesse": "Apartamento 3 quartos",
+  "origem": "Site",
+  "campanha": "Campanha Verão",
+  "anuncio": "Anúncio Principal",
+  "property_id": "uuid-do-imovel (opcional)"
 }`}
                 </pre>
-                <p className="text-sm text-muted-foreground">
-                  ⚠️ Campos obrigatórios: <strong>name</strong> e <strong>phone</strong><br />
-                  💡 Após o primeiro lead, configure a pontuação na aba <strong>Qualificação</strong> → <strong>Formulários Webhook</strong>
-                </p>
               </div>
 
-              {/* Imóveis Disponíveis */}
+              {/* Campos Obrigatórios */}
+              <div className="space-y-3">
+                <Label className="text-base font-semibold">Campos Obrigatórios</Label>
+                <div className="flex flex-wrap gap-2">
+                  <Badge>name</Badge>
+                  <Badge>phone</Badge>
+                </div>
+              </div>
+
+              {/* Lista de Imóveis */}
               {properties.length > 0 && (
                 <div className="space-y-3">
-                  <Label className="text-base font-semibold flex items-center gap-2">
-                    <Building2 className="h-4 w-4" />
-                    Imóveis Disponíveis para Vincular
-                  </Label>
+                  <Label className="text-base font-semibold">IDs dos Imóveis Disponíveis</Label>
                   <p className="text-sm text-muted-foreground">
-                    Copie o ID do imóvel e adicione no campo <code className="bg-muted px-1 rounded">property_id</code> do payload para vincular automaticamente o lead ao imóvel.
+                    Use o campo <code className="bg-muted px-1 rounded">property_id</code> para vincular o lead a um imóvel específico
                   </p>
-                  <div className="border rounded-lg divide-y max-h-64 overflow-y-auto">
-                    {properties.map((property) => (
-                      <div key={property.id} className="p-3 flex items-center justify-between gap-2 hover:bg-muted/50">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{property.title}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {property.type}{property.city && ` • ${property.city}`}
-                          </p>
-                          <p className="text-xs font-mono text-muted-foreground truncate mt-1">
-                            {property.id}
-                          </p>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            navigator.clipboard.writeText(property.id);
-                            setCopiedPropertyId(property.id);
-                            setTimeout(() => setCopiedPropertyId(null), 2000);
-                            toast({
-                              title: "ID Copiado!",
-                              description: `ID do imóvel "${property.title}" copiado`,
-                            });
-                          }}
-                        >
-                          {copiedPropertyId === property.id ? (
-                            <Check className="h-4 w-4" />
-                          ) : (
-                            <Copy className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-                    ))}
+                  <div className="max-h-48 overflow-y-auto border rounded-lg">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted sticky top-0">
+                        <tr>
+                          <th className="text-left p-2">Imóvel</th>
+                          <th className="text-left p-2">ID</th>
+                          <th className="w-10 p-2"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {properties.map(property => (
+                          <tr key={property.id} className="border-t">
+                            <td className="p-2">
+                              <div className="font-medium">{property.title}</div>
+                              <div className="text-xs text-muted-foreground">{property.type} • {property.city}</div>
+                            </td>
+                            <td className="p-2 font-mono text-xs">{property.id.slice(0, 8)}...</td>
+                            <td className="p-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(property.id);
+                                  setCopiedPropertyId(property.id);
+                                  setTimeout(() => setCopiedPropertyId(null), 2000);
+                                  toast({
+                                    title: "ID copiado!",
+                                    description: `ID do imóvel "${property.title}" copiado`,
+                                  });
+                                }}
+                              >
+                                {copiedPropertyId === property.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}
 
-              {/* Botão de Teste */}
-              <div className="pt-4 border-t">
+              {/* Teste */}
+              <div className="space-y-3 pt-4 border-t">
+                <Label className="text-base font-semibold">Testar Webhook</Label>
+                <p className="text-sm text-muted-foreground">
+                  Clique no botão abaixo para enviar um lead de teste
+                </p>
                 <Button
+                  variant="outline"
+                  disabled={testingWebhook}
                   onClick={async () => {
                     setTestingWebhook(true);
                     try {
@@ -940,119 +998,82 @@ const SettingsPage = () => {
                         `https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/webhook-leads?account_id=${accountId}`,
                         {
                           method: 'POST',
-                          headers: {
-                            'Content-Type': 'application/json',
-                          },
+                          headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
                             name: "Lead de Teste",
-                            phone: "11999887766",
+                            phone: "11999999999",
                             email: "teste@webhook.com",
-                            conjunto: "Teste Webhook",
-                            campanha: "Teste",
-                            interesse: "Teste de Integração",
-                            observacoes: "Este é um lead de teste criado via webhook",
-                            origem: "Webhook Test",
-                            anuncio: "Teste"
+                            interesse: "Teste de integração",
+                            origem: "Webhook Test"
                           })
                         }
                       );
-
-                      const data = await response.json();
-
+                      
                       if (response.ok) {
                         toast({
-                          title: "✅ Webhook Funcionando!",
+                          title: "✅ Teste enviado!",
                           description: "Lead de teste criado com sucesso. Verifique na página de Leads.",
                         });
                       } else {
-                        toast({
-                          variant: "destructive",
-                          title: "Erro no Webhook",
-                          description: data.error || "Não foi possível criar o lead de teste",
-                        });
+                        throw new Error('Falha no teste');
                       }
                     } catch (error) {
                       toast({
                         variant: "destructive",
-                        title: "Erro de Conexão",
-                        description: "Não foi possível conectar ao webhook",
+                        title: "Erro no teste",
+                        description: "Não foi possível enviar o lead de teste",
                       });
                     } finally {
                       setTestingWebhook(false);
                     }
                   }}
-                  disabled={testingWebhook || !accountId}
-                  className="w-full"
                 >
-                  {testingWebhook ? "Testando..." : "🧪 Testar Webhook"}
+                  {testingWebhook ? "Enviando..." : "Enviar Lead de Teste"}
                 </Button>
-                <p className="text-xs text-muted-foreground mt-2 text-center">
-                  Isso criará um lead de teste na sua conta para verificar se o webhook está funcionando
-                </p>
-              </div>
-
-              {/* Respostas Esperadas */}
-              <div className="space-y-3">
-                <Label className="text-base font-semibold">Respostas do Webhook</Label>
-                <div className="space-y-2 text-sm">
-                  <div className="bg-green-50 dark:bg-green-950 p-3 rounded border border-green-200 dark:border-green-800">
-                    <p className="font-semibold text-green-900 dark:text-green-100">✅ Sucesso (201)</p>
-                    <pre className="text-xs mt-1 text-green-800 dark:text-green-200">
-{`{
-  "success": true,
-  "lead_id": "uuid-do-lead",
-  "message": "Lead criado com sucesso"
-}`}
-                    </pre>
-                  </div>
-                  
-                  <div className="bg-red-50 dark:bg-red-950 p-3 rounded border border-red-200 dark:border-red-800">
-                    <p className="font-semibold text-red-900 dark:text-red-100">❌ Erro (400/500)</p>
-                    <pre className="text-xs mt-1 text-red-800 dark:text-red-200">
-{`{
-  "error": "Mensagem de erro",
-  "details": "Detalhes específicos"
-}`}
-                    </pre>
-                  </div>
-                </div>
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        );
 
-        <TabsContent value="permissions">
-          <RolePermissionsManager />
-        </TabsContent>
+      case 'qualification':
+        return <MetaFormScoringManager />;
 
-        <TabsContent value="distribution">
-          <DistributionRulesManager />
-        </TabsContent>
+      case 'metacapi':
+        return <MetaEventMappingManager />;
 
-        <TabsContent value="qualification">
-          <Card>
-            <CardHeader>
-              <CardTitle>Qualificação Automática de Leads</CardTitle>
-              <CardDescription>
-                Configure regras de pontuação para qualificar automaticamente leads do Meta Lead Ads
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <MetaFormScoringManager />
-            </CardContent>
-          </Card>
-        </TabsContent>
+      case 'permissions':
+        return hasPermission('settings.manage') ? <RolePermissionsManager /> : null;
 
-        <TabsContent value="metacapi">
-          <MetaEventMappingManager />
-        </TabsContent>
+      case 'whitelabel':
+        return <WhiteLabelSettings />;
 
-        <TabsContent value="whitelabel">
-          <WhiteLabelSettings />
-        </TabsContent>
-      </Tabs>
+      default:
+        return null;
+    }
+  };
 
-      {/* Dialog para criar/editar status */}
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Configurações</h1>
+        <p className="text-muted-foreground">Gerencie suas preferências do sistema</p>
+      </div>
+
+      {/* Mobile: horizontal scrolling tabs */}
+      {isMobile && renderMobileTabs()}
+
+      {/* Desktop: sidebar + content layout */}
+      <div className={`${isMobile ? '' : 'flex gap-8'}`}>
+        {/* Desktop sidebar */}
+        {!isMobile && renderSidebar()}
+
+        {/* Content area */}
+        <div className={`${isMobile ? '' : 'flex-1 min-w-0 max-w-4xl'}`}>
+          {renderContent()}
+        </div>
+      </div>
+
+      {/* Status Dialog */}
       <Dialog open={isStatusDialogOpen} onOpenChange={setIsStatusDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -1062,33 +1083,29 @@ const SettingsPage = () => {
           </DialogHeader>
           <form onSubmit={handleStatusSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="status-name">Nome do Status *</Label>
-              <Input id="status-name" value={statusForm.name} onChange={e => setStatusForm({
-              ...statusForm,
-              name: e.target.value
-            })} placeholder="Ex: Qualificado" />
+              <Label htmlFor="status-name">Nome do Status</Label>
+              <Input
+                id="status-name"
+                value={statusForm.name}
+                onChange={(e) => setStatusForm({ ...statusForm, name: e.target.value })}
+                placeholder="Ex: Em Negociação"
+              />
             </div>
-
+            
             <div className="space-y-2">
               <Label>Cor</Label>
-              <div className="grid grid-cols-10 gap-2">
-                {PRESET_COLORS.map(color => <button key={color} type="button" className={`w-8 h-8 rounded-full border-2 ${statusForm.color === color ? "border-foreground" : "border-transparent"}`} style={{
-                backgroundColor: color
-              }} onClick={() => setStatusForm({
-                ...statusForm,
-                color
-              })} />)}
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <Input type="color" value={statusForm.color} onChange={e => setStatusForm({
-                ...statusForm,
-                color: e.target.value
-              })} className="w-12 h-8 p-0 border-0" />
-                <Input value={statusForm.color} onChange={e => setStatusForm({
-                ...statusForm,
-                color: e.target.value
-              })} placeholder="#5a5f65" className="font-mono text-sm" />
+              <div className="flex flex-wrap gap-2">
+                {PRESET_COLORS.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    className={`w-8 h-8 rounded-full border-2 transition-all ${
+                      statusForm.color === color ? 'border-foreground scale-110' : 'border-transparent'
+                    }`}
+                    style={{ backgroundColor: color }}
+                    onClick={() => setStatusForm({ ...statusForm, color })}
+                  />
+                ))}
               </div>
             </div>
 
@@ -1097,14 +1114,14 @@ const SettingsPage = () => {
                 Cancelar
               </Button>
               <Button type="submit">
-                {editingStatus ? "Atualizar" : "Criar"}
+                {editingStatus ? "Salvar" : "Criar"}
               </Button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog para criar/editar templates WhatsApp */}
+      {/* WhatsApp Template Dialog */}
       <Dialog open={isWhatsAppDialogOpen} onOpenChange={setIsWhatsAppDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -1114,21 +1131,26 @@ const SettingsPage = () => {
           </DialogHeader>
           <form onSubmit={handleTemplateSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="template-name">Nome da Mensagem *</Label>
-              <Input id="template-name" value={templateForm.name} onChange={e => setTemplateForm({
-              ...templateForm,
-              name: e.target.value
-            })} placeholder="Ex: Primeira mensagem" />
+              <Label htmlFor="template-name">Nome da Mensagem</Label>
+              <Input
+                id="template-name"
+                value={templateForm.name}
+                onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
+                placeholder="Ex: Boas-vindas"
+              />
             </div>
-
+            
             <div className="space-y-2">
-              <Label htmlFor="template-text">Mensagem *</Label>
-              <Textarea id="template-text" value={templateForm.template} onChange={e => setTemplateForm({
-              ...templateForm,
-              template: e.target.value
-            })} placeholder="Digite sua mensagem aqui. Use {nome} para o nome do lead e {interesse} para o interesse." rows={4} />
+              <Label htmlFor="template-content">Mensagem</Label>
+              <Textarea
+                id="template-content"
+                value={templateForm.template}
+                onChange={(e) => setTemplateForm({ ...templateForm, template: e.target.value })}
+                placeholder="Olá {nome}! ..."
+                rows={4}
+              />
               <p className="text-xs text-muted-foreground">
-                Variáveis disponíveis: {"{nome}"} e {"{interesse}"}
+                Use {"{nome}"} para o nome do lead e {"{interesse}"} para o interesse
               </p>
             </div>
 
@@ -1137,12 +1159,14 @@ const SettingsPage = () => {
                 Cancelar
               </Button>
               <Button type="submit">
-                {editingTemplate ? "Atualizar" : "Criar"}
+                {editingTemplate ? "Salvar" : "Criar"}
               </Button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
-    </div>;
+    </div>
+  );
 };
+
 export default SettingsPage;
