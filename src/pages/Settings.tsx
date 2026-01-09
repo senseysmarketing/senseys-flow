@@ -4,11 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, Edit2, Trash2, Move, User, Settings as SettingsIcon, Palette, MessageCircle, Bell, Users, Webhook, Copy, Check, Building2, Shield, Shuffle, Target, Send, ChevronRight } from "lucide-react";
+import { Plus, Edit2, Trash2, Move, User, Settings as SettingsIcon, Palette, MessageCircle, Bell, Users, Webhook, Copy, Check, Building2, Shield, Shuffle, Target, Send } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -512,71 +513,62 @@ const SettingsPage = () => {
     { value: 'avancado', label: 'Avançado' },
   ];
 
-  // Render desktop two-level tabs
+  // Render desktop two-level tabs using Tabs component (same pattern as Reports)
   const renderDesktopTabs = () => (
     <div className="space-y-4">
-      {/* Category Tabs (Level 1) */}
-      <div className="flex gap-2 border-b pb-3">
-        {categories.map((cat) => {
-          // Check if category has any visible items
-          const group = navGroups.find(g => g.category === cat.value);
-          const hasVisibleItems = group?.items.some(item => 
-            !item.permission || hasPermission(item.permission)
-          );
-          if (!hasVisibleItems) return null;
-          
-          return (
-            <Button
-              key={cat.value}
-              variant={activeCategory === cat.value ? 'default' : 'outline'}
-              size="sm"
-              className="gap-2"
-              onClick={() => handleCategoryChange(cat.value)}
-            >
-              {cat.label}
-            </Button>
-          );
-        })}
-      </div>
+      {/* Category Tabs (Level 1) - Using Tabs component */}
+      <Tabs value={activeCategory} onValueChange={(v) => handleCategoryChange(v as CategoryValue)} className="w-full">
+        <TabsList className="flex-wrap">
+          {categories.map((cat) => {
+            const group = navGroups.find(g => g.category === cat.value);
+            const hasVisibleItems = group?.items.some(item => 
+              !item.permission || hasPermission(item.permission)
+            );
+            if (!hasVisibleItems) return null;
+            
+            return (
+              <TabsTrigger key={cat.value} value={cat.value}>
+                {cat.label}
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
+      </Tabs>
 
-      {/* Sub-tabs (Level 2) */}
-      <div className="flex gap-2 flex-wrap">
-        {currentCategoryItems.map((item) => (
-          <Button
-            key={item.value}
-            variant={activeTab === item.value ? 'secondary' : 'ghost'}
-            size="sm"
-            className="gap-2"
-            onClick={() => setActiveTab(item.value)}
-          >
-            {item.icon}
-            {item.label}
-          </Button>
-        ))}
-      </div>
+      {/* Sub-tabs (Level 2) - Using Tabs component */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)} className="w-full">
+        <TabsList className="flex-wrap">
+          {currentCategoryItems.map((item) => (
+            <TabsTrigger key={item.value} value={item.value} className="gap-2">
+              {item.icon}
+              {item.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
     </div>
   );
 
   // Render mobile tabs (keep simple flat list)
   const renderMobileTabs = () => (
-    <ScrollArea className="w-full">
-      <div className="flex gap-2 pb-3">
-        {navGroups.flatMap(group => 
-          group.items.filter(item => !item.permission || hasPermission(item.permission))
-        ).map((item) => (
-          <Button
-            key={item.value}
-            variant={activeTab === item.value ? 'default' : 'outline'}
-            size="sm"
-            className="whitespace-nowrap gap-2"
-            onClick={() => setActiveTab(item.value)}
-          >
-            {item.icon}
-            {item.label}
-          </Button>
-        ))}
-      </div>
-    </ScrollArea>
+    <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)} className="w-full">
+      <ScrollArea className="w-full">
+        <TabsList className="inline-flex w-max">
+          {navGroups.flatMap(group => 
+            group.items.filter(item => !item.permission || hasPermission(item.permission))
+          ).map((item) => (
+            <TabsTrigger
+              key={item.value}
+              value={item.value}
+              className="whitespace-nowrap gap-2"
+            >
+              {item.icon}
+              {item.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </ScrollArea>
+    </Tabs>
   );
 
   // Render content based on active tab
