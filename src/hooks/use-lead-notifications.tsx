@@ -37,35 +37,14 @@ export const useLeadNotifications = (onNewLead?: () => void, enabled: boolean = 
     }
   }, []);
 
-  // Função para mostrar notificação do navegador
-  const showBrowserNotification = useCallback((leadName: string) => {
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification('Novo Lead!', {
-        body: `${leadName} foi adicionado ao CRM`,
-        icon: '/favicon.ico',
-        badge: '/favicon.ico'
-      });
-    }
-  }, []);
-
-  // Solicitar permissão para notificações
-  const requestNotificationPermission = useCallback(async () => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      await Notification.requestPermission();
-    }
-  }, []);
-
   useEffect(() => {
     if (!user || !enabled) {
       return;
     }
 
-    // Solicitar permissão para notificações quando o hook for usado
-    requestNotificationPermission();
-
     // Configurar listener para mudanças em tempo real na tabela leads
     const channel = supabase
-      .channel(`leads-changes-${user.id}`) // Nome único do canal para evitar conflitos
+      .channel(`leads-changes-${user.id}`)
       .on(
         'postgres_changes',
         {
@@ -88,9 +67,6 @@ export const useLeadNotifications = (onNewLead?: () => void, enabled: boolean = 
             duration: 5000,
           });
           
-          // Mostrar notificação do navegador
-          showBrowserNotification(newLead.name);
-          
           // Chamar callback se fornecido
           if (onNewLead) {
             onNewLead();
@@ -103,11 +79,9 @@ export const useLeadNotifications = (onNewLead?: () => void, enabled: boolean = 
     return () => {
       supabase.removeChannel(channel);
     };
-  // Removidas dependências desnecessárias que causavam recriação do listener
   }, [user, enabled]);
 
   return {
-    playNotificationSound,
-    requestNotificationPermission
+    playNotificationSound
   };
 };
