@@ -293,15 +293,35 @@ const Leads = () => {
       // Use the first status if no status selected
       const statusId = newLead.status_id || (statuses.length > 0 ? statuses[0].id : null);
 
-      const { error } = await supabase
+      const { data: insertedLead, error } = await supabase
         .from('leads')
         .insert([{
           ...newLead,
           status_id: statusId,
           account_id: profile.account_id
-        }]);
+        }])
+        .select('id')
+        .single();
 
       if (error) throw error;
+
+      // Send email notification for manual leads
+      try {
+        await supabase.functions.invoke('notify-new-lead', {
+          body: {
+            lead_id: insertedLead.id,
+            lead_name: newLead.name,
+            lead_phone: newLead.phone,
+            lead_email: newLead.email,
+            lead_temperature: newLead.temperature || 'cold',
+            lead_origem: newLead.origem || 'Manual',
+            property_name: null,
+            account_id: profile.account_id,
+          }
+        });
+      } catch (notifyError) {
+        console.error('Notification error:', notifyError);
+      }
 
       toast({
         title: "Lead criado com sucesso!",
