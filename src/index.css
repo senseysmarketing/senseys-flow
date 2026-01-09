@@ -230,6 +230,13 @@
     animation: pulse-whatsapp 2s infinite;
   }
 
+  /* Mobile: position above BottomNav */
+  @media (max-width: 768px) {
+    .whatsapp-float {
+      bottom: 90px;
+    }
+  }
+
   .whatsapp-float:hover {
     transform: scale(1.1);
     box-shadow: 0 6px 30px rgba(37, 211, 102, 0.5);

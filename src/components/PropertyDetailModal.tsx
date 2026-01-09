@@ -239,28 +239,111 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] p-0 gap-0 overflow-hidden">
+      <DialogContent className="max-w-4xl w-[95vw] md:w-auto max-h-[90vh] p-0 gap-0 overflow-hidden">
         <VisuallyHidden.Root>
           <DialogTitle>Detalhes do Imóvel: {property.title}</DialogTitle>
         </VisuallyHidden.Root>
 
         {/* Header */}
-        <div className="relative bg-gradient-to-br from-primary/20 via-primary/10 to-transparent p-6 pt-8">
-          <div className="flex items-start gap-4">
-            <div className="w-16 h-16 rounded-xl bg-primary/20 border-2 border-primary/30 flex items-center justify-center">
-              <Building2 className="h-8 w-8 text-primary" />
+        <div className="relative bg-gradient-to-br from-primary/20 via-primary/10 to-transparent p-4 md:p-6 pt-6 md:pt-8">
+          {/* Mobile action buttons - top right */}
+          <div className="flex items-center justify-end gap-2 mb-3 md:hidden">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                onEdit?.(property);
+                onClose();
+              }}
+            >
+              <Edit2 className="h-4 w-4" />
+            </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <CheckCircle className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem 
+                  onClick={() => handleStatusChange("disponivel")}
+                  className="text-green-600"
+                >
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Disponível
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => handleStatusChange("reservado")}
+                  className="text-yellow-600"
+                >
+                  <BookmarkCheck className="h-4 w-4 mr-2" />
+                  Reservado
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={() => handleStatusChange("vendido")}
+                  className="text-blue-600"
+                >
+                  <DollarSign className="h-4 w-4 mr-2" />
+                  Vendido
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => handleStatusChange("alugado")}
+                  className="text-purple-600"
+                >
+                  <Key className="h-4 w-4 mr-2" />
+                  Alugado
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={() => handleStatusChange("inativo")}
+                  className="text-gray-600"
+                >
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Inativo
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" className="text-destructive">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Remover imóvel?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Esta ação não pode ser desfeita. Todos os leads vinculados perderão a associação com este imóvel.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDelete}>
+                    Remover
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+
+          <div className="flex items-start gap-3 md:gap-4">
+            <div className="w-12 h-12 md:w-16 md:h-16 rounded-xl bg-primary/20 border-2 border-primary/30 flex items-center justify-center flex-shrink-0">
+              <Building2 className="h-6 w-6 md:h-8 md:w-8 text-primary" />
             </div>
             <div className="flex-1 min-w-0">
-              <h2 className="text-2xl font-bold text-foreground truncate">{property.title}</h2>
-              <div className="flex items-center gap-2 mt-2 flex-wrap">
-                <Badge className={`${statusInfo.color} text-white`}>
+              <h2 className="text-lg md:text-2xl font-bold text-foreground truncate">{property.title}</h2>
+              <div className="flex items-center gap-2 mt-1 md:mt-2 flex-wrap">
+                <Badge className={`${statusInfo.color} text-white text-xs`}>
                   {statusInfo.label}
                 </Badge>
-                <Badge variant="outline">
+                <Badge variant="outline" className="text-xs">
                   {TYPE_LABELS[property.type] || property.type}
                 </Badge>
                 {property.neighborhood && property.city && (
-                  <span className="text-sm text-muted-foreground flex items-center gap-1">
+                  <span className="text-xs md:text-sm text-muted-foreground flex items-center gap-1">
                     <MapPin className="h-3 w-3" />
                     {property.neighborhood}, {property.city}
                   </span>
@@ -268,8 +351,8 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex items-center gap-2">
+            {/* Desktop action buttons */}
+            <div className="hidden md:flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -354,80 +437,80 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
             </div>
           </div>
 
-          {/* Property specs */}
-          <div className="flex items-center gap-4 mt-4 text-sm text-muted-foreground">
+          {/* Property specs - horizontal scroll on mobile */}
+          <div className="flex items-center gap-3 md:gap-4 mt-3 md:mt-4 text-xs md:text-sm text-muted-foreground overflow-x-auto pb-1">
             {property.area_m2 && (
-              <span className="flex items-center gap-1">
-                <Ruler className="h-4 w-4" /> {property.area_m2}m²
+              <span className="flex items-center gap-1 whitespace-nowrap">
+                <Ruler className="h-3 w-3 md:h-4 md:w-4" /> {property.area_m2}m²
               </span>
             )}
             {property.bedrooms && (
-              <span className="flex items-center gap-1">
-                <Bed className="h-4 w-4" /> {property.bedrooms} quartos
+              <span className="flex items-center gap-1 whitespace-nowrap">
+                <Bed className="h-3 w-3 md:h-4 md:w-4" /> {property.bedrooms} quartos
               </span>
             )}
             {property.bathrooms && (
-              <span className="flex items-center gap-1">
-                <Bath className="h-4 w-4" /> {property.bathrooms} banheiros
+              <span className="flex items-center gap-1 whitespace-nowrap">
+                <Bath className="h-3 w-3 md:h-4 md:w-4" /> {property.bathrooms} banheiros
               </span>
             )}
             {property.parking_spots && (
-              <span className="flex items-center gap-1">
-                <Car className="h-4 w-4" /> {property.parking_spots} vagas
+              <span className="flex items-center gap-1 whitespace-nowrap">
+                <Car className="h-3 w-3 md:h-4 md:w-4" /> {property.parking_spots} vagas
               </span>
             )}
           </div>
 
           {/* Prices */}
-          <div className="flex items-center gap-6 mt-4">
+          <div className="flex items-center gap-4 md:gap-6 mt-3 md:mt-4">
             {property.sale_price && (
               <div>
-                <p className="text-xs text-muted-foreground">Venda</p>
-                <p className="text-xl font-bold text-primary">{formatPrice(property.sale_price)}</p>
+                <p className="text-[10px] md:text-xs text-muted-foreground">Venda</p>
+                <p className="text-lg md:text-xl font-bold text-primary">{formatPrice(property.sale_price)}</p>
               </div>
             )}
             {property.rent_price && (
               <div>
-                <p className="text-xs text-muted-foreground">Aluguel</p>
-                <p className="text-xl font-bold text-primary">{formatPrice(property.rent_price)}/mês</p>
+                <p className="text-[10px] md:text-xs text-muted-foreground">Aluguel</p>
+                <p className="text-lg md:text-xl font-bold text-primary">{formatPrice(property.rent_price)}/mês</p>
               </div>
             )}
           </div>
         </div>
 
-        <ScrollArea className="flex-1 max-h-[calc(90vh-280px)]">
-          <div className="p-6 space-y-6">
+        <ScrollArea className="flex-1 max-h-[calc(90vh-320px)] md:max-h-[calc(90vh-280px)]">
+          <div className="p-4 md:p-6 space-y-4 md:space-y-6">
             {/* KPIs */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              <div className="bg-card rounded-lg border p-3 text-center">
-                <Users className="h-5 w-5 mx-auto text-primary mb-1" />
-                <p className="text-2xl font-bold">{totalLeads}</p>
-                <p className="text-xs text-muted-foreground">Total Leads</p>
+            <div className="grid grid-cols-3 md:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3">
+              <div className="bg-card rounded-lg border p-2 md:p-3 text-center">
+                <Users className="h-4 w-4 md:h-5 md:w-5 mx-auto text-primary mb-1" />
+                <p className="text-lg md:text-2xl font-bold">{totalLeads}</p>
+                <p className="text-[10px] md:text-xs text-muted-foreground">Total Leads</p>
               </div>
-              <div className="bg-card rounded-lg border p-3 text-center">
-                <Activity className="h-5 w-5 mx-auto text-orange-500 mb-1" />
-                <p className="text-2xl font-bold">{hotLeads}</p>
-                <p className="text-xs text-muted-foreground">Leads Quentes</p>
+              <div className="bg-card rounded-lg border p-2 md:p-3 text-center">
+                <Activity className="h-4 w-4 md:h-5 md:w-5 mx-auto text-orange-500 mb-1" />
+                <p className="text-lg md:text-2xl font-bold">{hotLeads}</p>
+                <p className="text-[10px] md:text-xs text-muted-foreground">Quentes</p>
               </div>
-              <div className="bg-card rounded-lg border p-3 text-center">
-                <CalendarDays className="h-5 w-5 mx-auto text-blue-500 mb-1" />
-                <p className="text-2xl font-bold">{events.length}</p>
-                <p className="text-xs text-muted-foreground">Visitas</p>
+              <div className="bg-card rounded-lg border p-2 md:p-3 text-center">
+                <CalendarDays className="h-4 w-4 md:h-5 md:w-5 mx-auto text-blue-500 mb-1" />
+                <p className="text-lg md:text-2xl font-bold">{events.length}</p>
+                <p className="text-[10px] md:text-xs text-muted-foreground">Visitas</p>
               </div>
-              <div className="bg-card rounded-lg border p-3 text-center">
-                <Clock className="h-5 w-5 mx-auto text-yellow-500 mb-1" />
-                <p className="text-2xl font-bold">{daysOnMarket}</p>
-                <p className="text-xs text-muted-foreground">Dias no Mercado</p>
+              <div className="bg-card rounded-lg border p-2 md:p-3 text-center">
+                <Clock className="h-4 w-4 md:h-5 md:w-5 mx-auto text-yellow-500 mb-1" />
+                <p className="text-lg md:text-2xl font-bold">{daysOnMarket}</p>
+                <p className="text-[10px] md:text-xs text-muted-foreground">Dias</p>
               </div>
-              <div className="bg-card rounded-lg border p-3 text-center">
-                <DollarSign className="h-5 w-5 mx-auto text-green-500 mb-1" />
-                <p className="text-2xl font-bold">{cpl ? formatPrice(cpl) : "-"}</p>
-                <p className="text-xs text-muted-foreground">CPL</p>
+              <div className="bg-card rounded-lg border p-2 md:p-3 text-center">
+                <DollarSign className="h-4 w-4 md:h-5 md:w-5 mx-auto text-green-500 mb-1" />
+                <p className="text-lg md:text-2xl font-bold truncate">{cpl ? formatPrice(cpl) : "-"}</p>
+                <p className="text-[10px] md:text-xs text-muted-foreground">CPL</p>
               </div>
-              <div className="bg-card rounded-lg border p-3 text-center">
-                <TrendingUp className="h-5 w-5 mx-auto text-purple-500 mb-1" />
-                <p className="text-2xl font-bold">{conversionRate}%</p>
-                <p className="text-xs text-muted-foreground">Conversão</p>
+              <div className="bg-card rounded-lg border p-2 md:p-3 text-center">
+                <TrendingUp className="h-4 w-4 md:h-5 md:w-5 mx-auto text-purple-500 mb-1" />
+                <p className="text-lg md:text-2xl font-bold">{conversionRate}%</p>
+                <p className="text-[10px] md:text-xs text-muted-foreground">Conversão</p>
               </div>
             </div>
 
@@ -460,13 +543,13 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
                   {brokerStats.map((broker) => (
                     <div 
                       key={broker.user_id}
-                      className="flex items-center justify-between p-2 rounded-lg bg-muted/50"
+                      className="flex flex-col md:flex-row md:items-center md:justify-between p-2 rounded-lg bg-muted/50 gap-2"
                     >
                       <div className="flex items-center gap-3">
                         <AvatarFallbackColored name={broker.full_name || "?"} size="sm" />
-                        <span className="font-medium">{broker.full_name}</span>
+                        <span className="font-medium text-sm">{broker.full_name}</span>
                       </div>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-3 md:gap-4 text-xs md:text-sm text-muted-foreground ml-10 md:ml-0">
                         <span>{broker.lead_count} leads</span>
                         <span className="text-orange-500">{broker.hot_leads} quentes</span>
                         <span className="text-green-500">{broker.closed_leads} fechados</span>
@@ -488,17 +571,17 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
                   {events.map((event) => (
                     <div 
                       key={event.id}
-                      className="flex items-center justify-between p-2 rounded-lg bg-muted/50"
+                      className="flex flex-col md:flex-row md:items-center md:justify-between p-2 rounded-lg bg-muted/50 gap-1 md:gap-2"
                     >
                       <div>
-                        <p className="font-medium">{event.title}</p>
+                        <p className="font-medium text-sm">{event.title}</p>
                         {event.lead && (
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-xs text-muted-foreground">
                             Lead: {event.lead.name}
                           </p>
                         )}
                       </div>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         {format(new Date(event.start_time), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                       </p>
                     </div>
@@ -522,29 +605,24 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
                   {leads.map((lead) => (
                     <div 
                       key={lead.id}
-                      className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                      className="flex flex-col md:flex-row md:items-center md:justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer gap-2"
                       onClick={() => onOpenLead?.(lead.id)}
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
                         <AvatarFallbackColored name={lead.name} size="sm" />
-                        <div>
-                          <p className="font-medium">{lead.name}</p>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-sm truncate">{lead.name}</p>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Phone className="h-3 w-3" />
-                            {lead.phone}
-                            {lead.email && (
-                              <>
-                                <Mail className="h-3 w-3 ml-2" />
-                                {lead.email}
-                              </>
-                            )}
+                            <Phone className="h-3 w-3 flex-shrink-0" />
+                            <span className="truncate">{lead.phone}</span>
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 ml-10 md:ml-0">
                         {lead.lead_status && (
                           <Badge 
                             variant="outline"
+                            className="text-xs"
                             style={{ 
                               backgroundColor: `${lead.lead_status.color}20`,
                               borderColor: lead.lead_status.color,
@@ -577,7 +655,7 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
             )}
 
             {/* Timestamps */}
-            <div className="flex items-center justify-between text-xs text-muted-foreground pt-4 border-t">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-1 text-xs text-muted-foreground pt-4 border-t">
               <span>
                 Cadastrado em {format(new Date(property.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
               </span>
