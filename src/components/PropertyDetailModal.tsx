@@ -239,7 +239,7 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl w-[95vw] md:w-auto max-h-[90vh] p-0 gap-0 overflow-hidden">
+      <DialogContent className="max-w-5xl w-[95vw] md:w-[90vw] lg:w-[900px] max-h-[90vh] p-0 gap-0 overflow-hidden">
         <VisuallyHidden.Root>
           <DialogTitle>Detalhes do Imóvel: {property.title}</DialogTitle>
         </VisuallyHidden.Root>
