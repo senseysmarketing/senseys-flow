@@ -210,10 +210,10 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // Send push notifications to all account users
+    // Send push notifications via OneSignal to all account users
     try {
-      console.log("Sending push notifications to account:", account_id);
-      const pushResponse = await fetch(`${supabaseUrl}/functions/v1/send-push-notification`, {
+      console.log("Sending OneSignal push notifications to account:", account_id);
+      const pushResponse = await fetch(`${supabaseUrl}/functions/v1/send-onesignal-notification`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -224,21 +224,20 @@ const handler = async (req: Request): Promise<Response> => {
           title: "🎉 Novo Lead!",
           body: `${lead_name} foi adicionado ao CRM`,
           url: "/leads",
-          tag: "new-lead",
           data: { lead_id }
         }),
       });
 
       if (pushResponse.ok) {
         const pushResult = await pushResponse.json();
-        notifications.push = pushResult.sent || 0;
-        console.log("Push notifications sent:", pushResult);
+        notifications.push = pushResult.recipients || pushResult.sent || 0;
+        console.log("OneSignal notifications sent:", pushResult);
       } else {
         const error = await pushResponse.text();
-        console.error("Push notification error:", error);
+        console.error("OneSignal notification error:", error);
       }
     } catch (pushError) {
-      console.error("Error sending push notifications:", pushError);
+      console.error("Error sending OneSignal notifications:", pushError);
     }
 
     console.log(`Notifications sent - Email: ${notifications.email}, Push: ${notifications.push}`);

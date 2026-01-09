@@ -9,20 +9,20 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { useNotificationPreferences } from '@/hooks/use-notification-preferences';
 import { useAuth } from '@/hooks/use-auth';
-import { usePushSubscription } from '@/hooks/use-push-subscription';
+import { useOneSignal } from '@/hooks/use-onesignal';
 
 export const NotificationSettings = () => {
   const { user } = useAuth();
   const { preferences, loading, saving, savePreferences } = useNotificationPreferences();
   const { 
-    isSupported: isPushSupported, 
+    isInitialized: isPushSupported, 
     isSubscribed: isPushSubscribed, 
     isLoading: isPushLoading,
     permissionState,
     subscribe: subscribeToPush, 
     unsubscribe: unsubscribeFromPush,
     sendTestNotification
-  } = usePushSubscription();
+  } = useOneSignal();
   
   const [localPrefs, setLocalPrefs] = useState(preferences);
   const [browserPermission, setBrowserPermission] = useState<NotificationPermission>('default');
@@ -144,22 +144,21 @@ export const NotificationSettings = () => {
         </Card>
       )}
 
-      {/* Web Push Notifications */}
-      {isPushSupported && (
-        <Card className="border-primary/30">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Send className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <CardTitle className="text-lg">Push Notifications</CardTitle>
-                <CardDescription>
-                  Receba notificações mesmo com o navegador fechado
-                </CardDescription>
-              </div>
+      {/* OneSignal Push Notifications */}
+      <Card className="border-primary/30">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <Send className="h-5 w-5 text-primary" />
             </div>
-          </CardHeader>
+            <div>
+              <CardTitle className="text-lg">Push Notifications</CardTitle>
+              <CardDescription>
+                Receba notificações em tempo real no celular e computador
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
@@ -230,7 +229,6 @@ export const NotificationSettings = () => {
             </div>
           </CardContent>
         </Card>
-      )}
 
       {/* Browser Notifications */}
       <Card>
