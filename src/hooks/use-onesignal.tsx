@@ -4,7 +4,7 @@ import { useAccount } from '@/hooks/use-account';
 import { toast } from 'sonner';
 
 // OneSignal App ID - will be loaded from window
-const ONESIGNAL_APP_ID = '0c8c8f50-34a5-4f19-9a3e-f59a5d24ffca';
+const ONESIGNAL_APP_ID = '2ed61f84-89ec-4384-9610-7e73ac8b2e47';
 
 declare global {
   interface Window {
