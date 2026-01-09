@@ -45,6 +45,56 @@ function uint8ArrayToBase64Url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
+// Convert DER-encoded ECDSA signature to raw format (r || s, 64 bytes)
+// Web Crypto returns DER format, but VAPID JWT requires IEEE P1363 format
+function derToRaw(signature: Uint8Array): Uint8Array {
+  // DER format: 0x30 [total-length] 0x02 [r-length] [r-bytes] 0x02 [s-length] [s-bytes]
+  if (signature[0] !== 0x30) {
+    throw new Error('Invalid DER signature: missing SEQUENCE tag');
+  }
+
+  let offset = 2; // Skip 0x30 and total length byte
+
+  // Read r
+  if (signature[offset] !== 0x02) {
+    throw new Error('Invalid DER signature: missing INTEGER tag for r');
+  }
+  offset++;
+  const rLength = signature[offset];
+  offset++;
+  let r = signature.slice(offset, offset + rLength);
+  offset += rLength;
+
+  // Read s
+  if (signature[offset] !== 0x02) {
+    throw new Error('Invalid DER signature: missing INTEGER tag for s');
+  }
+  offset++;
+  const sLength = signature[offset];
+  offset++;
+  let s = signature.slice(offset, offset + sLength);
+
+  // Pad or trim r and s to exactly 32 bytes each
+  // DER integers may have leading zeros for positive numbers or be shorter
+  const normalizeInteger = (arr: Uint8Array): Uint8Array => {
+    if (arr.length === 32) return arr;
+    if (arr.length > 32) {
+      // Remove leading zeros (common when DER adds 0x00 prefix for positive numbers)
+      return arr.slice(arr.length - 32);
+    }
+    // Pad with leading zeros if shorter than 32 bytes
+    const padded = new Uint8Array(32);
+    padded.set(arr, 32 - arr.length);
+    return padded;
+  };
+
+  const result = new Uint8Array(64);
+  result.set(normalizeInteger(r), 0);
+  result.set(normalizeInteger(s), 32);
+  
+  return result;
+}
+
 // Generate VAPID JWT token
 async function generateVapidJwt(
   audience: string,
@@ -102,8 +152,11 @@ async function generateVapidJwt(
   );
 
   // Convert DER signature to raw format (r || s, each 32 bytes)
+  // This is required for Apple APNs which expects IEEE P1363 format
   const signatureBytes = new Uint8Array(signature);
-  const signatureB64 = uint8ArrayToBase64Url(signatureBytes);
+  const rawSignature = derToRaw(signatureBytes);
+  console.log(`[VAPID] Signature converted: DER ${signatureBytes.length} bytes -> Raw ${rawSignature.length} bytes`);
+  const signatureB64 = uint8ArrayToBase64Url(rawSignature);
 
   return `${unsignedToken}.${signatureB64}`;
 }
