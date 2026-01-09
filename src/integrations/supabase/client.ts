@@ -8,10 +8,43 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+// Custom storage adapter with fallback for PWA persistence
+const persistentStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      const localValue = localStorage.getItem(key);
+      if (localValue) return localValue;
+      // Fallback to sessionStorage if localStorage fails
+      return sessionStorage.getItem(key);
+    } catch {
+      return sessionStorage.getItem(key);
+    }
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      localStorage.setItem(key, value);
+      // Also backup to sessionStorage for PWA recovery
+      sessionStorage.setItem(key, value);
+    } catch {
+      sessionStorage.setItem(key, value);
+    }
+  },
+  removeItem: (key: string): void => {
+    try {
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+    } catch {
+      sessionStorage.removeItem(key);
+    }
+  }
+};
+
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
+    storage: persistentStorage,
     persistSession: true,
     autoRefreshToken: true,
+    detectSessionInUrl: true,
+    flowType: 'pkce'
   }
 });
