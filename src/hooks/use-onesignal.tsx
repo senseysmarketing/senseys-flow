@@ -133,6 +133,14 @@ export function useOneSignal() {
       await new Promise<void>((resolve, reject) => {
         window.OneSignalDeferred?.push(async function(OneSignal: any) {
           try {
+            // FORCE RESET: Logout first to clear any previous binding
+            try {
+              await OneSignal.logout();
+              console.log('[OneSignal] Logged out to reset identity');
+            } catch (e) {
+              console.log('[OneSignal] Logout skipped (not logged in)');
+            }
+
             // CRITICAL: Login FIRST to identify the user BEFORE requesting permission
             // This ensures the external_id is linked to the subscription
             if (user) {
@@ -150,6 +158,12 @@ export function useOneSignal() {
               // Opt-in to push notifications
               await OneSignal.User.PushSubscription.optIn();
               console.log('[OneSignal] User opted in to push notifications');
+              
+              // Re-login after opt-in to ensure binding
+              if (user) {
+                await OneSignal.login(user.id);
+                console.log('[OneSignal] Re-login after opt-in:', user.id);
+              }
               
               // Add tags for targeting
               if (account) {
@@ -193,6 +207,9 @@ export function useOneSignal() {
         window.OneSignalDeferred?.push(async function(OneSignal: any) {
           try {
             await OneSignal.User.PushSubscription.optOut();
+            // Also logout to clear the external_id binding
+            await OneSignal.logout();
+            console.log('[OneSignal] User logged out and unsubscribed');
             setIsSubscribed(false);
             toast.success('Push notifications desativadas');
             resolve();
