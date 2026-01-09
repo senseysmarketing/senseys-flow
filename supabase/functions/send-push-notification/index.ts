@@ -389,20 +389,81 @@ const handler = async (req: Request): Promise<Response> => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const payload: PushNotificationRequest = await req.json();
-    console.log("[Push] Received request:", payload);
+    console.log("[Push] Received request:", JSON.stringify(payload));
 
     const { account_id, user_id, title, body, url, tag, data } = payload;
 
-    // Build query to get subscriptions
-    let query = supabase
-      .from("push_subscriptions")
-      .select("*")
-      .eq("is_active", true);
+    let subscriptions: any[] = [];
 
+    // If user_id is provided, search by user_id directly
     if (user_id) {
-      query = query.eq("user_id", user_id);
-    } else if (account_id) {
-      query = query.eq("account_id", account_id);
+      console.log(`[Push] Searching subscriptions by user_id: ${user_id}`);
+      const { data: subs, error } = await supabase
+        .from("push_subscriptions")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("is_active", true);
+      
+      if (error) {
+        console.error("[Push] Error fetching by user_id:", error);
+        throw error;
+      }
+      subscriptions = subs || [];
+    } 
+    // If account_id is provided, first get all users from that account, then get their subscriptions
+    else if (account_id) {
+      console.log(`[Push] Searching subscriptions by account_id: ${account_id}`);
+      
+      // First try direct account_id match
+      const { data: directSubs, error: directError } = await supabase
+        .from("push_subscriptions")
+        .select("*")
+        .eq("account_id", account_id)
+        .eq("is_active", true);
+      
+      if (directError) {
+        console.error("[Push] Error fetching by account_id:", directError);
+      }
+      
+      console.log(`[Push] Direct account_id match found: ${directSubs?.length || 0} subscriptions`);
+      
+      // Also get all user_ids from profiles for this account and search by user_id
+      const { data: profiles, error: profileError } = await supabase
+        .from("profiles")
+        .select("user_id")
+        .eq("account_id", account_id);
+      
+      if (profileError) {
+        console.error("[Push] Error fetching profiles:", profileError);
+      }
+      
+      const userIds = profiles?.map(p => p.user_id) || [];
+      console.log(`[Push] Found ${userIds.length} users in account: ${userIds.join(', ')}`);
+      
+      if (userIds.length > 0) {
+        const { data: userSubs, error: userSubsError } = await supabase
+          .from("push_subscriptions")
+          .select("*")
+          .in("user_id", userIds)
+          .eq("is_active", true);
+        
+        if (userSubsError) {
+          console.error("[Push] Error fetching by user_ids:", userSubsError);
+        }
+        
+        console.log(`[Push] User-based match found: ${userSubs?.length || 0} subscriptions`);
+        
+        // Merge and deduplicate subscriptions
+        const allSubs = [...(directSubs || []), ...(userSubs || [])];
+        const seenIds = new Set<string>();
+        subscriptions = allSubs.filter(sub => {
+          if (seenIds.has(sub.id)) return false;
+          seenIds.add(sub.id);
+          return true;
+        });
+      } else {
+        subscriptions = directSubs || [];
+      }
     } else {
       return new Response(
         JSON.stringify({ error: "Either account_id or user_id is required" }),
@@ -410,22 +471,15 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    const { data: subscriptions, error: fetchError } = await query;
-
-    if (fetchError) {
-      console.error("[Push] Error fetching subscriptions:", fetchError);
-      throw fetchError;
-    }
-
-    if (!subscriptions || subscriptions.length === 0) {
-      console.log("[Push] No active subscriptions found");
+    if (subscriptions.length === 0) {
+      console.log("[Push] No active subscriptions found after all queries");
       return new Response(
-        JSON.stringify({ success: true, sent: 0, message: "No subscriptions" }),
+        JSON.stringify({ success: true, sent: 0, message: "No subscriptions found" }),
         { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
-    console.log(`[Push] Found ${subscriptions.length} subscriptions`);
+    console.log(`[Push] Total subscriptions to notify: ${subscriptions.length}`);
 
     const pushPayload = {
       title,
