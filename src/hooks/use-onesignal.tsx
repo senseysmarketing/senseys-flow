@@ -73,15 +73,20 @@ export function useOneSignal() {
     };
   }, []);
 
-  // Login user when authenticated
+  // Login user when authenticated and already subscribed
   useEffect(() => {
     if (!isInitialized || !user || !account) return;
 
     window.OneSignalDeferred?.push(async function(OneSignal: any) {
       try {
-        // Login with external user ID (Supabase user.id)
-        await OneSignal.login(user.id);
-        console.log('[OneSignal] User logged in:', user.id);
+        // Check if already subscribed before logging in
+        const isPushEnabled = await OneSignal.User.PushSubscription.optedIn;
+        
+        if (isPushEnabled) {
+          // If already subscribed, login to ensure external_id is linked to device
+          await OneSignal.login(user.id);
+          console.log('[OneSignal] User logged in (already subscribed):', user.id);
+        }
 
         // Add tags for targeting
         await OneSignal.User.addTags({
@@ -115,6 +120,22 @@ export function useOneSignal() {
 
             if (permission) {
               await OneSignal.User.PushSubscription.optIn();
+              
+              // CRITICAL: Login AFTER opt-in to link external_id to the device
+              if (user) {
+                await OneSignal.login(user.id);
+                console.log('[OneSignal] User logged in after subscription:', user.id);
+                
+                // Re-add tags to ensure they're set
+                if (account) {
+                  await OneSignal.User.addTags({
+                    account_id: account.id,
+                    user_email: user.email || '',
+                  });
+                  console.log('[OneSignal] Tags re-added after subscription');
+                }
+              }
+              
               setIsSubscribed(true);
               toast.success('Push notifications ativadas!');
               resolve();
@@ -136,7 +157,7 @@ export function useOneSignal() {
     } finally {
       setIsLoading(false);
     }
-  }, [isInitialized]);
+  }, [isInitialized, user, account]);
 
   const unsubscribe = useCallback(async () => {
     if (!isInitialized) return false;
