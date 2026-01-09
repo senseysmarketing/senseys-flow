@@ -684,199 +684,200 @@ const Leads = () => {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold tracking-tight">Gestão de Leads</h1>
-            <Badge variant="secondary" className="text-sm">
-              {filteredLeads.length} leads
-            </Badge>
+    <div className="flex flex-col h-[calc(100vh-120px)]">
+      {/* Fixed Header - Does NOT scroll */}
+      <div className="shrink-0 space-y-4 pb-4">
+        {/* Title + New Lead Button */}
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-bold tracking-tight">Gestão de Leads</h1>
+              <Badge variant="secondary" className="text-sm">
+                {filteredLeads.length} leads
+              </Badge>
+            </div>
+            <p className="text-muted-foreground">
+              Gerencie seus leads e acompanhe o funil de vendas
+            </p>
           </div>
-          <p className="text-muted-foreground">
-            Gerencie seus leads e acompanhe o funil de vendas
-          </p>
-        </div>
-        
-        <div className="flex gap-2">
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="h-4 w-4" />
-                Novo Lead
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
-              <DialogHeader>
-                <DialogTitle>Criar Novo Lead</DialogTitle>
-                <DialogDescription>
-                  Preencha as informações do lead. Nome e telefone são obrigatórios.
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleCreateLead} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Nome *</Label>
-                    <Input
-                      id="name"
-                      value={newLead.name}
-                      onChange={(e) => setNewLead({...newLead, name: e.target.value})}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Telefone *</Label>
-                    <Input
-                      id="phone"
-                      type="tel"
-                      value={newLead.phone}
-                      onChange={(e) => setNewLead({...newLead, phone: e.target.value})}
-                      required
-                    />
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={newLead.email}
-                      onChange={(e) => setNewLead({...newLead, email: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="status">Status</Label>
-                    <Select
-                      value={newLead.status_id}
-                      onValueChange={(value) => setNewLead({...newLead, status_id: value})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione um status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {statuses.map((status) => (
-                          <SelectItem key={status.id} value={status.id}>
-                            {status.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="interesse">Interesse</Label>
-                    <Input
-                      id="interesse"
-                      value={newLead.interesse}
-                      onChange={(e) => setNewLead({...newLead, interesse: e.target.value})}
-                      placeholder="Ex: Apartamento 2 quartos, Casa em condomínio..."
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="temperature">Temperatura</Label>
-                    <Select
-                      value={newLead.temperature}
-                      onValueChange={(value: 'hot' | 'warm' | 'cold') => setNewLead({...newLead, temperature: value})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione a temperatura" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="hot">
-                          <span className="flex items-center gap-2">
-                            <Flame className="h-4 w-4 text-red-500" />
-                            Quente
-                          </span>
-                        </SelectItem>
-                        <SelectItem value="warm">
-                          <span className="flex items-center gap-2">
-                            <Thermometer className="h-4 w-4 text-yellow-500" />
-                            Morno
-                          </span>
-                        </SelectItem>
-                        <SelectItem value="cold">
-                          <span className="flex items-center gap-2">
-                            <Snowflake className="h-4 w-4 text-blue-500" />
-                            Frio
-                          </span>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="origem">Origem</Label>
-                    <Input
-                      id="origem"
-                      value={newLead.origem}
-                      onChange={(e) => setNewLead({...newLead, origem: e.target.value})}
-                      placeholder="Ex: Facebook, Google, Indicação..."
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="campanha">Campanha</Label>
-                    <Input
-                      id="campanha"
-                      value={newLead.campanha}
-                      onChange={(e) => setNewLead({...newLead, campanha: e.target.value})}
-                    />
-                  </div>
-                </div>
-
-                {canAssignLeads && (
+          
+          <div className="flex gap-2">
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Novo Lead
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[600px]">
+                <DialogHeader>
+                  <DialogTitle>Criar Novo Lead</DialogTitle>
+                  <DialogDescription>
+                    Preencha as informações do lead. Nome e telefone são obrigatórios.
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleCreateLead} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Corretor Responsável</Label>
-                      <BrokerSelect
-                        value={newLead.assigned_broker_id}
-                        onValueChange={(value) => setNewLead({...newLead, assigned_broker_id: value})}
-                        placeholder="Selecionar corretor"
+                      <Label htmlFor="name">Nome *</Label>
+                      <Input
+                        id="name"
+                        value={newLead.name}
+                        onChange={(e) => setNewLead({...newLead, name: e.target.value})}
+                        required
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Imóvel de Interesse</Label>
-                      <PropertySelect
-                        value={newLead.property_id}
-                        onValueChange={(value) => setNewLead({...newLead, property_id: value})}
-                        placeholder="Selecionar imóvel"
+                      <Label htmlFor="phone">Telefone *</Label>
+                      <Input
+                        id="phone"
+                        type="tel"
+                        value={newLead.phone}
+                        onChange={(e) => setNewLead({...newLead, phone: e.target.value})}
+                        required
                       />
                     </div>
                   </div>
-                )}
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Email</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={newLead.email}
+                        onChange={(e) => setNewLead({...newLead, email: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="status">Status</Label>
+                      <Select
+                        value={newLead.status_id}
+                        onValueChange={(value) => setNewLead({...newLead, status_id: value})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione um status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {statuses.map((status) => (
+                            <SelectItem key={status.id} value={status.id}>
+                              {status.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="observacoes">Observações</Label>
-                  <Textarea
-                    id="observacoes"
-                    value={newLead.observacoes}
-                    onChange={(e) => setNewLead({...newLead, observacoes: e.target.value})}
-                    placeholder="Informações adicionais sobre o lead..."
-                  />
-                </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="interesse">Interesse</Label>
+                      <Input
+                        id="interesse"
+                        value={newLead.interesse}
+                        onChange={(e) => setNewLead({...newLead, interesse: e.target.value})}
+                        placeholder="Ex: Apartamento 2 quartos, Casa em condomínio..."
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="temperature">Temperatura</Label>
+                      <Select
+                        value={newLead.temperature}
+                        onValueChange={(value: 'hot' | 'warm' | 'cold') => setNewLead({...newLead, temperature: value})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione a temperatura" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="hot">
+                            <span className="flex items-center gap-2">
+                              <Flame className="h-4 w-4 text-red-500" />
+                              Quente
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="warm">
+                            <span className="flex items-center gap-2">
+                              <Thermometer className="h-4 w-4 text-yellow-500" />
+                              Morno
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="cold">
+                            <span className="flex items-center gap-2">
+                              <Snowflake className="h-4 w-4 text-blue-500" />
+                              Frio
+                            </span>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
 
-                <div className="flex justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                    Cancelar
-                  </Button>
-                  <Button type="submit" disabled={loading}>
-                    {loading ? "Criando..." : "Criar Lead"}
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="origem">Origem</Label>
+                      <Input
+                        id="origem"
+                        value={newLead.origem}
+                        onChange={(e) => setNewLead({...newLead, origem: e.target.value})}
+                        placeholder="Ex: Facebook, Google, Indicação..."
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="campanha">Campanha</Label>
+                      <Input
+                        id="campanha"
+                        value={newLead.campanha}
+                        onChange={(e) => setNewLead({...newLead, campanha: e.target.value})}
+                      />
+                    </div>
+                  </div>
+
+                  {canAssignLeads && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Corretor Responsável</Label>
+                        <BrokerSelect
+                          value={newLead.assigned_broker_id}
+                          onValueChange={(value) => setNewLead({...newLead, assigned_broker_id: value})}
+                          placeholder="Selecionar corretor"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Imóvel de Interesse</Label>
+                        <PropertySelect
+                          value={newLead.property_id}
+                          onValueChange={(value) => setNewLead({...newLead, property_id: value})}
+                          placeholder="Selecionar imóvel"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="observacoes">Observações</Label>
+                    <Textarea
+                      id="observacoes"
+                      value={newLead.observacoes}
+                      onChange={(e) => setNewLead({...newLead, observacoes: e.target.value})}
+                      placeholder="Informações adicionais sobre o lead..."
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button type="submit" disabled={loading}>
+                      {loading ? "Criando..." : "Criar Lead"}
+                    </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
-      </div>
 
-      {/* Filters and Search - Sticky Header */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 -mx-4 px-4 sm:-mx-6 sm:px-6 pb-4 pt-1 border-b mb-4">
+        {/* Filters and Search Row */}
         <div className="flex flex-col gap-3 sm:gap-4">
           {/* Search and Filters Row */}
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -943,293 +944,303 @@ const Leads = () => {
         </div>
       </div>
 
-      {/* Content */}
-      {viewMode === 'kanban' ? (
-        isMobile ? (
-          // Mobile: Kanban as Accordion
-          <div className="space-y-2">
-            <Accordion type="single" collapsible defaultValue={statuses[0]?.id} className="space-y-2">
-              {statuses.filter(s => !hiddenColumns.includes(s.id)).map((status) => {
-                const statusLeads = getLeadsByStatus(status.id);
-                return (
-                  <AccordionItem 
-                    key={status.id} 
-                    value={status.id}
-                    className="border rounded-xl overflow-hidden bg-card"
-                  >
-                    <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
-                      <div className="flex items-center gap-3 flex-1">
-                        <div 
-                          className="w-3 h-3 rounded-full shrink-0" 
-                          style={{ backgroundColor: status.color }}
-                        />
-                        <span className="font-semibold">{status.name}</span>
-                        <Badge 
-                          variant="secondary" 
-                          className="ml-auto mr-2 font-bold"
-                          style={{ backgroundColor: `${status.color}20`, color: status.color }}
-                        >
-                          {statusLeads.length}
-                        </Badge>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="px-3 pb-3 pt-1">
-                      <div className="space-y-3">
-                        {statusLeads.length === 0 ? (
-                          <p className="text-sm text-muted-foreground text-center py-6">
-                            Nenhum lead neste status
-                          </p>
-                        ) : (
-                          statusLeads.map((lead) => (
-                            <div 
-                              key={lead.id}
-                              className="lead-card cursor-pointer"
-                              onClick={() => handleViewDetails(lead)}
-                            >
-                              <div className="flex items-start justify-between mb-2">
-                                <div>
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <h4 className="font-medium text-sm">{lead.name}</h4>
-                                    <TemperatureBadge temperature={lead.temperature} showLabel={false} size="sm" />
-                                    <OriginBadge origem={lead.origem} showLabel={false} size="sm" />
-                                  </div>
-                                  <span className="text-xs text-muted-foreground">{formatDate(lead.created_at)}</span>
-                                </div>
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                                      <MoreVertical className="h-4 w-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleViewDetails(lead); }}>
-                                      <Eye className="h-4 w-4 mr-2" />
-                                      Ver detalhes
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEditLead(lead); }}>
-                                      <Edit className="h-4 w-4 mr-2" />
-                                      Editar
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem 
-                                      onClick={(e) => { e.stopPropagation(); handleDeleteLead(lead.id); }}
-                                      className="text-destructive"
-                                    >
-                                      <Trash className="h-4 w-4 mr-2" />
-                                      Deletar
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </div>
-                              
-                              <div className="space-y-1 text-xs text-muted-foreground mb-3">
-                                <div className="flex items-center gap-1">
-                                  <Phone className="h-3 w-3" />
-                                  {formatPhone(lead.phone)}
-                                </div>
-                                {lead.properties && (
-                                  <div className="flex items-center gap-1">
-                                    <span>🏠</span>
-                                    <span className="truncate">{lead.properties.title}</span>
-                                  </div>
-                                )}
-                              </div>
-                              
-                              <div onClick={(e) => e.stopPropagation()}>
-                                <WhatsAppButton 
-                                  phone={lead.phone} 
-                                  leadName={lead.name}
-                                  leadId={lead.id}
-                                  propertyName={lead.properties?.title}
-                                  interesse={lead.interesse}
-                                  className="w-full h-9"
-                                />
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                );
-              })}
-            </Accordion>
-          </div>
-        ) : (
-          // Desktop: Kanban View with Drag and Drop
-          <DragDropContext onDragEnd={onDragEnd}>
-            <div className="overflow-x-auto pb-4">
-              {/* Botões para restaurar colunas ocultas */}
-              {hiddenColumns.length > 0 && (
-                <div className="flex gap-2 mb-4 flex-wrap">
-                  <span className="text-sm text-muted-foreground self-center">Colunas ocultas:</span>
-                  {hiddenColumns.map(columnId => {
-                    const status = statuses.find(s => s.id === columnId);
-                    if (!status) return null;
-                    return (
-                      <Button
-                        key={columnId}
-                        variant="outline"
-                        size="sm"
-                        onClick={() => toggleColumnVisibility(columnId)}
-                        className="gap-2"
-                      >
-                        <Eye className="h-3 w-3" />
-                        {status.name}
-                      </Button>
-                    );
-                  })}
-                </div>
-              )}
-              <div className="flex gap-4 min-w-max flex-nowrap">
-              {statuses.filter(s => !hiddenColumns.includes(s.id)).map((status) => {
-                const statusLeads = getLeadsByStatus(status.id);
-                return (
-                  <div key={status.id} className="kanban-column w-[330px] flex-none">
-                    <div 
-                      className="flex items-center gap-3 mb-4 p-3 rounded-lg"
-                      style={{ background: `linear-gradient(135deg, ${status.color}20 0%, transparent 100%)` }}
+      {/* Scrollable Content Area - ONLY this scrolls */}
+      <div className="flex-1 overflow-hidden">
+        {viewMode === 'kanban' ? (
+          isMobile ? (
+            // Mobile: Kanban as Accordion with its own scroll
+            <div className="h-full overflow-y-auto space-y-2">
+              <Accordion type="single" collapsible defaultValue={statuses[0]?.id} className="space-y-2">
+                {statuses.filter(s => !hiddenColumns.includes(s.id)).map((status) => {
+                  const statusLeads = getLeadsByStatus(status.id);
+                  return (
+                    <AccordionItem 
+                      key={status.id} 
+                      value={status.id}
+                      className="border rounded-xl overflow-hidden bg-card"
                     >
-                      <div 
-                        className="w-3 h-3 rounded-full shadow-sm" 
-                        style={{ backgroundColor: status.color, boxShadow: `0 0 8px ${status.color}50` }}
-                      />
-                      <h3 className="font-semibold flex-1">{status.name}</h3>
-                      <Badge 
-                        variant="secondary" 
-                        className="font-bold"
-                        style={{ backgroundColor: `${status.color}20`, color: status.color }}
-                      >
-                        {statusLeads.length}
-                      </Badge>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0 opacity-50 hover:opacity-100"
-                        onClick={() => toggleColumnVisibility(status.id)}
-                        title={`Ocultar coluna ${status.name}`}
-                      >
-                        <EyeOff className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                    
-                     <Droppable droppableId={status.id}>
-                       {(provided, snapshot) => (
-                         <div
-                           ref={provided.innerRef}
-                           {...provided.droppableProps}
-                           className={`space-y-3 min-h-[200px] max-h-[calc(100vh-300px)] overflow-y-auto p-2 rounded-lg transition-colors ${
-                             snapshot.isDraggingOver ? 'bg-muted/50' : ''
-                           }`}
-                         >
-                           {statusLeads.map((lead, index) => (
-                            <Draggable key={lead.id} draggableId={lead.id} index={index}>
-                              {(provided, snapshot) => (
-                                <div
-                                  ref={provided.innerRef}
-                                  {...provided.draggableProps}
-                                  {...provided.dragHandleProps}
-                                  className={`lead-card transition-transform cursor-pointer ${
-                                    snapshot.isDragging ? 'rotate-2 scale-105 shadow-lg' : ''
-                                  }`}
-                                  onDoubleClick={() => handleViewDetails(lead)}
-                                >
-                                   <div className="flex items-start justify-between mb-2">
-                                     <div>
-                                       <div className="flex items-center gap-2 flex-wrap">
-                                         <h4 className="font-medium text-sm">{lead.name}</h4>
-                                         <TemperatureBadge temperature={lead.temperature} showLabel={false} size="sm" />
-                                         <OriginBadge origem={lead.origem} showLabel={false} size="sm" />
-                                       </div>
-                                       <span className="text-xs text-muted-foreground">{formatDate(lead.created_at)}</span>
-                                     </div>
-                                     <DropdownMenu>
-                                      <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                                          <MoreVertical className="h-3 w-3" />
-                                        </Button>
-                                      </DropdownMenuTrigger>
-                                      <DropdownMenuContent align="end">
-                                        <DropdownMenuItem onClick={() => handleViewDetails(lead)}>
-                                          <Eye className="h-4 w-4 mr-2" />
-                                          Ver detalhes
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => handleEditLead(lead)}>
-                                          <Edit className="h-4 w-4 mr-2" />
-                                          Editar lead
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem 
-                                          onClick={() => handleDeleteLead(lead.id)}
-                                          className="text-destructive"
-                                        >
-                                          <Trash className="h-4 w-4 mr-2" />
-                                          Deletar
-                                        </DropdownMenuItem>
-                                      </DropdownMenuContent>
-                                    </DropdownMenu>
-                                  </div>
-                                  
-                                  <div className="space-y-1 text-xs text-muted-foreground">
-                                    <div className="flex items-center gap-1">
-                                      <span>📞</span>
-                                      {formatPhone(lead.phone)}
-                                    </div>
-                                    {lead.email && (
-                                      <div className="flex items-center gap-1">
-                                        <span>📧</span>
-                                        {lead.email}
-                                      </div>
-                                    )}
-                                    {lead.interesse && (
-                                      <div className="text-xs">
-                                        Interesse: {lead.interesse}
-                                      </div>
-                                    )}
-                                    {lead.properties && (
-                                      <div className="text-xs flex items-center gap-1">
-                                        <span className="text-amber-500">🏠</span>
-                                        <span className="truncate">{lead.properties.title}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                  
-                                  <div className="flex gap-2 mt-3">
-                                    <WhatsAppButton 
-                                      phone={lead.phone} 
-                                      leadName={lead.name}
-                                      leadId={lead.id}
-                                      propertyName={lead.properties?.title}
-                                      interesse={lead.interesse}
-                                      className="flex-1 h-7 text-xs"
-                                    />
-                                  </div>
-                                </div>
-                              )}
-                            </Draggable>
-                          ))}
-                          {provided.placeholder}
+                      <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+                        <div className="flex items-center gap-3 flex-1">
+                          <div 
+                            className="w-3 h-3 rounded-full shrink-0" 
+                            style={{ backgroundColor: status.color }}
+                          />
+                          <span className="font-semibold">{status.name}</span>
+                          <Badge 
+                            variant="secondary" 
+                            className="ml-auto mr-2 font-bold"
+                            style={{ backgroundColor: `${status.color}20`, color: status.color }}
+                          >
+                            {statusLeads.length}
+                          </Badge>
                         </div>
-                      )}
-                    </Droppable>
-                  </div>
-                );
-              })}
+                      </AccordionTrigger>
+                      <AccordionContent className="px-3 pb-3 pt-1">
+                        <div className="space-y-3">
+                          {statusLeads.length === 0 ? (
+                            <p className="text-sm text-muted-foreground text-center py-6">
+                              Nenhum lead neste status
+                            </p>
+                          ) : (
+                            statusLeads.map((lead) => (
+                              <div 
+                                key={lead.id}
+                                className="lead-card cursor-pointer"
+                                onClick={() => handleViewDetails(lead)}
+                              >
+                                <div className="flex items-start justify-between mb-2">
+                                  <div>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <h4 className="font-medium text-sm">{lead.name}</h4>
+                                      <TemperatureBadge temperature={lead.temperature} showLabel={false} size="sm" />
+                                      <OriginBadge origem={lead.origem} showLabel={false} size="sm" />
+                                    </div>
+                                    <span className="text-xs text-muted-foreground">{formatDate(lead.created_at)}</span>
+                                  </div>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                                        <MoreVertical className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleViewDetails(lead); }}>
+                                        <Eye className="h-4 w-4 mr-2" />
+                                        Ver detalhes
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEditLead(lead); }}>
+                                        <Edit className="h-4 w-4 mr-2" />
+                                        Editar
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem 
+                                        onClick={(e) => { e.stopPropagation(); handleDeleteLead(lead.id); }}
+                                        className="text-destructive"
+                                      >
+                                        <Trash className="h-4 w-4 mr-2" />
+                                        Deletar
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </div>
+                                
+                                <div className="space-y-1 text-xs text-muted-foreground mb-3">
+                                  <div className="flex items-center gap-1">
+                                    <Phone className="h-3 w-3" />
+                                    {formatPhone(lead.phone)}
+                                  </div>
+                                  {lead.properties && (
+                                    <div className="flex items-center gap-1">
+                                      <span>🏠</span>
+                                      <span className="truncate">{lead.properties.title}</span>
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                <div onClick={(e) => e.stopPropagation()}>
+                                  <WhatsAppButton 
+                                    phone={lead.phone} 
+                                    leadName={lead.name}
+                                    leadId={lead.id}
+                                    propertyName={lead.properties?.title}
+                                    interesse={lead.interesse}
+                                    className="w-full h-9"
+                                  />
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  );
+                })}
+              </Accordion>
             </div>
+          ) : (
+            // Desktop: Kanban View with horizontal scroll only on columns
+            <DragDropContext onDragEnd={onDragEnd}>
+              <div className="h-full flex flex-col">
+                {/* Hidden columns restore buttons */}
+                {hiddenColumns.length > 0 && (
+                  <div className="flex gap-2 mb-4 flex-wrap shrink-0">
+                    <span className="text-sm text-muted-foreground self-center">Colunas ocultas:</span>
+                    {hiddenColumns.map(columnId => {
+                      const status = statuses.find(s => s.id === columnId);
+                      if (!status) return null;
+                      return (
+                        <Button
+                          key={columnId}
+                          variant="outline"
+                          size="sm"
+                          onClick={() => toggleColumnVisibility(columnId)}
+                          className="gap-2"
+                        >
+                          <Eye className="h-3 w-3" />
+                          {status.name}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                )}
+                
+                {/* Kanban columns - horizontal scroll */}
+                <div className="flex-1 overflow-x-auto overflow-y-hidden">
+                  <div className="flex gap-4 min-w-max h-full">
+                    {statuses.filter(s => !hiddenColumns.includes(s.id)).map((status) => {
+                      const statusLeads = getLeadsByStatus(status.id);
+                      return (
+                        <div key={status.id} className="kanban-column w-[330px] flex-none h-full flex flex-col">
+                          {/* Column header */}
+                          <div 
+                            className="flex items-center gap-3 mb-4 p-3 rounded-lg shrink-0"
+                            style={{ background: `linear-gradient(135deg, ${status.color}20 0%, transparent 100%)` }}
+                          >
+                            <div 
+                              className="w-3 h-3 rounded-full shadow-sm" 
+                              style={{ backgroundColor: status.color, boxShadow: `0 0 8px ${status.color}50` }}
+                            />
+                            <h3 className="font-semibold flex-1">{status.name}</h3>
+                            <Badge 
+                              variant="secondary" 
+                              className="font-bold"
+                              style={{ backgroundColor: `${status.color}20`, color: status.color }}
+                            >
+                              {statusLeads.length}
+                            </Badge>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 opacity-50 hover:opacity-100"
+                              onClick={() => toggleColumnVisibility(status.id)}
+                              title={`Ocultar coluna ${status.name}`}
+                            >
+                              <EyeOff className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                          
+                          {/* Column content - vertical scroll */}
+                          <Droppable droppableId={status.id}>
+                            {(provided, snapshot) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.droppableProps}
+                                className={`flex-1 space-y-3 overflow-y-auto p-2 rounded-lg transition-colors ${
+                                  snapshot.isDraggingOver ? 'bg-muted/50' : ''
+                                }`}
+                              >
+                                {statusLeads.map((lead, index) => (
+                                  <Draggable key={lead.id} draggableId={lead.id} index={index}>
+                                    {(provided, snapshot) => (
+                                      <div
+                                        ref={provided.innerRef}
+                                        {...provided.draggableProps}
+                                        {...provided.dragHandleProps}
+                                        className={`lead-card transition-transform cursor-pointer ${
+                                          snapshot.isDragging ? 'rotate-2 scale-105 shadow-lg' : ''
+                                        }`}
+                                        onDoubleClick={() => handleViewDetails(lead)}
+                                      >
+                                        <div className="flex items-start justify-between mb-2">
+                                          <div>
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                              <h4 className="font-medium text-sm">{lead.name}</h4>
+                                              <TemperatureBadge temperature={lead.temperature} showLabel={false} size="sm" />
+                                              <OriginBadge origem={lead.origem} showLabel={false} size="sm" />
+                                            </div>
+                                            <span className="text-xs text-muted-foreground">{formatDate(lead.created_at)}</span>
+                                          </div>
+                                          <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                                                <MoreVertical className="h-3 w-3" />
+                                              </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                              <DropdownMenuItem onClick={() => handleViewDetails(lead)}>
+                                                <Eye className="h-4 w-4 mr-2" />
+                                                Ver detalhes
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem onClick={() => handleEditLead(lead)}>
+                                                <Edit className="h-4 w-4 mr-2" />
+                                                Editar lead
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem 
+                                                onClick={() => handleDeleteLead(lead.id)}
+                                                className="text-destructive"
+                                              >
+                                                <Trash className="h-4 w-4 mr-2" />
+                                                Deletar
+                                              </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                          </DropdownMenu>
+                                        </div>
+                                        
+                                        <div className="space-y-1 text-xs text-muted-foreground">
+                                          <div className="flex items-center gap-1">
+                                            <span>📞</span>
+                                            {formatPhone(lead.phone)}
+                                          </div>
+                                          {lead.email && (
+                                            <div className="flex items-center gap-1">
+                                              <span>📧</span>
+                                              {lead.email}
+                                            </div>
+                                          )}
+                                          {lead.interesse && (
+                                            <div className="text-xs">
+                                              Interesse: {lead.interesse}
+                                            </div>
+                                          )}
+                                          {lead.properties && (
+                                            <div className="text-xs flex items-center gap-1">
+                                              <span className="text-amber-500">🏠</span>
+                                              <span className="truncate">{lead.properties.title}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                        
+                                        <div className="flex gap-2 mt-3">
+                                          <WhatsAppButton 
+                                            phone={lead.phone} 
+                                            leadName={lead.name}
+                                            leadId={lead.id}
+                                            propertyName={lead.properties?.title}
+                                            interesse={lead.interesse}
+                                            className="flex-1 h-7 text-xs"
+                                          />
+                                        </div>
+                                      </div>
+                                    )}
+                                  </Draggable>
+                                ))}
+                                {provided.placeholder}
+                              </div>
+                            )}
+                          </Droppable>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </DragDropContext>
+          )
+        ) : viewMode === 'database' ? (
+          // Database View
+          <div className="h-full overflow-auto">
+            <LeadsDatabaseView
+              leads={leads}
+              statuses={statuses}
+              loading={loading}
+              onViewDetails={handleViewDetails}
+              onEditLead={handleEditLead}
+              onDeleteLead={handleDeleteLead}
+              onStatusChange={handleStatusChange}
+              onRefresh={fetchData}
+            />
           </div>
-        </DragDropContext>
-        )
-      ) : viewMode === 'database' ? (
-        // Database View
-        <LeadsDatabaseView
-          leads={leads}
-          statuses={statuses}
-          loading={loading}
-          onViewDetails={handleViewDetails}
-          onEditLead={handleEditLead}
-          onDeleteLead={handleDeleteLead}
-          onStatusChange={handleStatusChange}
-          onRefresh={fetchData}
-        />
-      ) : null}
+        ) : null}
+      </div>
 
       {/* Edit Lead Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
