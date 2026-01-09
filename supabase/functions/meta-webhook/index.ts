@@ -607,6 +607,37 @@ serve(async (req) => {
             });
           console.log('✅ Activity logged');
 
+          // Send email notifications
+          try {
+            // Get property name if linked
+            let propertyName: string | null = null;
+            if (leadInsert.property_id) {
+              const { data: property } = await supabase
+                .from('properties')
+                .select('title')
+                .eq('id', leadInsert.property_id)
+                .single();
+              propertyName = property?.title || null;
+            }
+
+            await supabase.functions.invoke('notify-new-lead', {
+              body: {
+                lead_id: newLead.id,
+                lead_name: leadInsert.name,
+                lead_phone: leadInsert.phone,
+                lead_email: leadInsert.email,
+                lead_temperature: temperature,
+                lead_origem: 'Facebook Lead Ads',
+                property_name: propertyName,
+                account_id: metaConfig.account_id,
+              }
+            });
+            console.log('✅ Notification function invoked');
+          } catch (notifyError) {
+            console.error('Error invoking notify-new-lead:', notifyError);
+            // Don't fail lead creation if notification fails
+          }
+
           // Send Meta CAPI event for hot leads automatically
           if (temperature === 'hot') {
             try {
