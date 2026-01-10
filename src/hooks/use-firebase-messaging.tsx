@@ -129,7 +129,7 @@ export function useFirebaseMessaging() {
     }
   }, [addDiagnosticLog]);
 
-  // Initialize on mount
+  // Initialize on mount and auto-reconnect FCM if needed
   useEffect(() => {
     if (typeof window === 'undefined' || initAttemptedRef.current) return;
     if (!checkBrowserSupport()) {
@@ -145,19 +145,58 @@ export function useFirebaseMessaging() {
         addDiagnosticLog('Inicializando...');
         setPermissionState(Notification.permission as 'default' | 'granted' | 'denied');
         
-        if (Notification.permission === 'granted' && user?.id) {
+        if (Notification.permission === 'granted' && user?.id && account?.id) {
+          // Check for existing valid FCM token (not old Web Push tokens)
           const { data: existing } = await supabase
             .from('push_subscriptions')
             .select('endpoint, is_active')
             .eq('user_id', user.id)
             .eq('is_active', true)
+            .not('endpoint', 'like', 'https://%') // Exclude old Web Push tokens
             .single();
           
-          if (existing) {
-            setIsSubscribed(true);
-            setFcmToken(existing.endpoint);
-            updateDiagnosticInfo({ fcmToken: existing.endpoint, userId: user.id });
-            addDiagnosticLog('Token existente encontrado');
+          if (existing && existing.endpoint) {
+            addDiagnosticLog('Token FCM válido encontrado, reconectando...');
+            
+            // Auto-reconnect: load Firebase SDK and setup listeners
+            try {
+              await loadFirebaseSDK();
+              const firebase = (window as any).firebase;
+              
+              if (!firebase.apps.length) {
+                firebase.initializeApp(FIREBASE_CONFIG);
+              }
+              
+              // Register service worker
+              const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
+              await navigator.serviceWorker.ready;
+              
+              const messaging = firebase.messaging();
+              
+              // Setup foreground message listener
+              messaging.onMessage((payload: any) => {
+                console.log('[FCM] Foreground message:', payload);
+                addDiagnosticLog(`Mensagem recebida: ${payload.notification?.title}`);
+                if (payload.notification) {
+                  toast(payload.notification.title, {
+                    description: payload.notification.body,
+                  });
+                }
+              });
+              
+              setIsSubscribed(true);
+              setFcmToken(existing.endpoint);
+              updateDiagnosticInfo({ fcmToken: existing.endpoint, userId: user.id, serviceWorkerStatus: 'active' });
+              addDiagnosticLog('FCM reconectado com sucesso');
+            } catch (reconnectError: any) {
+              addDiagnosticLog(`AVISO: Falha ao reconectar FCM: ${reconnectError.message}`);
+              // Still mark as subscribed since token exists in DB
+              setIsSubscribed(true);
+              setFcmToken(existing.endpoint);
+              updateDiagnosticInfo({ fcmToken: existing.endpoint, userId: user.id });
+            }
+          } else {
+            addDiagnosticLog('Nenhum token FCM válido encontrado');
           }
         }
         
@@ -171,7 +210,7 @@ export function useFirebaseMessaging() {
     };
 
     init();
-  }, [user?.id, addDiagnosticLog, updateDiagnosticInfo]);
+  }, [user?.id, account?.id, addDiagnosticLog, updateDiagnosticInfo]);
 
   const subscribe = useCallback(async () => {
     if (!user?.id || !account?.id) {
@@ -296,6 +335,44 @@ export function useFirebaseMessaging() {
     addDiagnosticLog('Diagnóstico atualizado');
   }, [user?.id, addDiagnosticLog, updateDiagnosticInfo]);
 
+  // Cleanup old Web Push tokens (OneSignal, etc.)
+  const cleanupOldTokens = useCallback(async () => {
+    if (!user?.id) return { deleted: 0 };
+    
+    try {
+      addDiagnosticLog('Limpando tokens antigos...');
+      
+      const { data: oldTokens, error: fetchError } = await supabase
+        .from('push_subscriptions')
+        .select('id, endpoint')
+        .eq('user_id', user.id)
+        .like('endpoint', 'https://%'); // Old Web Push tokens start with https://
+      
+      if (fetchError) throw fetchError;
+      
+      if (!oldTokens || oldTokens.length === 0) {
+        addDiagnosticLog('Nenhum token antigo encontrado');
+        return { deleted: 0 };
+      }
+      
+      const { error: deleteError } = await supabase
+        .from('push_subscriptions')
+        .delete()
+        .eq('user_id', user.id)
+        .like('endpoint', 'https://%');
+      
+      if (deleteError) throw deleteError;
+      
+      addDiagnosticLog(`${oldTokens.length} token(s) antigo(s) removido(s)`);
+      toast.success(`${oldTokens.length} token(s) antigo(s) removido(s)`);
+      return { deleted: oldTokens.length };
+    } catch (error: any) {
+      addDiagnosticLog(`ERRO ao limpar: ${error.message}`);
+      toast.error('Erro ao limpar tokens antigos');
+      return { deleted: 0, error: error.message };
+    }
+  }, [user?.id, addDiagnosticLog]);
+
   return {
     isInitialized,
     isSubscribed,
@@ -307,6 +384,7 @@ export function useFirebaseMessaging() {
     diagnosticInfo,
     diagnosticLogs,
     getDiagnosticInfo,
-    addDiagnosticLog
+    addDiagnosticLog,
+    cleanupOldTokens
   };
 }

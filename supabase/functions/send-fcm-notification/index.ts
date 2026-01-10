@@ -184,7 +184,27 @@ serve(async (req) => {
       );
     }
 
-    console.log(`[FCM] Found ${subscriptions.length} active FCM tokens`);
+    // Filter out old Web Push / OneSignal tokens (they start with https://)
+    // FCM tokens are alphanumeric strings that don't start with http
+    const validFcmTokens = subscriptions.filter(sub => 
+      sub.endpoint && !sub.endpoint.startsWith('http')
+    );
+
+    console.log(`[FCM] Found ${subscriptions.length} subscriptions, ${validFcmTokens.length} valid FCM tokens`);
+
+    if (validFcmTokens.length === 0) {
+      console.log("[FCM] No valid FCM tokens after filtering");
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          sent: 0, 
+          message: "No valid FCM tokens (only old Web Push tokens found)",
+          target_users: targetUserIds.length,
+          filtered_out: subscriptions.length
+        }),
+        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
 
     // Get access token for FCM API
     const accessToken = await getAccessToken();
@@ -193,8 +213,8 @@ serve(async (req) => {
     let failureCount = 0;
     const errors: string[] = [];
 
-    // Send notification to each FCM token
-    for (const sub of subscriptions) {
+    // Send notification to each valid FCM token
+    for (const sub of validFcmTokens) {
       const fcmToken = sub.endpoint; // We store FCM token in endpoint field
 
       const fcmPayload = {
@@ -244,15 +264,20 @@ serve(async (req) => {
           console.error(`[FCM] Failed to send to user ${sub.user_id}:`, errorData);
           failureCount++;
           
-          // If token is invalid, mark subscription as inactive
-          if (errorData.error?.details?.some((d: any) => 
-            d.errorCode === "UNREGISTERED" || d.errorCode === "INVALID_ARGUMENT"
-          )) {
+          // Only mark as inactive if token is truly unregistered (expired/revoked)
+          // Don't deactivate for INVALID_ARGUMENT as it might be temporary
+          const isUnregistered = errorData.error?.details?.some((d: any) => 
+            d.errorCode === "UNREGISTERED"
+          );
+          
+          if (isUnregistered) {
             await supabase
               .from("push_subscriptions")
               .update({ is_active: false })
               .eq("endpoint", fcmToken);
-            console.log(`[FCM] Marked token as inactive for user ${sub.user_id}`);
+            console.log(`[FCM] Marked token as inactive (UNREGISTERED) for user ${sub.user_id}`);
+          } else {
+            console.log(`[FCM] Token error but NOT marking inactive (error type: ${errorData.error?.status})`);
           }
           
           errors.push(`User ${sub.user_id}: ${JSON.stringify(errorData.error)}`);
@@ -268,7 +293,8 @@ serve(async (req) => {
       success: true,
       sent: successCount,
       failed: failureCount,
-      total_tokens: subscriptions.length,
+      total_tokens: validFcmTokens.length,
+      filtered_out: subscriptions.length - validFcmTokens.length,
       target_users: targetUserIds.length,
       errors: errors.length > 0 ? errors.slice(0, 5) : undefined,
     };

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell, Mail, Volume2, Smartphone, Flame, Thermometer, Snowflake, Download, Send, Loader2, CheckCircle2, XCircle, Bug, RefreshCw, Copy, AlertTriangle } from 'lucide-react';
+import { Bell, Mail, Volume2, Smartphone, Flame, Thermometer, Snowflake, Download, Send, Loader2, CheckCircle2, XCircle, Bug, RefreshCw, Copy, AlertTriangle, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -78,7 +78,8 @@ export const NotificationSettings = () => {
     sendTestNotification,
     diagnosticInfo,
     diagnosticLogs,
-    getDiagnosticInfo
+    getDiagnosticInfo,
+    cleanupOldTokens
   } = useFirebaseMessaging();
   
   const [localPrefs, setLocalPrefs] = useState(preferences);
@@ -395,6 +396,27 @@ export const NotificationSettings = () => {
                 status="info"
               />
             )}
+          </div>
+
+          <Separator />
+
+          {/* Cleanup old tokens */}
+          <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+            <div className="space-y-0.5">
+              <Label className="text-sm">Limpar tokens antigos</Label>
+              <p className="text-xs text-muted-foreground">
+                Remove tokens de sistemas antigos (OneSignal, Web Push)
+              </p>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => cleanupOldTokens()}
+              className="gap-1 text-orange-600 border-orange-500/30 hover:bg-orange-500/10"
+            >
+              <Trash2 className="h-3 w-3" />
+              Limpar
+            </Button>
           </div>
 
           <Separator />
