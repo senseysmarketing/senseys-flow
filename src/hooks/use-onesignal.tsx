@@ -21,7 +21,23 @@ export interface OneSignalDiagnosticInfo {
   pushToken: string | null;
   sdkVersion: string | null;
   lastUpdated: Date | null;
+  isIOS: boolean;
+  isPWA: boolean;
 }
+
+// Check if iOS device
+const checkIsIOS = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+};
+
+// Check if running as PWA (standalone mode)
+const checkIsPWA = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(display-mode: standalone)').matches || 
+    (window.navigator as any).standalone === true;
+};
 
 // Check if browser supports push notifications
 const checkBrowserSupport = (): boolean => {
@@ -53,7 +69,9 @@ export function useOneSignal() {
     subscriptionId: null,
     pushToken: null,
     sdkVersion: null,
-    lastUpdated: null
+    lastUpdated: null,
+    isIOS: checkIsIOS(),
+    isPWA: checkIsPWA()
   });
   const [diagnosticLogs, setDiagnosticLogs] = useState<string[]>([]);
 
@@ -66,6 +84,9 @@ export function useOneSignal() {
 
   // Get diagnostic info from OneSignal
   const getDiagnosticInfo = useCallback(async (): Promise<OneSignalDiagnosticInfo> => {
+    const isIOS = checkIsIOS();
+    const isPWA = checkIsPWA();
+    
     return new Promise((resolve) => {
       if (!window.OneSignal) {
         const info: OneSignalDiagnosticInfo = {
@@ -74,10 +95,12 @@ export function useOneSignal() {
           subscriptionId: null,
           pushToken: null,
           sdkVersion: null,
-          lastUpdated: new Date()
+          lastUpdated: new Date(),
+          isIOS,
+          isPWA
         };
         setDiagnosticInfo(info);
-        addDiagnosticLog('SDK não disponível');
+        addDiagnosticLog(`SDK não disponível | iOS=${isIOS}, PWA=${isPWA}`);
         resolve(info);
         return;
       }
@@ -90,10 +113,12 @@ export function useOneSignal() {
             subscriptionId: OneSignal.User?.PushSubscription?.id || null,
             pushToken: OneSignal.User?.PushSubscription?.token || null,
             sdkVersion: OneSignal.VERSION || null,
-            lastUpdated: new Date()
+            lastUpdated: new Date(),
+            isIOS,
+            isPWA
           };
           setDiagnosticInfo(info);
-          addDiagnosticLog(`Diagnóstico: externalId=${info.externalId}, subscriptionId=${info.subscriptionId?.slice(0, 8) || 'null'}`);
+          addDiagnosticLog(`Diagnóstico: externalId=${info.externalId}, iOS=${isIOS}, PWA=${isPWA}`);
           resolve(info);
         } catch (error: any) {
           addDiagnosticLog(`Erro ao obter diagnóstico: ${error.message}`);
@@ -103,7 +128,9 @@ export function useOneSignal() {
             subscriptionId: null,
             pushToken: null,
             sdkVersion: null,
-            lastUpdated: new Date()
+            lastUpdated: new Date(),
+            isIOS,
+            isPWA
           });
         }
       });
@@ -150,7 +177,9 @@ export function useOneSignal() {
     window.OneSignalDeferred = window.OneSignalDeferred || [];
     window.OneSignalDeferred.push(async function(OneSignal: any) {
       try {
-        addDiagnosticLog('Iniciando SDK...');
+        const isIOS = checkIsIOS();
+        const isPWA = checkIsPWA();
+        addDiagnosticLog(`Iniciando SDK... iOS=${isIOS}, PWA=${isPWA}`);
         
         // Check if already initialized to avoid duplicate init errors
         const isAlreadyInitialized = window.OneSignal?.initialized === true;
@@ -163,6 +192,9 @@ export function useOneSignal() {
             serviceWorkerPath: '/OneSignalSDKWorker.js',
             notifyButton: {
               enable: false, // We'll use our own UI
+            },
+            welcomeNotification: {
+              disable: true, // Managed via dashboard
             },
           });
           addDiagnosticLog('SDK inicializado com sucesso');
