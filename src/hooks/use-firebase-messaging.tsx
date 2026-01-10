@@ -212,9 +212,11 @@ export function useFirebaseMessaging() {
 
       // Get messaging instance and token
       const messaging = firebase.messaging();
-      messaging.useServiceWorker(swReg);
       
-      const token = await messaging.getToken({ vapidKey: VAPID_KEY });
+      const token = await messaging.getToken({ 
+        vapidKey: VAPID_KEY,
+        serviceWorkerRegistration: swReg 
+      });
 
       if (!token) throw new Error('Não foi possível obter token');
       
