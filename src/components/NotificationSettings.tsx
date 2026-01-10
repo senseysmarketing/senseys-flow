@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useNotificationPreferences } from '@/hooks/use-notification-preferences';
 import { useAuth } from '@/hooks/use-auth';
-import { useOneSignal } from '@/hooks/use-onesignal';
+import { useFirebaseMessaging } from '@/hooks/use-firebase-messaging';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -79,7 +79,7 @@ export const NotificationSettings = () => {
     diagnosticInfo,
     diagnosticLogs,
     getDiagnosticInfo
-  } = useOneSignal();
+  } = useFirebaseMessaging();
   
   const [localPrefs, setLocalPrefs] = useState(preferences);
   const [isPWA, setIsPWA] = useState(false);
@@ -182,7 +182,7 @@ export const NotificationSettings = () => {
         </Card>
       )}
 
-      {/* OneSignal Push Notifications */}
+      {/* Firebase Push Notifications */}
       <Card className="border-primary/30">
         <CardHeader>
           <div className="flex items-center gap-3">
@@ -288,7 +288,7 @@ export const NotificationSettings = () => {
         </CardContent>
       </Card>
 
-      {/* OneSignal Diagnostic Panel */}
+      {/* Firebase Diagnostic Panel */}
       <Card className="border-orange-500/30">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -297,7 +297,7 @@ export const NotificationSettings = () => {
                 <Bug className="h-5 w-5 text-orange-500" />
               </div>
               <div>
-                <CardTitle className="text-lg">Diagnóstico OneSignal</CardTitle>
+                <CardTitle className="text-lg">Diagnóstico Firebase</CardTitle>
                 <CardDescription>
                   Informações técnicas para debug
                 </CardDescription>
@@ -315,14 +315,14 @@ export const NotificationSettings = () => {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Critical alert if external_id is null but subscribed */}
-          {diagnosticInfo.externalId === null && isPushSubscribed && (
+          {/* Critical alert if no token but subscribed */}
+          {diagnosticInfo.fcmToken === null && isPushSubscribed && (
             <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
               <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
               <div className="text-sm">
                 <strong className="text-red-600">Problema detectado!</strong>
                 <p className="text-muted-foreground mt-1">
-                  External ID não está vinculado. Notificações não serão recebidas. 
+                  Token FCM não encontrado. Notificações não serão recebidas. 
                   Tente desativar e reativar o push.
                 </p>
               </div>
@@ -367,30 +367,16 @@ export const NotificationSettings = () => {
               status="info"
             />
             <DiagnosticRow 
-              label="External User ID" 
-              value={diagnosticInfo.externalId} 
-              status={diagnosticInfo.externalId ? 'success' : 'error'}
+              label="FCM Token" 
+              value={diagnosticInfo.fcmToken ? `...${diagnosticInfo.fcmToken.slice(-20)}` : null} 
+              status={diagnosticInfo.fcmToken ? 'success' : 'warning'}
               critical
             />
             <DiagnosticRow 
-              label="OneSignal ID" 
-              value={diagnosticInfo.onesignalId} 
-              status={diagnosticInfo.onesignalId ? 'success' : 'warning'}
-            />
-            <DiagnosticRow 
-              label="Subscription ID" 
-              value={diagnosticInfo.subscriptionId} 
-              status={diagnosticInfo.subscriptionId ? 'success' : 'warning'}
-            />
-            <DiagnosticRow 
-              label="Push Token" 
-              value={diagnosticInfo.pushToken ? `...${diagnosticInfo.pushToken.slice(-20)}` : null} 
-              status={diagnosticInfo.pushToken ? 'success' : 'warning'}
-            />
-            <DiagnosticRow 
-              label="SDK Version" 
-              value={diagnosticInfo.sdkVersion} 
-              status="info"
+              label="Service Worker" 
+              value={diagnosticInfo.serviceWorkerStatus} 
+              status={diagnosticInfo.serviceWorkerStatus === 'active' ? 'success' : 
+                      diagnosticInfo.serviceWorkerStatus === 'error' ? 'error' : 'warning'}
             />
             <DiagnosticRow 
               label="Permissão" 

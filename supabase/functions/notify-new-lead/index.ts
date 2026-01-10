@@ -210,10 +210,10 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // Send push notifications via OneSignal to all account users
+    // Send push notifications via Firebase FCM to all account users
     try {
-      console.log("Sending OneSignal push notifications to account:", account_id);
-      const pushResponse = await fetch(`${supabaseUrl}/functions/v1/send-onesignal-notification`, {
+      console.log("Sending FCM push notifications to account:", account_id);
+      const pushResponse = await fetch(`${supabaseUrl}/functions/v1/send-fcm-notification`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -230,14 +230,14 @@ const handler = async (req: Request): Promise<Response> => {
 
       if (pushResponse.ok) {
         const pushResult = await pushResponse.json();
-        notifications.push = pushResult.recipients || pushResult.sent || 0;
-        console.log("OneSignal notifications sent:", pushResult);
+        notifications.push = pushResult.sent || 0;
+        console.log("FCM notifications sent:", pushResult);
       } else {
         const error = await pushResponse.text();
-        console.error("OneSignal notification error:", error);
+        console.error("FCM notification error:", error);
       }
     } catch (pushError) {
-      console.error("Error sending OneSignal notifications:", pushError);
+      console.error("Error sending FCM notifications:", pushError);
     }
 
     console.log(`Notifications sent - Email: ${notifications.email}, Push: ${notifications.push}`);
