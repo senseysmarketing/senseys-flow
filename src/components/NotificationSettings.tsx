@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell, Mail, Volume2, Smartphone, Flame, Thermometer, Snowflake, Download, Send, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { Bell, Mail, Volume2, Smartphone, Flame, Thermometer, Snowflake, Download, Send, Loader2, CheckCircle2, XCircle, Bug, RefreshCw, Copy, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -7,9 +7,63 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useNotificationPreferences } from '@/hooks/use-notification-preferences';
 import { useAuth } from '@/hooks/use-auth';
 import { useOneSignal } from '@/hooks/use-onesignal';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+
+// Helper component for diagnostic info rows
+const DiagnosticRow = ({ 
+  label, 
+  value, 
+  status,
+  critical 
+}: { 
+  label: string; 
+  value: string | null | undefined;
+  status: 'success' | 'error' | 'warning' | 'info';
+  critical?: boolean;
+}) => {
+  const statusColors = {
+    success: 'text-green-600',
+    error: 'text-red-600',
+    warning: 'text-orange-500',
+    info: 'text-muted-foreground'
+  };
+
+  const handleCopy = () => {
+    if (value) {
+      navigator.clipboard.writeText(value);
+      toast.success('Copiado!');
+    }
+  };
+
+  return (
+    <div className="flex justify-between items-center py-1.5 border-b border-border/50 last:border-0">
+      <span className={cn("text-xs", critical && "font-semibold")}>{label}</span>
+      <div className="flex items-center gap-1">
+        <span className={cn(
+          statusColors[status], 
+          "text-xs truncate max-w-[160px] font-mono"
+        )}>
+          {value || 'null'}
+        </span>
+        {value && (
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-5 w-5 shrink-0"
+            onClick={handleCopy}
+          >
+            <Copy className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export const NotificationSettings = () => {
   const { user } = useAuth();
@@ -21,7 +75,10 @@ export const NotificationSettings = () => {
     permissionState,
     subscribe: subscribeToPush, 
     unsubscribe: unsubscribeFromPush,
-    sendTestNotification
+    sendTestNotification,
+    diagnosticInfo,
+    diagnosticLogs,
+    getDiagnosticInfo
   } = useOneSignal();
   
   const [localPrefs, setLocalPrefs] = useState(preferences);
@@ -227,6 +284,131 @@ export const NotificationSettings = () => {
               checked={localPrefs.sound_enabled}
               onCheckedChange={(checked) => handleChange('sound_enabled', checked)}
             />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* OneSignal Diagnostic Panel */}
+      <Card className="border-orange-500/30">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-orange-500/10">
+                <Bug className="h-5 w-5 text-orange-500" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">Diagnóstico OneSignal</CardTitle>
+                <CardDescription>
+                  Informações técnicas para debug
+                </CardDescription>
+              </div>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => getDiagnosticInfo()}
+              className="gap-1"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Atualizar
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Critical alert if external_id is null but subscribed */}
+          {diagnosticInfo.externalId === null && isPushSubscribed && (
+            <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <strong className="text-red-600">Problema detectado!</strong>
+                <p className="text-muted-foreground mt-1">
+                  External ID não está vinculado. Notificações não serão recebidas. 
+                  Tente desativar e reativar o push.
+                </p>
+              </div>
+            </div>
+          )}
+          
+          {/* Diagnostic info table */}
+          <div className="space-y-0.5 bg-muted/30 rounded-lg p-3">
+            <DiagnosticRow 
+              label="User ID (Supabase)" 
+              value={user?.id} 
+              status="info"
+            />
+            <DiagnosticRow 
+              label="External User ID" 
+              value={diagnosticInfo.externalId} 
+              status={diagnosticInfo.externalId ? 'success' : 'error'}
+              critical
+            />
+            <DiagnosticRow 
+              label="OneSignal ID" 
+              value={diagnosticInfo.onesignalId} 
+              status={diagnosticInfo.onesignalId ? 'success' : 'warning'}
+            />
+            <DiagnosticRow 
+              label="Subscription ID" 
+              value={diagnosticInfo.subscriptionId} 
+              status={diagnosticInfo.subscriptionId ? 'success' : 'warning'}
+            />
+            <DiagnosticRow 
+              label="Push Token" 
+              value={diagnosticInfo.pushToken ? `...${diagnosticInfo.pushToken.slice(-20)}` : null} 
+              status={diagnosticInfo.pushToken ? 'success' : 'warning'}
+            />
+            <DiagnosticRow 
+              label="SDK Version" 
+              value={diagnosticInfo.sdkVersion} 
+              status="info"
+            />
+            <DiagnosticRow 
+              label="Permissão" 
+              value={permissionState} 
+              status={permissionState === 'granted' ? 'success' : permissionState === 'denied' ? 'error' : 'warning'}
+            />
+            <DiagnosticRow 
+              label="Inscrito" 
+              value={isPushSubscribed ? 'Sim' : 'Não'} 
+              status={isPushSubscribed ? 'success' : 'warning'}
+            />
+            {diagnosticInfo.lastUpdated && (
+              <DiagnosticRow 
+                label="Última atualização" 
+                value={diagnosticInfo.lastUpdated.toLocaleTimeString('pt-BR')} 
+                status="info"
+              />
+            )}
+          </div>
+
+          <Separator />
+
+          {/* Real-time logs */}
+          <div>
+            <Label className="text-sm font-medium">Logs em Tempo Real</Label>
+            <ScrollArea className="h-32 mt-2 rounded border bg-muted/50 p-2">
+              {diagnosticLogs.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Nenhum log ainda. Interaja com as notificações para ver os logs.
+                </p>
+              ) : (
+                <div className="space-y-1 font-mono text-xs">
+                  {diagnosticLogs.map((log, i) => (
+                    <div 
+                      key={i} 
+                      className={cn(
+                        "text-muted-foreground",
+                        log.includes('ERRO') && "text-red-500",
+                        log.includes('AVISO') && "text-orange-500",
+                        log.includes('sucesso') && "text-green-600"
+                      )}
+                    >
+                      {log}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
           </div>
         </CardContent>
       </Card>
