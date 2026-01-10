@@ -112,6 +112,15 @@ serve(async (req) => {
 
     const result = await response.json();
     console.log("[OneSignal] API response:", JSON.stringify(result));
+    console.log("[OneSignal] Response status:", response.status);
+    console.log("[OneSignal] Recipients:", result.recipients || 0);
+
+    // Check if no recipients were found (external_id not linked)
+    if (result.recipients === 0 || result.external_id === null) {
+      console.warn("[OneSignal] ⚠️ AVISO: Nenhum dispositivo recebeu a notificação!");
+      console.warn("[OneSignal] Isso geralmente significa que o external_id não está vinculado a nenhuma subscription.");
+      console.warn("[OneSignal] O usuário precisa desativar e reativar as notificações push.");
+    }
 
     if (!response.ok) {
       console.error("[OneSignal] API error:", result);
@@ -121,13 +130,24 @@ serve(async (req) => {
       );
     }
 
+    // Return detailed response
+    const responseData = {
+      success: true,
+      sent: targetUserIds.length,
+      onesignal_id: result.id,
+      recipients: result.recipients || 0,
+      external_id_found: result.external_id !== null,
+      warning: result.recipients === 0 ? "Nenhum dispositivo recebeu a notificação. O external_id pode não estar vinculado." : null,
+      debug: {
+        target_user_ids: targetUserIds,
+        onesignal_response: result
+      }
+    };
+
+    console.log("[OneSignal] Final response:", JSON.stringify(responseData));
+
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        sent: targetUserIds.length,
-        onesignal_id: result.id,
-        recipients: result.recipients || 0
-      }),
+      JSON.stringify(responseData),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
 
