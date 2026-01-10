@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/use-auth";
 import { AccountProvider } from "@/hooks/use-account";
 import { PermissionsProvider } from "@/hooks/use-permissions";
+import { FirebaseMessagingProvider } from "@/hooks/use-firebase-messaging";
 import Layout from "@/components/Layout";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
@@ -27,24 +28,26 @@ const App = () => (
       <AuthProvider>
         <PermissionsProvider>
           <AccountProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <Routes>
-                <Route path="/" element={<Layout><Index /></Layout>} />
-                <Route path="/auth" element={<Layout><Auth /></Layout>} />
-                <Route path="/auth/support-callback" element={<SupportCallback />} />
-                <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
-              <Route path="/leads" element={<Layout><Leads /></Layout>} />
-              <Route path="/properties" element={<Layout><Properties /></Layout>} />
-              <Route path="/calendar" element={<Layout><Calendar /></Layout>} />
-                <Route path="/reports" element={<Layout><Reports /></Layout>} />
-                <Route path="/settings" element={<Layout><Settings /></Layout>} />
-                <Route path="/agency-admin" element={<Layout><AgencyAdmin /></Layout>} />
-                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                <Route path="*" element={<Layout><NotFound /></Layout>} />
-              </Routes>
-            </BrowserRouter>
+            <FirebaseMessagingProvider>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <Routes>
+                  <Route path="/" element={<Layout><Index /></Layout>} />
+                  <Route path="/auth" element={<Layout><Auth /></Layout>} />
+                  <Route path="/auth/support-callback" element={<SupportCallback />} />
+                  <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
+                  <Route path="/leads" element={<Layout><Leads /></Layout>} />
+                  <Route path="/properties" element={<Layout><Properties /></Layout>} />
+                  <Route path="/calendar" element={<Layout><Calendar /></Layout>} />
+                  <Route path="/reports" element={<Layout><Reports /></Layout>} />
+                  <Route path="/settings" element={<Layout><Settings /></Layout>} />
+                  <Route path="/agency-admin" element={<Layout><AgencyAdmin /></Layout>} />
+                  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                  <Route path="*" element={<Layout><NotFound /></Layout>} />
+                </Routes>
+              </BrowserRouter>
+            </FirebaseMessagingProvider>
           </AccountProvider>
         </PermissionsProvider>
       </AuthProvider>

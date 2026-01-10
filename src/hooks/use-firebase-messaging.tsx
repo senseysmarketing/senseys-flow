@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useAccount } from '@/hooks/use-account';
 import { supabase } from '@/integrations/supabase/client';
@@ -64,7 +64,24 @@ const loadFirebaseSDK = (): Promise<void> => {
   });
 };
 
-export function useFirebaseMessaging() {
+interface FirebaseMessagingContextType {
+  isInitialized: boolean;
+  isSubscribed: boolean;
+  isLoading: boolean;
+  permissionState: 'default' | 'granted' | 'denied';
+  subscribe: () => Promise<boolean>;
+  unsubscribe: () => Promise<boolean>;
+  sendTestNotification: () => Promise<void>;
+  diagnosticInfo: FCMDiagnosticInfo;
+  diagnosticLogs: string[];
+  getDiagnosticInfo: () => Promise<void>;
+  addDiagnosticLog: (message: string) => void;
+  cleanupOldTokens: () => Promise<{ deleted: number; error?: string }>;
+}
+
+const FirebaseMessagingContext = createContext<FirebaseMessagingContextType | null>(null);
+
+export function FirebaseMessagingProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { account } = useAccount();
   const [isInitialized, setIsInitialized] = useState(false);
@@ -131,7 +148,12 @@ export function useFirebaseMessaging() {
 
   // Initialize on mount and auto-reconnect FCM if needed
   useEffect(() => {
-    if (typeof window === 'undefined' || initAttemptedRef.current) return;
+    if (typeof window === 'undefined') return;
+    if (!user?.id || !account?.id) {
+      setIsLoading(false);
+      return;
+    }
+    if (initAttemptedRef.current) return;
     if (!checkBrowserSupport()) {
       setIsLoading(false);
       updateDiagnosticInfo({ serviceWorkerStatus: 'unsupported' });
@@ -142,10 +164,10 @@ export function useFirebaseMessaging() {
 
     const init = async () => {
       try {
-        addDiagnosticLog('Inicializando...');
+        addDiagnosticLog('Inicializando FCM Provider...');
         setPermissionState(Notification.permission as 'default' | 'granted' | 'denied');
         
-        if (Notification.permission === 'granted' && user?.id && account?.id) {
+        if (Notification.permission === 'granted') {
           // Check for existing valid FCM token (not old Web Push tokens)
           const { data: existing } = await supabase
             .from('push_subscriptions')
@@ -211,6 +233,17 @@ export function useFirebaseMessaging() {
 
     init();
   }, [user?.id, account?.id, addDiagnosticLog, updateDiagnosticInfo]);
+
+  // Reset state on logout
+  useEffect(() => {
+    if (!user?.id) {
+      initAttemptedRef.current = false;
+      setIsSubscribed(false);
+      setFcmToken(null);
+      setIsInitialized(false);
+      setIsLoading(true);
+    }
+  }, [user?.id]);
 
   const subscribe = useCallback(async () => {
     if (!user?.id || !account?.id) {
@@ -373,7 +406,7 @@ export function useFirebaseMessaging() {
     }
   }, [user?.id, addDiagnosticLog]);
 
-  return {
+  const value: FirebaseMessagingContextType = {
     isInitialized,
     isSubscribed,
     isLoading,
@@ -387,4 +420,18 @@ export function useFirebaseMessaging() {
     addDiagnosticLog,
     cleanupOldTokens
   };
+
+  return (
+    <FirebaseMessagingContext.Provider value={value}>
+      {children}
+    </FirebaseMessagingContext.Provider>
+  );
+}
+
+export function useFirebaseMessaging() {
+  const context = useContext(FirebaseMessagingContext);
+  if (!context) {
+    throw new Error('useFirebaseMessaging must be used within a FirebaseMessagingProvider');
+  }
+  return context;
 }
