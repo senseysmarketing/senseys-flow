@@ -398,6 +398,28 @@ export const NotificationSettings = () => {
             )}
           </div>
 
+          {/* Show full FCM token for testing */}
+          {diagnosticInfo.fcmToken && (
+            <div className="p-3 bg-muted/30 rounded-lg border border-border/50">
+              <Label className="text-sm font-medium">Token FCM Completo (para testes)</Label>
+              <div className="mt-2 p-2 bg-background rounded border font-mono text-xs break-all select-all max-h-20 overflow-y-auto">
+                {diagnosticInfo.fcmToken}
+              </div>
+              <Button 
+                size="sm" 
+                variant="outline"
+                className="mt-2 gap-1"
+                onClick={() => {
+                  navigator.clipboard.writeText(diagnosticInfo.fcmToken!);
+                  toast.success('Token copiado!');
+                }}
+              >
+                <Copy className="h-3 w-3" />
+                Copiar Token
+              </Button>
+            </div>
+          )}
+
           <Separator />
 
           {/* Cleanup old tokens */}

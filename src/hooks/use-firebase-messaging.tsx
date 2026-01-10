@@ -267,9 +267,22 @@ export function FirebaseMessagingProvider({ children }: { children: ReactNode })
       return false;
     }
 
+    // Check iOS/PWA context
+    const isIOS = checkIsIOS();
+    const isPWA = checkIsPWA();
+    
+    // Warn iOS users if not in PWA
+    if (isIOS && !isPWA) {
+      addDiagnosticLog('AVISO: iOS detectado fora da PWA!');
+      toast.warning(
+        'Para receber notificações no iOS, instale o app e abra pelo ícone da Tela de Início.',
+        { duration: 10000 }
+      );
+    }
+
     try {
       setIsLoading(true);
-      addDiagnosticLog('Iniciando subscribe...');
+      addDiagnosticLog(`Iniciando subscribe... (iOS=${isIOS}, PWA=${isPWA})`);
 
       // Load Firebase SDK from CDN
       await loadFirebaseSDK();
