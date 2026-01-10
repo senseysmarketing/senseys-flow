@@ -419,6 +419,40 @@ export const NotificationSettings = () => {
             </Button>
           </div>
 
+          {/* Force update Service Worker */}
+          <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+            <div className="space-y-0.5">
+              <Label className="text-sm">Atualizar Service Worker</Label>
+              <p className="text-xs text-muted-foreground">
+                Força atualização do SW para versão mais recente
+              </p>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={async () => {
+                try {
+                  const reg = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
+                  if (reg) {
+                    if (reg.waiting) {
+                      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                    }
+                    await reg.update();
+                    toast.success('Service Worker atualizado!');
+                  } else {
+                    toast.info('Nenhum SW registrado');
+                  }
+                } catch (e: any) {
+                  toast.error(`Erro: ${e.message}`);
+                }
+              }}
+              className="gap-1"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Atualizar SW
+            </Button>
+          </div>
+
           <Separator />
 
           {/* Real-time logs */}
