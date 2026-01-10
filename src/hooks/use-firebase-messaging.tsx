@@ -111,10 +111,20 @@ export function FirebaseMessagingProvider({ children }: { children: ReactNode })
     setDiagnosticInfo(prev => ({ ...prev, ...updates, lastUpdated: new Date() }));
   }, []);
 
-  // Save FCM token to database
+  // Save FCM token to database - UPSERT to avoid duplicates
   const saveTokenToDatabase = useCallback(async (token: string, userId: string, accountId: string) => {
     try {
-      addDiagnosticLog('Salvando token no banco...');
+      addDiagnosticLog('Desativando tokens antigos...');
+      
+      // First, deactivate ALL old tokens for this user (ensures only 1 active)
+      await supabase
+        .from('push_subscriptions')
+        .update({ is_active: false })
+        .eq('user_id', userId);
+      
+      addDiagnosticLog('Salvando novo token...');
+      
+      // Check if this exact token already exists
       const { data: existing } = await supabase
         .from('push_subscriptions')
         .select('id')
@@ -123,11 +133,17 @@ export function FirebaseMessagingProvider({ children }: { children: ReactNode })
         .single();
 
       if (existing) {
+        // Reactivate existing token
         await supabase
           .from('push_subscriptions')
-          .update({ is_active: true, device_name: navigator.userAgent.substring(0, 50) })
+          .update({ 
+            is_active: true, 
+            device_name: navigator.userAgent.substring(0, 50),
+            account_id: accountId
+          })
           .eq('id', existing.id);
       } else {
+        // Insert new token
         await supabase.from('push_subscriptions').insert({
           user_id: userId,
           account_id: accountId,
@@ -138,7 +154,7 @@ export function FirebaseMessagingProvider({ children }: { children: ReactNode })
           device_name: navigator.userAgent.substring(0, 50)
         });
       }
-      addDiagnosticLog('Token salvo com sucesso');
+      addDiagnosticLog('Token salvo com sucesso (único ativo)');
       return true;
     } catch (error: any) {
       addDiagnosticLog(`ERRO ao salvar: ${error.message}`);
@@ -267,10 +283,19 @@ export function FirebaseMessagingProvider({ children }: { children: ReactNode })
         addDiagnosticLog('Firebase inicializado');
       }
 
-      // Register service worker
-      const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
+      // Register service worker with forced update
+      const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { 
+        scope: '/',
+        updateViaCache: 'none' // Force fetch latest version
+      });
+      
+      // Force SW update if available
+      if (swReg.waiting) {
+        swReg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
+      await swReg.update();
       await navigator.serviceWorker.ready;
-      addDiagnosticLog('Service Worker registrado');
+      addDiagnosticLog('Service Worker registrado (atualizado)');
 
       // Request permission
       const permission = await Notification.requestPermission();
@@ -347,7 +372,7 @@ export function FirebaseMessagingProvider({ children }: { children: ReactNode })
     }
     try {
       addDiagnosticLog('Enviando teste...');
-      const { error } = await supabase.functions.invoke('send-fcm-notification', {
+      const { data, error } = await supabase.functions.invoke('send-fcm-notification', {
         body: {
           user_ids: [user.id],
           title: '🧪 Teste de Notificação',
@@ -356,7 +381,10 @@ export function FirebaseMessagingProvider({ children }: { children: ReactNode })
         }
       });
       if (error) throw error;
-      toast.success('Notificação enviada!');
+      
+      // Log FCM response
+      addDiagnosticLog(`Resposta FCM: sent=${data?.sent || 0}, failed=${data?.failed || 0}`);
+      toast.success(`Notificação enviada! (${data?.sent || 0} dispositivo${data?.sent !== 1 ? 's' : ''})`);
     } catch (error: any) {
       addDiagnosticLog(`ERRO: ${error.message}`);
       toast.error('Erro ao enviar teste');
