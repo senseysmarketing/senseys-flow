@@ -328,9 +328,39 @@ export const NotificationSettings = () => {
               </div>
             </div>
           )}
+
+          {/* iOS not in PWA mode alert */}
+          {diagnosticInfo.isIOS && !diagnosticInfo.isPWA && (
+            <div className="flex items-start gap-2 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+              <AlertTriangle className="h-5 w-5 text-orange-500 shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <strong className="text-orange-600">Push no iPhone/iPad</strong>
+                <p className="text-muted-foreground mt-1 mb-2">
+                  Para receber notificações neste dispositivo, você precisa:
+                </p>
+                <ol className="text-muted-foreground list-decimal list-inside space-y-1 text-xs">
+                  <li>Tocar no ícone de <strong>Compartilhar</strong> (⬆️) do Safari</li>
+                  <li>Selecionar <strong>"Adicionar à Tela de Início"</strong></li>
+                  <li>Abrir o app pelo ícone criado na tela inicial</li>
+                  <li>Voltar aqui e ativar as notificações</li>
+                </ol>
+              </div>
+            </div>
+          )}
           
           {/* Diagnostic info table */}
           <div className="space-y-0.5 bg-muted/30 rounded-lg p-3">
+            <DiagnosticRow 
+              label="Dispositivo iOS" 
+              value={diagnosticInfo.isIOS ? 'Sim' : 'Não'} 
+              status="info"
+            />
+            <DiagnosticRow 
+              label="Modo PWA (Tela Início)" 
+              value={diagnosticInfo.isPWA ? 'Sim' : 'Não'} 
+              status={diagnosticInfo.isPWA ? 'success' : (diagnosticInfo.isIOS ? 'error' : 'info')}
+              critical={diagnosticInfo.isIOS}
+            />
             <DiagnosticRow 
               label="User ID (Supabase)" 
               value={user?.id} 
