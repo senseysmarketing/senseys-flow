@@ -220,7 +220,7 @@ serve(async (req) => {
       // Construir URL absoluta para click
       const absoluteUrl = url?.startsWith("http") 
         ? url 
-        : `https://crm.senseys.com.br${url || "/leads"}`;
+        : `https://crmsenseys.com.br${url || "/leads"}`;
 
       const fcmPayload = {
         message: {
@@ -234,8 +234,8 @@ serve(async (req) => {
               link: absoluteUrl,
             },
             notification: {
-              icon: "https://crm.senseys.com.br/pwa-192x192.png",
-              badge: "https://crm.senseys.com.br/pwa-192x192.png",
+              icon: "https://crmsenseys.com.br/pwa-192x192.png",
+              badge: "https://crmsenseys.com.br/pwa-192x192.png",
             },
           },
           data: {

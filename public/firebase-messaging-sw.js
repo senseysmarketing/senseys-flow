@@ -68,12 +68,12 @@ self.addEventListener('push', (event) => {
       const url =
         msg?.data?.click_action ||
         msg?.data?.url ||
-        'https://crm.senseys.com.br/leads';
+        'https://crmsenseys.com.br/leads';
 
       const options = {
         body,
-        icon: 'https://crm.senseys.com.br/pwa-192x192.png',
-        badge: 'https://crm.senseys.com.br/pwa-192x192.png',
+        icon: 'https://crmsenseys.com.br/pwa-192x192.png',
+        badge: 'https://crmsenseys.com.br/pwa-192x192.png',
         tag: 'fcm-push',
         renotify: false,
         data: { ...msg?.data, click_action: url }
@@ -93,13 +93,13 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   
   const url = event.notification.data?.click_action || 
-              'https://crm.senseys.com.br/leads';
+              'https://crmsenseys.com.br/leads';
   
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true })
       .then((windowClients) => {
         for (const client of windowClients) {
-          if (client.url.includes('crm.senseys.com.br') && 'focus' in client) {
+          if (client.url.includes('crmsenseys.com.br') && 'focus' in client) {
             client.navigate(url);
             return client.focus();
           }
