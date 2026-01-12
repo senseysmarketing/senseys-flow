@@ -88,7 +88,7 @@ const handler = async (req: Request): Promise<Response> => {
           const temperatureColor = lead_temperature === "hot" ? "#ef4444" : 
                                    lead_temperature === "warm" ? "#f59e0b" : "#3b82f6";
 
-          const appUrl = "https://crm.senseys.com.br";
+          const appUrl = "https://crmsenseys.com.br";
           
           const emailHtml = `
 <!DOCTYPE html>
