@@ -10,9 +10,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { AlertCircle, CheckCircle2, Settings2, Thermometer, Save, RefreshCw, Globe, Facebook, Download, Loader2, CloudDownload, Trash2 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
+import { AlertCircle, CheckCircle2, Settings2, Thermometer, Save, RefreshCw, Globe, Facebook, Download, Loader2, CloudDownload, Trash2, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+
+// Constantes de limite
+const MAX_FORMS = 20;
+const FORMS_PER_PAGE = 10;
 
 interface FormConfig {
   id: string;
@@ -60,6 +66,7 @@ const MetaFormScoringManager = () => {
   const [editedRules, setEditedRules] = useState<Record<string, number>>({});
   const [updateExistingLeads, setUpdateExistingLeads] = useState<Record<string, boolean>>({});
   const [activeTab, setActiveTab] = useState<string>("all");
+  const [currentPage, setCurrentPage] = useState(1);
   
   // Sync states
   const [availableForms, setAvailableForms] = useState<AvailableForm[]>([]);
@@ -74,6 +81,11 @@ const MetaFormScoringManager = () => {
     fetchData();
     checkMetaConfig();
   }, []);
+
+  // Reset page when tab changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab]);
 
   const checkMetaConfig = async () => {
     try {
@@ -175,6 +187,17 @@ const MetaFormScoringManager = () => {
       return;
     }
 
+    // Verificar limite antes de importar
+    const totalAfterImport = formConfigs.length + selectedForms.size;
+    if (totalAfterImport > MAX_FORMS) {
+      toast({
+        variant: "destructive",
+        title: "Limite atingido",
+        description: `Você já tem ${formConfigs.length} formulários. O limite é ${MAX_FORMS}. Exclua formulários não utilizados para liberar espaço.`,
+      });
+      return;
+    }
+
     setSyncing(true);
     let successCount = 0;
     let totalRules = 0;
@@ -213,6 +236,18 @@ const MetaFormScoringManager = () => {
   };
 
   const syncAllForms = async () => {
+    // Verificar limite antes de sincronizar todos
+    const notImportedForms = availableForms.filter(f => !f.isImported);
+    const totalAfterSync = formConfigs.length + notImportedForms.length;
+    if (totalAfterSync > MAX_FORMS) {
+      toast({
+        variant: "destructive",
+        title: "Limite atingido",
+        description: `Sincronizar todos adicionaria ${notImportedForms.length} formulários, ultrapassando o limite de ${MAX_FORMS}. Exclua formulários não utilizados ou importe apenas alguns.`,
+      });
+      return;
+    }
+
     setSyncing(true);
     try {
       const { data, error } = await supabase.functions.invoke("sync-meta-forms", {
@@ -497,8 +532,16 @@ const MetaFormScoringManager = () => {
     return config.source_type === activeTab;
   });
 
+  // Pagination logic
+  const totalPages = Math.ceil(filteredConfigs.length / FORMS_PER_PAGE);
+  const paginatedConfigs = filteredConfigs.slice(
+    (currentPage - 1) * FORMS_PER_PAGE,
+    currentPage * FORMS_PER_PAGE
+  );
+
   const metaCount = formConfigs.filter(c => c.source_type === 'meta').length;
   const webhookCount = formConfigs.filter(c => c.source_type === 'webhook').length;
+  const limitReached = formConfigs.length >= MAX_FORMS;
 
   if (loading) {
     return (
@@ -954,6 +997,36 @@ const MetaFormScoringManager = () => {
   return (
     <div className="space-y-4">
       {hasMetaConfig && renderSyncPanel()}
+
+      {/* Limite de formulários - Alerta quando atingido */}
+      {limitReached && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Limite de formulários atingido</AlertTitle>
+          <AlertDescription>
+            Você atingiu o limite de {MAX_FORMS} formulários. 
+            Exclua formulários que não está utilizando para adicionar novos.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Indicador de progresso do limite */}
+      <div className="flex items-center justify-between gap-4 p-3 bg-muted/30 rounded-lg">
+        <div className="flex items-center gap-3 flex-1">
+          <span className="text-sm text-muted-foreground whitespace-nowrap">
+            {formConfigs.length}/{MAX_FORMS} formulários
+          </span>
+          <Progress 
+            value={(formConfigs.length / MAX_FORMS) * 100} 
+            className="flex-1 max-w-[200px] h-2"
+          />
+        </div>
+        {formConfigs.length >= MAX_FORMS * 0.8 && formConfigs.length < MAX_FORMS && (
+          <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20 text-xs">
+            Quase no limite
+          </Badge>
+        )}
+      </div>
       
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <div className="flex items-center justify-between flex-wrap gap-2">
@@ -972,7 +1045,13 @@ const MetaFormScoringManager = () => {
           </TabsList>
           <div className="flex items-center gap-2">
             {hasMetaConfig && !showSyncPanel && (
-              <Button variant="outline" size="sm" onClick={fetchAvailableForms} disabled={loadingForms}>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={fetchAvailableForms} 
+                disabled={loadingForms || limitReached}
+                title={limitReached ? "Limite de formulários atingido" : undefined}
+              >
                 {loadingForms ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
@@ -988,7 +1067,7 @@ const MetaFormScoringManager = () => {
           </div>
         </div>
 
-        <TabsContent value={activeTab} className="mt-4">
+        <TabsContent value={activeTab} className="mt-4 space-y-4">
           {filteredConfigs.length === 0 ? (
             <Card>
               <CardContent className="py-8">
@@ -999,9 +1078,43 @@ const MetaFormScoringManager = () => {
               </CardContent>
             </Card>
           ) : (
-            <Accordion type="single" collapsible className="space-y-4">
-              {filteredConfigs.map(renderFormConfig)}
-            </Accordion>
+            <>
+              <Accordion type="single" collapsible className="space-y-4">
+                {paginatedConfigs.map(renderFormConfig)}
+              </Accordion>
+
+              {/* Paginação */}
+              {totalPages > 1 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t">
+                  <span className="text-sm text-muted-foreground">
+                    Mostrando {((currentPage - 1) * FORMS_PER_PAGE) + 1} - {Math.min(currentPage * FORMS_PER_PAGE, filteredConfigs.length)} de {filteredConfigs.length} formulários
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4 mr-1" />
+                      Anterior
+                    </Button>
+                    <span className="text-sm px-2">
+                      Página {currentPage} de {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Próxima
+                      <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </TabsContent>
       </Tabs>
