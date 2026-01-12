@@ -217,6 +217,11 @@ serve(async (req) => {
     for (const sub of validFcmTokens) {
       const fcmToken = sub.endpoint; // We store FCM token in endpoint field
 
+      // Construir URL absoluta para click
+      const absoluteUrl = url?.startsWith("http") 
+        ? url 
+        : `https://crm.senseys.com.br${url || "/leads"}`;
+
       const fcmPayload = {
         message: {
           token: fcmToken,
@@ -226,19 +231,17 @@ serve(async (req) => {
           },
           webpush: {
             fcm_options: {
-              link: url?.startsWith("http") ? url : `https://crm.senseys.com.br${url || "/leads"}`,
+              link: absoluteUrl,
             },
             notification: {
-              icon: "/pwa-192x192.png",
-              badge: "/pwa-192x192.png",
-              vibrate: [200, 100, 200],
-              requireInteraction: true,
+              icon: "https://crm.senseys.com.br/pwa-192x192.png",
+              badge: "https://crm.senseys.com.br/pwa-192x192.png",
             },
           },
           data: {
             ...data,
-            url: url || "/leads",
-            click_action: url?.startsWith("http") ? url : `https://crm.senseys.com.br${url || "/leads"}`,
+            url: absoluteUrl,
+            click_action: absoluteUrl,
           },
         },
       };
