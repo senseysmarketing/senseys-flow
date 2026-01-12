@@ -549,26 +549,50 @@ const SettingsPage = () => {
     </div>
   );
 
-  // Render mobile tabs (keep simple flat list)
+  // Render mobile tabs with two-level structure
   const renderMobileTabs = () => (
-    <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)} className="w-full">
-      <ScrollArea className="w-full">
-        <TabsList className="inline-flex w-max">
-          {navGroups.flatMap(group => 
-            group.items.filter(item => !item.permission || hasPermission(item.permission))
-          ).map((item) => (
-            <TabsTrigger
-              key={item.value}
-              value={item.value}
-              className="whitespace-nowrap gap-2"
+    <div className="space-y-3">
+      {/* Categorias (Nível 1) - Grid compacto */}
+      <Tabs value={activeCategory} onValueChange={(v) => handleCategoryChange(v as CategoryValue)} className="w-full">
+        <TabsList className="w-full grid grid-cols-4 h-auto p-1">
+          {categories.map((cat) => {
+            const group = navGroups.find(g => g.category === cat.value);
+            const hasVisibleItems = group?.items.some(item => 
+              !item.permission || hasPermission(item.permission)
+            );
+            if (!hasVisibleItems) return null;
+            
+            return (
+              <TabsTrigger 
+                key={cat.value} 
+                value={cat.value}
+                className="text-xs px-1.5 py-1.5"
+              >
+                {cat.label === "Gestão de Leads" ? "Leads" : 
+                 cat.label === "Integrações" ? "Integr." : 
+                 cat.label === "Avançado" ? "Avanç." : cat.label}
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
+      </Tabs>
+
+      {/* Sub-tabs (Nível 2) - Flex wrap */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)} className="w-full">
+        <TabsList className="w-full flex flex-wrap h-auto p-1 gap-1">
+          {currentCategoryItems.map((item) => (
+            <TabsTrigger 
+              key={item.value} 
+              value={item.value} 
+              className="flex-1 min-w-[45%] text-xs gap-1.5 py-1.5"
             >
               {item.icon}
-              {item.label}
+              <span className="truncate">{item.label}</span>
             </TabsTrigger>
           ))}
         </TabsList>
-      </ScrollArea>
-    </Tabs>
+      </Tabs>
+    </div>
   );
 
   // Render content based on active tab
