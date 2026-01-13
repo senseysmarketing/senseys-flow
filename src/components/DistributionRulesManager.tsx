@@ -28,6 +28,7 @@ interface DistributionRule {
   target_broker_id: string | null;
   priority: number;
   is_active: boolean;
+  is_default?: boolean;
 }
 
 interface Broker {
@@ -298,6 +299,17 @@ const DistributionRulesManager = () => {
   };
 
   const handleDelete = async (id: string) => {
+    // Check if this is the default rule
+    const rule = rules.find(r => r.id === id);
+    if (rule?.is_default) {
+      toast({
+        variant: "destructive",
+        title: "Não é possível excluir",
+        description: "A regra de distribuição padrão não pode ser excluída. Você pode desativá-la ou editar suas configurações.",
+      });
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from("distribution_rules")
@@ -862,6 +874,12 @@ const DistributionRulesManager = () => {
                         </div>
                       </div>
                     </div>
+
+                    {rule.is_default && (
+                      <Badge variant="outline" className="shrink-0 border-primary text-primary">
+                        Padrão
+                      </Badge>
+                    )}
 
                     <Badge variant="secondary" className="shrink-0">
                       P: {rule.priority}
