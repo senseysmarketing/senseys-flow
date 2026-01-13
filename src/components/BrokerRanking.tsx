@@ -60,7 +60,7 @@ const BrokerRanking = () => {
       const { data: activities, error: activitiesError } = await supabase
         .from("lead_activities")
         .select("lead_id, created_at, activity_type, created_by")
-        .in("activity_type", ["status_changed", "note_added"])
+        .in("activity_type", ["status_changed", "note_added", "temperature_changed"])
         .gte("created_at", startDate);
 
       if (activitiesError) throw activitiesError;
@@ -78,7 +78,7 @@ const BrokerRanking = () => {
         const responseTimes: number[] = [];
         brokerLeads.forEach(lead => {
           const leadActivities = activities
-            .filter(a => a.lead_id === lead.id && a.created_by === broker.user_id)
+            .filter(a => a.lead_id === lead.id && a.created_by === broker.user_id && a.created_by !== null)
             .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
           
           if (leadActivities.length > 0) {
@@ -239,7 +239,7 @@ const BrokerRanking = () => {
               })()}
             </div>
             <p className="text-xs text-muted-foreground">
-              média de primeiro contato
+              média até primeira interação
             </p>
           </CardContent>
         </Card>
