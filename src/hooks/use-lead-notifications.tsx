@@ -57,15 +57,35 @@ export const useLeadNotifications = (onNewLead?: () => void, enabled: boolean = 
           
           const newLead = payload.new as any;
           
+          // Check if this notification is relevant for the current user:
+          // 1. Lead was assigned to this user (directed notification), OR
+          // 2. Lead was not assigned to anyone (notify all as fallback)
+          const isAssignedToMe = newLead.assigned_broker_id === user.id;
+          const noAssignment = !newLead.assigned_broker_id;
+          
+          if (!isAssignedToMe && !noAssignment) {
+            // Lead was assigned to someone else - don't show toast
+            console.log('Lead atribuído a outro corretor, ignorando notificação toast');
+            return;
+          }
+          
           // Reproduzir som de notificação
           playNotificationSound();
           
-          // Mostrar toast
-          toast({
-            title: "🎉 Novo Lead!",
-            description: `${newLead.name} foi adicionado ao CRM`,
-            duration: 5000,
-          });
+          // Mostrar toast com mensagem personalizada
+          if (isAssignedToMe) {
+            toast({
+              title: "🎯 Lead Atribuído!",
+              description: `${newLead.name} foi atribuído a você`,
+              duration: 6000,
+            });
+          } else {
+            toast({
+              title: "🎉 Novo Lead!",
+              description: `${newLead.name} foi adicionado ao CRM`,
+              duration: 5000,
+            });
+          }
           
           // Chamar callback se fornecido
           if (onNewLead) {
@@ -79,7 +99,7 @@ export const useLeadNotifications = (onNewLead?: () => void, enabled: boolean = 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, enabled]);
+  }, [user, enabled, playNotificationSound, onNewLead]);
 
   return {
     playNotificationSound

@@ -349,7 +349,8 @@ serve(async (req) => {
 
     console.log('Lead created successfully:', lead.id);
 
-    // Apply distribution rules
+    // Apply distribution rules and capture assigned broker
+    let assignedBrokerId: string | undefined;
     try {
       const distributionResult = await supabase.functions.invoke('apply-distribution-rules', {
         body: {
@@ -359,6 +360,7 @@ serve(async (req) => {
       });
       
       if (distributionResult.data?.success) {
+        assignedBrokerId = distributionResult.data.broker_id;
         console.log(`✅ Lead distributed to ${distributionResult.data.broker_name} via rule: ${distributionResult.data.rule_applied}`);
       } else {
         console.log(`ℹ️ No distribution rule matched: ${distributionResult.data?.reason || 'unknown'}`);
@@ -378,7 +380,7 @@ serve(async (req) => {
       propertyName = property?.title || null;
     }
 
-    // Send email notifications
+    // Send notifications (only to assigned broker if any)
     try {
       await supabase.functions.invoke('notify-new-lead', {
         body: {
@@ -390,9 +392,10 @@ serve(async (req) => {
           lead_origem: leadData.origem,
           property_name: propertyName,
           account_id: accountId,
+          assigned_broker_id: assignedBrokerId, // Only notify assigned broker if any
         }
       });
-      console.log('Notification function invoked successfully');
+      console.log(`Notification function invoked${assignedBrokerId ? ` (directed to ${assignedBrokerId})` : ' (all users)'}`);
     } catch (notifyError) {
       console.error('Error invoking notify-new-lead:', notifyError);
       // Don't fail the webhook if notification fails

@@ -15,6 +15,7 @@ interface NotifyNewLeadRequest {
   lead_origem?: string;
   property_name?: string;
   account_id: string;
+  assigned_broker_id?: string; // NEW: If set, only notify this broker
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -32,7 +33,7 @@ const handler = async (req: Request): Promise<Response> => {
     const payload: NotifyNewLeadRequest = await req.json();
     console.log("Received notification request:", payload);
 
-    const { lead_id, lead_name, lead_phone, lead_email, lead_temperature, lead_origem, property_name, account_id } = payload;
+    const { lead_id, lead_name, lead_phone, lead_email, lead_temperature, lead_origem, property_name, account_id, assigned_broker_id } = payload;
 
     // Get account info
     const { data: account } = await supabase
@@ -42,12 +43,12 @@ const handler = async (req: Request): Promise<Response> => {
       .single();
 
     // Get all team members with notification preferences
-    const { data: profiles } = await supabase
+    const { data: allProfiles } = await supabase
       .from("profiles")
       .select("user_id, full_name")
       .eq("account_id", account_id);
 
-    if (!profiles || profiles.length === 0) {
+    if (!allProfiles || allProfiles.length === 0) {
       console.log("No profiles found for account");
       return new Response(JSON.stringify({ success: true, message: "No profiles to notify" }), {
         status: 200,
@@ -55,9 +56,30 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
+    // Filter profiles: if broker is assigned, only notify them; otherwise notify all
+    let profilesToNotify = allProfiles;
+    const isDirectedNotification = !!assigned_broker_id;
+    
+    if (assigned_broker_id) {
+      profilesToNotify = allProfiles.filter(p => p.user_id === assigned_broker_id);
+      console.log(`Directed notification: only notifying assigned broker ${assigned_broker_id}`);
+      
+      if (profilesToNotify.length === 0) {
+        console.log("Assigned broker not found in profiles, falling back to all");
+        profilesToNotify = allProfiles;
+      }
+    } else {
+      console.log("No broker assigned, notifying all users in account");
+    }
+
+    // Get broker name for personalized messages
+    const assignedBrokerProfile = assigned_broker_id 
+      ? allProfiles.find(p => p.user_id === assigned_broker_id)
+      : null;
+
     const notifications: { email: number; push: number } = { email: 0, push: 0 };
 
-    for (const profile of profiles) {
+    for (const profile of profilesToNotify) {
       // Get notification preferences for this user
       const { data: prefs } = await supabase
         .from("notification_preferences")
@@ -90,13 +112,22 @@ const handler = async (req: Request): Promise<Response> => {
 
           const appUrl = "https://crmsenseys.com.br";
           
+          // Personalized subject and header based on assignment
+          const emailSubject = isDirectedNotification 
+            ? `🎯 Lead Atribuído: ${lead_name}`
+            : `🎉 Novo Lead: ${lead_name}`;
+          
+          const emailHeader = isDirectedNotification
+            ? `🎯 Lead Atribuído a Você!`
+            : `🎉 Novo Lead Recebido!`;
+          
           const emailHtml = `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Novo Lead - ${lead_name}</title>
+  <title>${emailSubject}</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #1a1d21;">
   <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -104,8 +135,9 @@ const handler = async (req: Request): Promise<Response> => {
       <!-- Header -->
       <div style="text-align: center; margin-bottom: 24px;">
         <h1 style="color: #ffffff; font-size: 24px; margin: 0; font-weight: 700;">
-          🎉 Novo Lead Recebido!
+          ${emailHeader}
         </h1>
+        ${isDirectedNotification ? `<p style="color: #9ca3af; margin-top: 8px;">Este lead foi atribuído diretamente a você</p>` : ''}
       </div>
 
       <!-- Lead Info Card -->
@@ -192,7 +224,7 @@ const handler = async (req: Request): Promise<Response> => {
             body: JSON.stringify({
               from: "Senseys CRM <notificacoes@lead.crmsenseys.com.br>",
               to: [notifyEmail],
-              subject: `🎉 Novo Lead: ${lead_name}`,
+              subject: emailSubject,
               html: emailHtml,
             }),
           });
@@ -210,22 +242,39 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // Send push notifications via Firebase FCM to all account users
+    // Send push notifications via Firebase FCM
+    // If broker is assigned, only send to that broker; otherwise send to all
     try {
-      console.log("Sending FCM push notifications to account:", account_id);
+      const pushTitle = isDirectedNotification 
+        ? "🎯 Lead Atribuído!" 
+        : "🎉 Novo Lead!";
+      const pushBody = isDirectedNotification
+        ? `${lead_name} foi atribuído a você`
+        : `${lead_name} foi adicionado ao CRM`;
+
+      console.log(`Sending FCM push notifications - directed: ${isDirectedNotification}`);
+      
+      const pushPayload: Record<string, any> = {
+        title: pushTitle,
+        body: pushBody,
+        url: "/leads",
+        data: { lead_id, assigned: isDirectedNotification }
+      };
+
+      // If directed notification, send only to the broker
+      if (assigned_broker_id) {
+        pushPayload.user_ids = [assigned_broker_id];
+      } else {
+        pushPayload.account_id = account_id;
+      }
+
       const pushResponse = await fetch(`${supabaseUrl}/functions/v1/send-fcm-notification`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${supabaseServiceKey}`,
         },
-        body: JSON.stringify({
-          account_id,
-          title: "🎉 Novo Lead!",
-          body: `${lead_name} foi adicionado ao CRM`,
-          url: "/leads",
-          data: { lead_id }
-        }),
+        body: JSON.stringify(pushPayload),
       });
 
       if (pushResponse.ok) {
@@ -240,12 +289,14 @@ const handler = async (req: Request): Promise<Response> => {
       console.error("Error sending FCM notifications:", pushError);
     }
 
-    console.log(`Notifications sent - Email: ${notifications.email}, Push: ${notifications.push}`);
+    console.log(`Notifications sent - Email: ${notifications.email}, Push: ${notifications.push}, Directed: ${isDirectedNotification}`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        notifications 
+        notifications,
+        directed: isDirectedNotification,
+        assigned_broker_id
       }),
       {
         status: 200,
