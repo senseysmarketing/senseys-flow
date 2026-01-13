@@ -539,6 +539,24 @@ serve(async (req) => {
 
           console.log(`✅ Lead created successfully: ${newLead.id}`);
 
+          // Apply distribution rules
+          try {
+            const distributionResult = await supabase.functions.invoke('apply-distribution-rules', {
+              body: {
+                lead_id: newLead.id,
+                account_id: metaConfig.account_id,
+              }
+            });
+            
+            if (distributionResult.data?.success) {
+              console.log(`✅ Lead distributed to ${distributionResult.data.broker_name} via rule: ${distributionResult.data.rule_applied}`);
+            } else {
+              console.log(`ℹ️ No distribution rule matched: ${distributionResult.data?.reason || 'unknown'}`);
+            }
+          } catch (distError) {
+            console.error('Error applying distribution rules:', distError);
+          }
+
           // Store additional custom fields if any
           // Exclude basic lead data fields that are already stored in the leads table
           const excludedFields = [
