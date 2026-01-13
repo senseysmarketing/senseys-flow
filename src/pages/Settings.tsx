@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, Edit2, Trash2, Move, User, Settings as SettingsIcon, Palette, MessageCircle, Bell, Users, Webhook, Copy, Check, Building2, Shield, Shuffle, Target, Send } from "lucide-react";
+import { Plus, Edit2, Trash2, Move, User, Settings as SettingsIcon, Palette, MessageCircle, Bell, Users, Webhook, Copy, Check, Building2, Shield, Shuffle, Target, Send, Upload } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -24,6 +24,7 @@ import DistributionRulesManager from "@/components/DistributionRulesManager";
 import MetaFormScoringManager from "@/components/MetaFormScoringManager";
 import MetaEventMappingManager from "@/components/MetaEventMappingManager";
 import { NotificationSettings } from "@/components/NotificationSettings";
+import DataImporter from "@/components/DataImporter";
 
 interface Profile {
   id: string;
@@ -55,7 +56,7 @@ interface Property {
   city: string | null;
 }
 
-type TabValue = 'profile' | 'team' | 'notifications' | 'statuses' | 'whatsapp' | 'followup' | 'distribution' | 'webhook' | 'qualification' | 'metacapi' | 'permissions' | 'whitelabel';
+type TabValue = 'profile' | 'team' | 'notifications' | 'statuses' | 'whatsapp' | 'followup' | 'distribution' | 'webhook' | 'qualification' | 'metacapi' | 'permissions' | 'whitelabel' | 'import';
 type CategoryValue = 'geral' | 'leads' | 'integracoes' | 'avancado';
 
 interface NavItem {
@@ -123,6 +124,7 @@ const SettingsPage = () => {
         { value: 'followup', label: 'Follow-up', icon: <Bell className="h-4 w-4" /> },
         { value: 'distribution', label: 'Distribuição', icon: <Shuffle className="h-4 w-4" /> },
         { value: 'qualification', label: 'Qualificação', icon: <Target className="h-4 w-4" /> },
+        { value: 'import', label: 'Importação', icon: <Upload className="h-4 w-4" />, permission: 'leads.create' },
       ]
     },
     {
@@ -1099,6 +1101,9 @@ const SettingsPage = () => {
 
       case 'whitelabel':
         return <WhiteLabelSettings />;
+
+      case 'import':
+        return <DataImporter />;
 
       default:
         return null;
