@@ -704,7 +704,7 @@ const Leads = () => {
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-hidden">
+    <div className="flex flex-col h-[calc(100vh-8rem)] lg:h-[calc(100vh-6rem)]">
       {/* Fixed Header - Does NOT scroll */}
       <div className="shrink-0 space-y-4 pb-4">
         {/* Title + New Lead Button */}
@@ -988,7 +988,7 @@ const Leads = () => {
       </div>
 
       {/* Scrollable Content Area - ONLY this scrolls */}
-      <div className="flex-1 overflow-hidden min-h-0 w-full">
+      <div className="flex-1 min-h-0">
         {viewMode === 'kanban' ? (
           isMobile ? (
             // Mobile: Kanban as Accordion with its own scroll
@@ -1103,14 +1103,14 @@ const Leads = () => {
             // Desktop: Kanban View with horizontal scroll only on columns
             <DragDropContext onDragEnd={onDragEnd}>
               {/* Visual container for Kanban board */}
-              <div className="h-full bg-muted/30 rounded-xl border p-4 flex flex-col overflow-hidden">
+              <div className="h-full bg-muted/30 rounded-xl border p-4 flex flex-col">
                 {/* Kanban columns - horizontal scroll ONLY here */}
-                <div className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar min-h-0">
-                  <div className="flex gap-4 h-full pb-4" style={{ minWidth: 'max-content' }}>
+                <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden custom-scrollbar pb-2">
+                  <div className="flex gap-4 h-full">
                     {statuses.filter(s => !hiddenColumns.includes(s.id)).map((status) => {
                       const statusLeads = getLeadsByStatus(status.id);
                       return (
-                        <div key={status.id} className="kanban-column w-[330px] flex-none h-full flex flex-col">
+                        <div key={status.id} className="kanban-column w-[330px] flex-shrink-0 h-full flex flex-col">
                           {/* Column header */}
                           <div 
                             className="flex items-center gap-3 mb-4 p-3 rounded-lg shrink-0"
@@ -1145,7 +1145,7 @@ const Leads = () => {
                               <div
                                 ref={provided.innerRef}
                                 {...provided.droppableProps}
-                                className={`flex-1 space-y-3 overflow-y-auto p-2 rounded-lg transition-colors ${
+                                className={`flex-1 min-h-0 overflow-y-auto space-y-3 p-2 rounded-lg transition-colors custom-scrollbar ${
                                   snapshot.isDraggingOver ? 'bg-muted/50' : ''
                                 }`}
                               >
