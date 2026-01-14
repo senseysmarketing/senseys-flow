@@ -962,6 +962,29 @@ const Leads = () => {
             </Button>
           </div>
         </div>
+
+        {/* Hidden columns - Fixed in header area (Desktop only) */}
+        {viewMode === 'kanban' && !isMobile && hiddenColumns.length > 0 && (
+          <div className="flex gap-2 flex-wrap items-center">
+            <span className="text-sm text-muted-foreground">Colunas ocultas:</span>
+            {hiddenColumns.map(columnId => {
+              const status = statuses.find(s => s.id === columnId);
+              if (!status) return null;
+              return (
+                <Button
+                  key={columnId}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => toggleColumnVisibility(columnId)}
+                  className="gap-2"
+                >
+                  <Eye className="h-3 w-3" />
+                  {status.name}
+                </Button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Scrollable Content Area - ONLY this scrolls */}
@@ -1079,32 +1102,10 @@ const Leads = () => {
           ) : (
             // Desktop: Kanban View with horizontal scroll only on columns
             <DragDropContext onDragEnd={onDragEnd}>
-              <div className="h-full flex flex-col min-h-0 overflow-hidden">
-                {/* Hidden columns restore buttons */}
-                {hiddenColumns.length > 0 && (
-                  <div className="flex gap-2 mb-4 flex-wrap shrink-0">
-                    <span className="text-sm text-muted-foreground self-center">Colunas ocultas:</span>
-                    {hiddenColumns.map(columnId => {
-                      const status = statuses.find(s => s.id === columnId);
-                      if (!status) return null;
-                      return (
-                        <Button
-                          key={columnId}
-                          variant="outline"
-                          size="sm"
-                          onClick={() => toggleColumnVisibility(columnId)}
-                          className="gap-2"
-                        >
-                          <Eye className="h-3 w-3" />
-                          {status.name}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                )}
-                
-                {/* Kanban columns - horizontal scroll */}
-                <div className="flex-1 overflow-x-auto overflow-y-hidden min-h-0">
+              {/* Visual container for Kanban board */}
+              <div className="h-full bg-muted/30 rounded-xl border p-4 overflow-hidden flex flex-col">
+                {/* Kanban columns - horizontal scroll ONLY here */}
+                <div className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar">
                   <div className="flex gap-4 h-full pb-2" style={{ minWidth: 'max-content' }}>
                     {statuses.filter(s => !hiddenColumns.includes(s.id)).map((status) => {
                       const statusLeads = getLeadsByStatus(status.id);
