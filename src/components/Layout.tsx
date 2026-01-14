@@ -174,7 +174,7 @@ const Layout = ({ children }: LayoutProps) => {
             "flex-1 p-4 lg:p-6 overflow-x-hidden overflow-y-auto custom-scrollbar",
             isMobile && "pb-20" // Space for bottom nav
           )}>
-            <div className="animate-in">{children}</div>
+            <div className="animate-in w-full max-w-full overflow-hidden">{children}</div>
           </main>
         </div>
 

@@ -704,7 +704,7 @@ const Leads = () => {
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="flex flex-col h-full min-h-0 overflow-hidden">
       {/* Fixed Header - Does NOT scroll */}
       <div className="shrink-0 space-y-4 pb-4">
         {/* Title + New Lead Button */}
@@ -988,7 +988,7 @@ const Leads = () => {
       </div>
 
       {/* Scrollable Content Area - ONLY this scrolls */}
-      <div className="flex-1 overflow-hidden min-h-0 max-w-full">
+      <div className="flex-1 overflow-hidden min-h-0 w-full">
         {viewMode === 'kanban' ? (
           isMobile ? (
             // Mobile: Kanban as Accordion with its own scroll
