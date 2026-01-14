@@ -1103,11 +1103,10 @@ const Leads = () => {
             // Desktop: Kanban View with horizontal scroll only on columns
             <DragDropContext onDragEnd={onDragEnd}>
               {/* Visual container for Kanban board */}
-              <div className="h-full bg-muted/30 rounded-xl border p-4 flex flex-col relative">
+              <div className="h-full bg-muted/30 rounded-xl border p-4 flex flex-col overflow-hidden">
                 {/* Kanban columns - horizontal scroll ONLY here */}
-                <div className="flex-1 relative min-h-0">
-                  <div className="absolute inset-0 overflow-x-auto overflow-y-hidden custom-scrollbar">
-                  <div className="flex gap-4 h-full pb-2" style={{ minWidth: 'max-content' }}>
+                <div className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar min-h-0">
+                  <div className="flex gap-4 h-full pb-4" style={{ minWidth: 'max-content' }}>
                     {statuses.filter(s => !hiddenColumns.includes(s.id)).map((status) => {
                       const statusLeads = getLeadsByStatus(status.id);
                       return (
@@ -1244,7 +1243,6 @@ const Leads = () => {
                     })}
                   </div>
                 </div>
-              </div>
               </div>
             </DragDropContext>
           )
