@@ -704,7 +704,7 @@ const Leads = () => {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-120px)]">
+    <div className="flex flex-col h-full min-h-0">
       {/* Fixed Header - Does NOT scroll */}
       <div className="shrink-0 space-y-4 pb-4">
         {/* Title + New Lead Button */}
@@ -965,7 +965,7 @@ const Leads = () => {
       </div>
 
       {/* Scrollable Content Area - ONLY this scrolls */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden min-h-0">
         {viewMode === 'kanban' ? (
           isMobile ? (
             // Mobile: Kanban as Accordion with its own scroll
@@ -1079,7 +1079,7 @@ const Leads = () => {
           ) : (
             // Desktop: Kanban View with horizontal scroll only on columns
             <DragDropContext onDragEnd={onDragEnd}>
-              <div className="h-full flex flex-col">
+              <div className="h-full flex flex-col min-h-0 overflow-hidden">
                 {/* Hidden columns restore buttons */}
                 {hiddenColumns.length > 0 && (
                   <div className="flex gap-2 mb-4 flex-wrap shrink-0">
@@ -1104,8 +1104,8 @@ const Leads = () => {
                 )}
                 
                 {/* Kanban columns - horizontal scroll */}
-                <div className="flex-1 overflow-x-auto overflow-y-hidden">
-                  <div className="flex gap-4 min-w-max h-full">
+                <div className="flex-1 overflow-x-auto overflow-y-hidden min-h-0">
+                  <div className="flex gap-4 h-full pb-2" style={{ minWidth: 'max-content' }}>
                     {statuses.filter(s => !hiddenColumns.includes(s.id)).map((status) => {
                       const statusLeads = getLeadsByStatus(status.id);
                       return (
