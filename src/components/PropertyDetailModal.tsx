@@ -239,7 +239,7 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl w-[95vw] md:w-[90vw] lg:w-[900px] max-h-[90vh] p-0 gap-0 overflow-hidden">
+      <DialogContent className="!max-w-5xl w-[95vw] md:w-[90vw] lg:w-[900px] max-h-[90vh] p-0 gap-0 overflow-hidden">
         <VisuallyHidden.Root>
           <DialogTitle>Detalhes do Imóvel: {property.title}</DialogTitle>
         </VisuallyHidden.Root>
@@ -352,7 +352,7 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
             </div>
 
             {/* Desktop action buttons */}
-            <div className="hidden md:flex items-center gap-2">
+            <div className="hidden md:flex items-center gap-2 flex-shrink-0">
               <Button
                 variant="outline"
                 size="sm"
@@ -478,10 +478,10 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
           </div>
         </div>
 
-        <ScrollArea className="flex-1 max-h-[calc(90vh-320px)] md:max-h-[calc(90vh-280px)]">
+        <ScrollArea className="flex-1 max-h-[calc(90vh-320px)] md:max-h-[calc(90vh-280px)] overflow-x-hidden">
           <div className="p-4 md:p-6 space-y-4 md:space-y-6">
             {/* KPIs */}
-            <div className="grid grid-cols-3 md:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3">
+            <div className="grid grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
               <div className="bg-card rounded-lg border p-2 md:p-3 text-center">
                 <Users className="h-4 w-4 md:h-5 md:w-5 mx-auto text-primary mb-1" />
                 <p className="text-lg md:text-2xl font-bold">{totalLeads}</p>
@@ -618,7 +618,7 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 ml-10 md:ml-0">
+                      <div className="flex items-center gap-2 ml-10 md:ml-0 flex-shrink-0">
                         {lead.lead_status && (
                           <Badge 
                             variant="outline"
