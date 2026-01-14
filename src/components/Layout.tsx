@@ -15,9 +15,10 @@ import { useIsMobile } from "@/hooks/use-mobile";
 
 interface LayoutProps {
   children: React.ReactNode;
+  fullHeight?: boolean;
 }
 
-const Layout = ({ children }: LayoutProps) => {
+const Layout = ({ children, fullHeight = false }: LayoutProps) => {
   const { user, loading } = useAuth();
   const { account, userFullName } = useAccount();
   const { isSupportMode, supportAccountName, exitSupportMode } = useSupportMode();
@@ -171,10 +172,16 @@ const Layout = ({ children }: LayoutProps) => {
 
           {/* Main Content */}
           <main className={cn(
-            "flex-1 p-4 lg:p-6 overflow-x-hidden overflow-y-auto custom-scrollbar",
+            "flex-1 p-4 lg:p-6",
+            !fullHeight && "overflow-x-hidden overflow-y-auto custom-scrollbar",
+            fullHeight && "overflow-hidden",
             isMobile && "pb-20" // Space for bottom nav
           )}>
-            <div className="animate-in w-full max-w-full overflow-hidden">{children}</div>
+            <div className={cn(
+              "animate-in",
+              !fullHeight && "w-full max-w-full",
+              fullHeight && "h-full w-full"
+            )}>{children}</div>
           </main>
         </div>
 
