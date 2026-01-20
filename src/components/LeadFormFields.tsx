@@ -46,7 +46,11 @@ const LeadFormFields = ({ leadId }: LeadFormFieldsProps) => {
     );
   }
 
-  if (formFields.length === 0) {
+  const fieldsWithValues = formFields.filter(
+    field => field.field_value && field.field_value.trim() !== ''
+  );
+
+  if (fieldsWithValues.length === 0) {
     return null;
   }
 
@@ -68,7 +72,7 @@ const LeadFormFields = ({ leadId }: LeadFormFieldsProps) => {
         Dados do Formulário
       </h3>
       <div className="grid grid-cols-2 gap-3">
-        {formFields.map((field, index) => (
+        {fieldsWithValues.map((field, index) => (
           <div key={index} className="p-3 rounded-lg bg-muted/50">
             <p className="text-xs text-muted-foreground mb-1">
               {field.field_label || field.field_name}

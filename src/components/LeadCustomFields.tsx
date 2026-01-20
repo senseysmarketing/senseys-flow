@@ -111,7 +111,13 @@ const LeadCustomFields = ({ leadId }: LeadCustomFieldsProps) => {
     );
   }
 
-  if (fields.length === 0) {
+  // Filter to only show fields that have values
+  const fieldsWithValues = fields.filter(field => {
+    const value = values.get(field.id);
+    return value && value.trim() !== '';
+  });
+
+  if (fieldsWithValues.length === 0) {
     return null;
   }
 
@@ -122,17 +128,14 @@ const LeadCustomFields = ({ leadId }: LeadCustomFieldsProps) => {
         Informações Adicionais
       </h3>
       <div className="grid grid-cols-2 gap-3">
-        {fields.map((field) => {
+        {fieldsWithValues.map((field) => {
           const value = values.get(field.id);
           const displayValue = formatValue(field, value);
-          const hasValue = value && value.trim() !== '';
           
           return (
             <div key={field.id} className="p-3 rounded-lg bg-muted/50">
               <p className="text-xs text-muted-foreground mb-1">{field.name}</p>
-              <p className={`font-medium text-sm ${!hasValue ? 'text-muted-foreground italic' : ''}`}>
-                {displayValue}
-              </p>
+              <p className="font-medium text-sm">{displayValue}</p>
             </div>
           );
         })}
