@@ -170,6 +170,9 @@ const Leads = () => {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
 
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [leadToDelete, setLeadToDelete] = useState<Pick<Lead, "id" | "name"> | null>(null);
+
   useEffect(() => {
     fetchData();
   }, [user]);
@@ -478,6 +481,18 @@ const Leads = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const requestDeleteLead = (lead: Pick<Lead, "id" | "name">) => {
+    setLeadToDelete({ id: lead.id, name: lead.name });
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteLead = async () => {
+    if (!leadToDelete) return;
+    await handleDeleteLead(leadToDelete.id);
+    setIsDeleteDialogOpen(false);
+    setLeadToDelete(null);
   };
 
   const handleViewDetails = (lead: Lead) => {
@@ -1056,7 +1071,10 @@ const Leads = () => {
                                         Editar
                                       </DropdownMenuItem>
                                       <DropdownMenuItem 
-                                        onClick={(e) => { e.stopPropagation(); handleDeleteLead(lead.id); }}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          requestDeleteLead(lead);
+                                        }}
                                         className="text-destructive"
                                       >
                                         <Trash className="h-4 w-4 mr-2" />
@@ -1186,7 +1204,10 @@ const Leads = () => {
                                                 Editar lead
                                               </DropdownMenuItem>
                                               <DropdownMenuItem 
-                                                onClick={() => handleDeleteLead(lead.id)}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  requestDeleteLead(lead);
+                                                }}
                                                 className="text-destructive"
                                               >
                                                 <Trash className="h-4 w-4 mr-2" />
@@ -1255,13 +1276,50 @@ const Leads = () => {
               loading={loading}
               onViewDetails={handleViewDetails}
               onEditLead={handleEditLead}
-              onDeleteLead={handleDeleteLead}
+              onDeleteLead={(id) => {
+                const lead = leads.find(l => l.id === id);
+                if (!lead) return;
+                requestDeleteLead(lead);
+              }}
               onStatusChange={handleStatusChange}
               onRefresh={fetchData}
             />
           </div>
         ) : null}
       </div>
+
+      {/* Confirm Delete Lead */}
+      <AlertDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={(open) => {
+          setIsDeleteDialogOpen(open);
+          if (!open) setLeadToDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Remover &quot;{leadToDelete?.name ?? "este lead"}&quot;?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={loading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                confirmDeleteLead();
+              }}
+              disabled={loading || !leadToDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {loading ? "Removendo..." : "Remover"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Edit Lead Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
