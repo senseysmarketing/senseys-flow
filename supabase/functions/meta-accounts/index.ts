@@ -36,15 +36,12 @@ serve(async (req) => {
       });
     }
 
-    // Check if user is super admin
-    const { data: superAdmin } = await supabase
-      .from('super_admins')
-      .select('id')
-      .eq('user_id', user.id)
-      .single();
+    // Check if user is super admin (uses DB function that includes agency account check)
+    const { data: isSuperAdmin, error: saError } = await supabase
+      .rpc('is_super_admin', { _user_id: user.id });
 
-    if (!superAdmin) {
-      return new Response(JSON.stringify({ error: 'Not authorized - super admin only' }), {
+    if (saError || !isSuperAdmin) {
+      return new Response(JSON.stringify({ error: 'Not authorized - agency access required' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
