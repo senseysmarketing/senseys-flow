@@ -1,73 +1,85 @@
 
-## Plano: Permitir que Todos os Usuários da Agência Gerenciem Integração Meta
+## Plano: Exibir Botão "Sincronizar Meta" para Todos os Usuários
 
-**Problema identificado:**
+### Problema Identificado
 
-A edge function `meta-accounts` verifica permissões de forma diferente do restante do sistema:
+O botão "Sincronizar Meta" não aparece para usuários da agência (super admins) porque a função `checkMetaConfig` no componente `MetaFormScoringManager.tsx` falha silenciosamente.
 
-| Componente | Lógica de verificação |
-|------------|----------------------|
-| `is_super_admin()` (DB) | Tabela `super_admins` **OU** usuários da conta Senseys |
-| `use-super-admin` (frontend) | Usa `is_super_admin()` via RPC - funciona |
-| **`meta-accounts` (edge function)** | Apenas tabela `super_admins` - **problema aqui** |
-
-Por isso, o frontend permite que usuários da agência acessem o painel (correto), mas quando tentam fazer operações na integração Meta, a edge function bloqueia (incorreto).
-
----
-
-## Solução Proposta
-
-Atualizar a edge function `supabase/functions/meta-accounts/index.ts` para usar a mesma lógica de verificação que a função `is_super_admin()` do banco de dados.
-
-### Mudanças Técnicas
-
-**Arquivo:** `supabase/functions/meta-accounts/index.ts`
-
-Substituir a verificação atual (linhas 39-51):
-```javascript
-// Verificação ATUAL (incompleta)
-const { data: superAdmin } = await supabase
-  .from('super_admins')
-  .select('id')
-  .eq('user_id', user.id)
-  .single();
-
-if (!superAdmin) {
-  return new Response(...{ error: 'Not authorized' });
-}
+**Causa raiz:**
+```typescript
+const { data: config } = await supabase
+  .from("account_meta_config")
+  .select("page_id")
+  .single();  // <-- Problema aqui!
 ```
 
-Por uma verificação que usa a função RPC do banco:
-```javascript
-// Nova verificação (usa is_super_admin do banco)
-const { data: isSuperAdmin, error: saError } = await supabase
-  .rpc('is_super_admin', { _user_id: user.id });
+O método `.single()` espera **exatamente 1 linha**. A política RLS permite que super admins vejam **todas** as 12 configurações de Meta da tabela. Quando `.single()` encontra múltiplas linhas, lança um erro, que é capturado e define `hasMetaConfig = false`.
 
-if (saError || !isSuperAdmin) {
-  return new Response(...{ error: 'Not authorized - agency access required' });
-}
+| Tipo de Usuário | Linhas Retornadas | Resultado |
+|-----------------|-------------------|-----------|
+| Usuário comum   | 1 (seu próprio)   | Funciona  |
+| Super admin     | 12 (todos)        | Erro      |
+
+---
+
+### Solução
+
+Adicionar um filtro `account_id` explícito antes de chamar `.single()`, usando a função RPC `get_user_account_id()` do banco de dados.
+
+**De:**
+```typescript
+const checkMetaConfig = async () => {
+  try {
+    const { data: config } = await supabase
+      .from("account_meta_config")
+      .select("page_id")
+      .single();
+    
+    setHasMetaConfig(!!config?.page_id);
+  } catch {
+    setHasMetaConfig(false);
+  }
+};
 ```
 
-### Por que usar RPC em vez de replicar a lógica?
-
-1. **Fonte única de verdade**: A função `is_super_admin()` já define a regra de negócio
-2. **Manutenção simplificada**: Futuras mudanças de regras serão refletidas automaticamente
-3. **Consistência**: Mesmo comportamento entre frontend e edge functions
+**Para:**
+```typescript
+const checkMetaConfig = async () => {
+  try {
+    // Primeiro, obter o account_id do usuário atual
+    const { data: accountId, error: accountError } = await supabase
+      .rpc('get_user_account_id');
+    
+    if (accountError || !accountId) {
+      setHasMetaConfig(false);
+      return;
+    }
+    
+    // Buscar config filtrada pelo account_id específico
+    const { data: config } = await supabase
+      .from("account_meta_config")
+      .select("page_id")
+      .eq("account_id", accountId)
+      .single();
+    
+    setHasMetaConfig(!!config?.page_id);
+  } catch {
+    setHasMetaConfig(false);
+  }
+};
+```
 
 ---
 
-## Resumo da Alteração
+### Arquivo a Modificar
 
-| Antes | Depois |
-|-------|--------|
-| Verifica apenas `super_admins` table | Chama `is_super_admin()` via RPC |
-| Só Gabriel Facioli consegue configurar | Todos da conta Senseys conseguem |
-| Lógica duplicada e inconsistente | Fonte única de verdade |
+- **`src/components/MetaFormScoringManager.tsx`** - Atualizar a função `checkMetaConfig` (linhas 90-101)
 
 ---
 
-## Arquivos a Modificar
+### Resultado Esperado
 
-1. **`supabase/functions/meta-accounts/index.ts`** - Trocar verificação direta por chamada RPC
-
-Nenhuma mudança no frontend ou banco de dados é necessária, pois a lógica já está correta nesses lugares.
+Após a correção:
+- O botão "Sincronizar Meta" aparecerá para **qualquer usuário** cuja conta tenha `page_id` configurado na tabela `account_meta_config`
+- Super admins da agência verão o botão ao acessar contas de clientes via modo suporte
+- A conta Senseys verá o botão ao acessar suas próprias configurações
