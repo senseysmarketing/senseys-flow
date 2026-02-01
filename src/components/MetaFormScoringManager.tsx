@@ -89,10 +89,21 @@ const MetaFormScoringManager = () => {
 
   const checkMetaConfig = async () => {
     try {
+      // Primeiro, obter o account_id do usuário atual
+      const { data: accountId, error: accountError } = await supabase
+        .rpc('get_user_account_id');
+      
+      if (accountError || !accountId) {
+        setHasMetaConfig(false);
+        return;
+      }
+      
+      // Buscar config filtrada pelo account_id específico
       const { data: config } = await supabase
         .from("account_meta_config")
         .select("page_id")
-        .single();
+        .eq("account_id", accountId)
+        .maybeSingle();
       
       setHasMetaConfig(!!config?.page_id);
     } catch {
