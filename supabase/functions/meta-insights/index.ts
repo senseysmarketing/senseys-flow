@@ -63,12 +63,9 @@ serve(async (req) => {
         .eq('user_id', user.id)
         .single();
 
-      // Check if user is super admin
-      const { data: superAdmin } = await supabase
-        .from('super_admins')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
+      // Check if user is super admin using RPC
+      const { data: isSuperAdmin } = await supabase
+        .rpc('is_super_admin', { _user_id: user.id });
 
       let targetAccountId: string;
 
@@ -77,7 +74,7 @@ serve(async (req) => {
         targetAccountId = body.account_id;
 
         // If not super admin, can only sync their own account
-        if (!superAdmin && targetAccountId !== userProfile?.account_id) {
+        if (!isSuperAdmin && targetAccountId !== userProfile?.account_id) {
           return new Response(JSON.stringify({ error: 'Not authorized to sync this account' }), {
             status: 403,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -362,13 +359,10 @@ serve(async (req) => {
 
     // Sync all accounts (for super admin or cron job)
     if (action === 'sync-all') {
-      const { data: superAdmin } = await supabase
-        .from('super_admins')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
+      const { data: isSuperAdmin } = await supabase
+        .rpc('is_super_admin', { _user_id: user.id });
 
-      if (!superAdmin) {
+      if (!isSuperAdmin) {
         return new Response(JSON.stringify({ error: 'Not authorized - super admin only' }), {
           status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

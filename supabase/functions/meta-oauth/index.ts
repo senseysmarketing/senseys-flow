@@ -82,14 +82,11 @@ serve(async (req) => {
         });
       }
 
-      // Verify the user from state is a super admin
-      const { data: superAdminCheck } = await supabase
-        .from('super_admins')
-        .select('id')
-        .eq('user_id', state)
-        .single();
+      // Verify the user from state is a super admin using RPC
+      const { data: isSuperAdmin } = await supabase
+        .rpc('is_super_admin', { _user_id: state });
 
-      if (!superAdminCheck) {
+      if (!isSuperAdmin) {
         console.error('State user_id is not a super admin:', state);
         return new Response(`
           <html>
@@ -243,14 +240,11 @@ serve(async (req) => {
       });
     }
 
-    // Check if user is super admin
-    const { data: superAdmin } = await supabase
-      .from('super_admins')
-      .select('id')
-      .eq('user_id', user.id)
-      .single();
+    // Check if user is super admin using RPC
+    const { data: isSuperAdmin, error: saError } = await supabase
+      .rpc('is_super_admin', { _user_id: user.id });
 
-    if (!superAdmin) {
+    if (saError || !isSuperAdmin) {
       return new Response(JSON.stringify({ error: 'Not authorized - super admin only' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
