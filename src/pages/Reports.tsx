@@ -574,10 +574,10 @@ const ReportsPage = () => {
   const fetchPropertyStats = async () => {
     const { from: dateFrom, to: dateTo } = getDateRange();
 
-    // Buscar todas as propriedades
+    // 1. Buscar todas as propriedades COM reference_code
     const { data: properties, error: propError } = await supabase
       .from("properties")
-      .select("id, title, type, status, campaign_cost");
+      .select("id, title, type, status, campaign_cost, reference_code");
 
     if (propError) {
       console.error("Erro ao buscar propriedades:", propError);
@@ -589,10 +589,41 @@ const ReportsPage = () => {
       return;
     }
 
-    // Buscar leads vinculados a propriedades NO PERÍODO SELECIONADO
+    // 2. Buscar mapeamentos form_id → reference_code
+    const { data: formMappings, error: mappingsError } = await supabase
+      .from("meta_form_property_mapping")
+      .select("form_id, reference_code");
+
+    if (mappingsError) {
+      console.error("Erro ao buscar mapeamentos:", mappingsError);
+    }
+
+    // 3. Buscar insights por anúncio no período (COM form_id)
+    const { data: adInsights, error: adInsightsError } = await supabase
+      .from("meta_ad_insights_by_ad")
+      .select("form_id, spend")
+      .gte("date", dateFrom)
+      .lte("date", dateTo)
+      .not("form_id", "is", null);
+
+    if (adInsightsError) {
+      console.error("Erro ao buscar insights de anúncios:", adInsightsError);
+    }
+
+    // 4. Agregar spend por reference_code (não por form_id individual)
+    const spendByRef = new Map<string, number>();
+    for (const insight of adInsights || []) {
+      const mapping = formMappings?.find(m => m.form_id === insight.form_id);
+      if (mapping?.reference_code) {
+        const current = spendByRef.get(mapping.reference_code) || 0;
+        spendByRef.set(mapping.reference_code, current + Number(insight.spend || 0));
+      }
+    }
+
+    // 5. Buscar leads vinculados a propriedades NO PERÍODO SELECIONADO
     const { data: leads, error: leadsError } = await supabase
       .from("leads")
-      .select("property_id, temperature, meta_form_id")
+      .select("property_id, temperature")
       .not("property_id", "is", null)
       .gte("created_at", `${dateFrom}T00:00:00`)
       .lte("created_at", `${dateTo}T23:59:59`);
@@ -602,27 +633,7 @@ const ReportsPage = () => {
       return;
     }
 
-    // Buscar insights por anúncio no período (com form_id)
-    const { data: adInsights, error: adInsightsError } = await supabase
-      .from("meta_ad_insights_by_ad")
-      .select("form_id, spend")
-      .gte("date", dateFrom)
-      .lte("date", dateTo);
-
-    if (adInsightsError) {
-      console.error("Erro ao buscar insights de anúncios:", adInsightsError);
-    }
-
-    // Agregar spend por form_id
-    const spendByFormId = new Map<string, number>();
-    for (const insight of adInsights || []) {
-      if (insight.form_id) {
-        const current = spendByFormId.get(insight.form_id) || 0;
-        spendByFormId.set(insight.form_id, current + Number(insight.spend || 0));
-      }
-    }
-
-    // Agregar leads por propriedade
+    // 6. Calcular stats usando reference_code para investimento
     const stats: PropertyStats[] = properties.map(prop => {
       const propLeads = leads?.filter(l => l.property_id === prop.id) || [];
       const leadCount = propLeads.length;
@@ -630,16 +641,10 @@ const ReportsPage = () => {
       const warmLeads = propLeads.filter(l => l.temperature === 'warm').length;
       const coldLeads = propLeads.filter(l => l.temperature === 'cold').length;
       
-      // Identificar form_ids únicos dos leads deste imóvel
-      const propertyFormIds = propLeads
-        .filter(l => l.meta_form_id)
-        .map(l => l.meta_form_id as string);
-      const uniqueFormIds = [...new Set(propertyFormIds)];
-      
-      // Somar investimento de todos os forms vinculados a este imóvel
+      // Investimento vem da reference_code, não dos leads individuais
       let campaignCost = 0;
-      for (const formId of uniqueFormIds) {
-        campaignCost += spendByFormId.get(formId) || 0;
+      if (prop.reference_code) {
+        campaignCost = spendByRef.get(prop.reference_code) || 0;
       }
       
       // Fallback para campaign_cost manual se não houver dados do Meta
