@@ -175,6 +175,77 @@ serve(async (req) => {
         campaignsByDate.get(dateKey)!.push(campaignInfo);
       }
 
+      // Fetch ad-level insights for granular form/property tracking
+      console.log(`Fetching ad-level insights for account ${adAccountId}`);
+      const adsResponse = await fetch(
+        `https://graph.facebook.com/v19.0/${adAccountId}/insights?` +
+        `fields=ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,reach,actions&` +
+        `time_range={"since":"${startDate}","until":"${endDate}"}&` +
+        `level=ad&` +
+        `time_increment=1&` +
+        `access_token=${accessToken}`
+      );
+
+      const adsData = await adsResponse.json();
+      
+      if (adsData.error) {
+        console.error('Error fetching ad-level insights:', adsData.error);
+      } else {
+        console.log(`Fetched ${adsData.data?.length || 0} ad-level insights`);
+        
+        // Process and save ad-level insights
+        for (const adInsight of adsData.data || []) {
+          const leadsAction = adInsight.actions?.find((a: any) => a.action_type === 'lead');
+          const leadsCount = leadsAction?.value ? parseInt(leadsAction.value) : 0;
+          const spend = parseFloat(adInsight.spend || '0');
+          
+          // Try to find form_id by looking up leads with this ad_id
+          let formId: string | null = null;
+          const { data: leadWithForm } = await supabase
+            .from('leads')
+            .select('meta_form_id')
+            .eq('account_id', targetAccountId)
+            .eq('meta_ad_id', adInsight.ad_id)
+            .not('meta_form_id', 'is', null)
+            .limit(1)
+            .maybeSingle();
+          
+          if (leadWithForm?.meta_form_id) {
+            formId = leadWithForm.meta_form_id;
+          }
+
+          const adInsightData = {
+            account_id: targetAccountId,
+            date: adInsight.date_start,
+            ad_id: adInsight.ad_id,
+            ad_name: adInsight.ad_name,
+            adset_id: adInsight.adset_id,
+            adset_name: adInsight.adset_name,
+            campaign_id: adInsight.campaign_id,
+            campaign_name: adInsight.campaign_name,
+            form_id: formId,
+            spend,
+            impressions: parseInt(adInsight.impressions || '0'),
+            clicks: parseInt(adInsight.clicks || '0'),
+            leads_count: leadsCount,
+            reach: parseInt(adInsight.reach || '0'),
+            cpm: parseFloat(adInsight.cpm || '0'),
+            cpc: parseFloat(adInsight.cpc || '0'),
+            cpl: leadsCount > 0 ? spend / leadsCount : 0,
+          };
+
+          const { error: adUpsertError } = await supabase
+            .from('meta_ad_insights_by_ad')
+            .upsert(adInsightData, {
+              onConflict: 'account_id,date,ad_id'
+            });
+
+          if (adUpsertError) {
+            console.error('Error saving ad insight:', adUpsertError);
+          }
+        }
+      }
+
       // Process and save each day's data
       const savedInsights = [];
       for (const day of insightsData.data || []) {

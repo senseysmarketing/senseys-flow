@@ -572,6 +572,8 @@ const ReportsPage = () => {
   };
 
   const fetchPropertyStats = async () => {
+    const { from: dateFrom, to: dateTo } = getDateRange();
+
     // Buscar todas as propriedades
     const { data: properties, error: propError } = await supabase
       .from("properties")
@@ -587,15 +589,37 @@ const ReportsPage = () => {
       return;
     }
 
-    // Buscar leads vinculados a propriedades
+    // Buscar leads vinculados a propriedades NO PERÍODO SELECIONADO
     const { data: leads, error: leadsError } = await supabase
       .from("leads")
-      .select("property_id, temperature")
-      .not("property_id", "is", null);
+      .select("property_id, temperature, meta_form_id")
+      .not("property_id", "is", null)
+      .gte("created_at", `${dateFrom}T00:00:00`)
+      .lte("created_at", `${dateTo}T23:59:59`);
 
     if (leadsError) {
       console.error("Erro ao buscar leads de propriedades:", leadsError);
       return;
+    }
+
+    // Buscar insights por anúncio no período (com form_id)
+    const { data: adInsights, error: adInsightsError } = await supabase
+      .from("meta_ad_insights_by_ad")
+      .select("form_id, spend")
+      .gte("date", dateFrom)
+      .lte("date", dateTo);
+
+    if (adInsightsError) {
+      console.error("Erro ao buscar insights de anúncios:", adInsightsError);
+    }
+
+    // Agregar spend por form_id
+    const spendByFormId = new Map<string, number>();
+    for (const insight of adInsights || []) {
+      if (insight.form_id) {
+        const current = spendByFormId.get(insight.form_id) || 0;
+        spendByFormId.set(insight.form_id, current + Number(insight.spend || 0));
+      }
     }
 
     // Agregar leads por propriedade
@@ -605,7 +629,24 @@ const ReportsPage = () => {
       const hotLeads = propLeads.filter(l => l.temperature === 'hot').length;
       const warmLeads = propLeads.filter(l => l.temperature === 'warm').length;
       const coldLeads = propLeads.filter(l => l.temperature === 'cold').length;
-      const campaignCost = prop.campaign_cost || 0;
+      
+      // Identificar form_ids únicos dos leads deste imóvel
+      const propertyFormIds = propLeads
+        .filter(l => l.meta_form_id)
+        .map(l => l.meta_form_id as string);
+      const uniqueFormIds = [...new Set(propertyFormIds)];
+      
+      // Somar investimento de todos os forms vinculados a este imóvel
+      let campaignCost = 0;
+      for (const formId of uniqueFormIds) {
+        campaignCost += spendByFormId.get(formId) || 0;
+      }
+      
+      // Fallback para campaign_cost manual se não houver dados do Meta
+      if (campaignCost === 0 && prop.campaign_cost) {
+        campaignCost = prop.campaign_cost;
+      }
+      
       const cpl = leadCount > 0 ? campaignCost / leadCount : 0;
 
       return {
