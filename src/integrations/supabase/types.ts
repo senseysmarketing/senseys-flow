@@ -641,6 +641,80 @@ export type Database = {
           },
         ]
       }
+      meta_ad_insights_by_ad: {
+        Row: {
+          account_id: string
+          ad_id: string
+          ad_name: string | null
+          adset_id: string | null
+          adset_name: string | null
+          campaign_id: string | null
+          campaign_name: string | null
+          clicks: number | null
+          cpc: number | null
+          cpl: number | null
+          cpm: number | null
+          created_at: string | null
+          date: string
+          form_id: string | null
+          id: string
+          impressions: number | null
+          leads_count: number | null
+          reach: number | null
+          spend: number | null
+        }
+        Insert: {
+          account_id: string
+          ad_id: string
+          ad_name?: string | null
+          adset_id?: string | null
+          adset_name?: string | null
+          campaign_id?: string | null
+          campaign_name?: string | null
+          clicks?: number | null
+          cpc?: number | null
+          cpl?: number | null
+          cpm?: number | null
+          created_at?: string | null
+          date: string
+          form_id?: string | null
+          id?: string
+          impressions?: number | null
+          leads_count?: number | null
+          reach?: number | null
+          spend?: number | null
+        }
+        Update: {
+          account_id?: string
+          ad_id?: string
+          ad_name?: string | null
+          adset_id?: string | null
+          adset_name?: string | null
+          campaign_id?: string | null
+          campaign_name?: string | null
+          clicks?: number | null
+          cpc?: number | null
+          cpl?: number | null
+          cpm?: number | null
+          created_at?: string | null
+          date?: string
+          form_id?: string | null
+          id?: string
+          impressions?: number | null
+          leads_count?: number | null
+          reach?: number | null
+          spend?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_ad_insights_by_ad_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meta_agency_token: {
         Row: {
           access_token: string
