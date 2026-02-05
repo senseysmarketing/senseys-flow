@@ -1,133 +1,143 @@
 
-## Plano: Corrigir Acesso à Integração Meta para Todos os Usuários da Agência
+## Plano: Corrigir Recálculo de Temperatura dos Leads
 
 ### Problema Identificado
 
-O usuário "Leo Henry" está na conta da agência Senseys e deveria ter acesso ao painel de integração Meta, mas as edge functions bloqueiam seu acesso porque verificam a tabela `super_admins` diretamente, em vez de usar a função `is_super_admin()` do banco de dados.
+Quando o usuário salva ajustes nas pontuações de um formulário e marca a opção "Atualizar leads existentes", a edge function `recalculate-lead-temperatures` não encontra correspondência entre as regras de scoring e os valores dos leads, resultando em **pontuação total = 0** para todos os leads, que são classificados como "cold" (frios).
 
-| Usuário | Account ID | Está em `super_admins`? | `is_super_admin()` retorna? |
-|---------|------------|------------------------|----------------------------|
-| Gabriel Facioli | Senseys | Sim | `true` |
-| Leo Henry | Senseys | Não | `true` (via account_id) |
-| João Paulo | Senseys | Não | `true` (via account_id) |
+### Causa Raiz (3 bugs)
 
-A função `is_super_admin()` do banco inclui corretamente todos os usuários da conta Senseys:
+| Bug | Onde Ocorre | Impacto |
+|-----|-------------|---------|
+| **1. Tabela errada** | `recalculate-lead-temperatures` busca em `lead_custom_field_values` | Não encontra dados (tabela quase vazia) |
+| **2. Nomes não batem** | Regras: `quando_pretende_comprar?` vs Leads: `quando_pretende_comprar` | Match falha por causa do `?` no final |
+| **3. Valores não batem** | Regras: `Nos próximos 3 meses` vs Leads: `nos_próximos_3_meses` | Match falha por formato diferente |
+
+### Dados Comprobatórios
+
 ```sql
-SELECT EXISTS (SELECT 1 FROM super_admins WHERE user_id = _user_id)
-   OR EXISTS (
-     SELECT 1 FROM profiles 
-     WHERE user_id = _user_id 
-     AND account_id = '05f41011-8143-4a71-a3ca-8f42f043ab8c' -- Senseys
-   )
+-- Regras de scoring (meta_form_scoring_rules):
+question_name: "quando_pretende_comprar?"
+answer_value: "Nos próximos 3 meses"
+
+-- Valores do lead (lead_form_field_values):  
+field_name: "quando_pretende_comprar"  -- SEM interrogação
+field_value: "nos_próximos_3_meses"    -- snake_case minúsculo
 ```
 
----
-
-### Edge Functions Afetadas
-
-| Edge Function | Status | Problema |
-|---------------|--------|----------|
-| `meta-accounts` | Corrigida | Já usa RPC `is_super_admin()` |
-| `meta-oauth` | **Incorreta** | Verifica tabela `super_admins` diretamente |
-| `meta-insights` | **Incorreta** | Verifica tabela `super_admins` diretamente |
+O webhook `webhook-leads` já tem a função `normalizeForComparison` que resolve isso, mas a edge function `recalculate-lead-temperatures` não a utiliza.
 
 ---
 
 ### Solução
 
-Atualizar as duas edge functions restantes para usar `supabase.rpc('is_super_admin', { _user_id: user.id })` em vez de query direta na tabela.
+Reescrever a edge function `recalculate-lead-temperatures` para:
+
+1. **Buscar dados da tabela correta**: `lead_form_field_values` em vez de `lead_custom_field_values`
+2. **Usar normalização**: Aplicar a mesma função `normalizeForComparison` do webhook
+3. **Comparar corretamente**: Normalizar tanto `question_name` ↔ `field_name` quanto `answer_value` ↔ `field_value`
 
 ---
 
-### Arquivo 1: `supabase/functions/meta-oauth/index.ts`
+### Mudanças Técnicas
 
-**Mudança 1 - Callback OAuth (linhas 86-106):**
+#### Arquivo: `supabase/functions/recalculate-lead-temperatures/index.ts`
 
-```text
-DE (verificação direta):
-const { data: superAdminCheck } = await supabase
-  .from('super_admins')
-  .select('id')
-  .eq('user_id', state)
-  .single();
-
-if (!superAdminCheck) { ... }
+**Adicionar função de normalização:**
+```typescript
+// Normalize values for comparison (handles snake_case vs readable format)
+const normalizeForComparison = (value: string): string => {
+  return value
+    .toLowerCase()
+    .replace(/_/g, ' ')     // underscores -> spaces
+    .replace(/\?/g, '')     // remove question marks
+    .replace(/\s+/g, ' ')   // multiple spaces -> single space
+    .trim();
+};
 ```
 
-```text
-PARA (usando RPC):
-const { data: isSuperAdmin } = await supabase
-  .rpc('is_super_admin', { _user_id: state });
+**Mudar busca de dados (de tabela errada para correta):**
+```typescript
+// ANTES (errado):
+const { data: fieldValues } = await supabase
+  .from('lead_custom_field_values')
+  .select('custom_field_id, value')
+  .eq('lead_id', lead.id);
 
-if (!isSuperAdmin) { ... }
+// DEPOIS (correto):
+const { data: fieldValues } = await supabase
+  .from('lead_form_field_values')
+  .select('field_name, field_value')
+  .eq('lead_id', lead.id);
 ```
 
-**Mudança 2 - Outras ações (linhas 247-258):**
+**Mudar comparação (usar normalização):**
+```typescript
+// ANTES (match exato):
+const questionScores = scoringMap.get(customField.field_key);
+const score = questionScores.get(fieldValue.value.toLowerCase());
 
-```text
-DE:
-const { data: superAdmin } = await supabase
-  .from('super_admins')
-  .select('id')
-  .eq('user_id', user.id)
-  .single();
-
-if (!superAdmin) { ... }
+// DEPOIS (match normalizado):
+for (const fieldValue of fieldValues) {
+  const normalizedFieldName = normalizeForComparison(fieldValue.field_name);
+  const normalizedFieldValue = normalizeForComparison(fieldValue.field_value);
+  
+  // Procurar regra que corresponde (normalizando ambos os lados)
+  const matchingRule = scoringRules.find(rule => 
+    normalizeForComparison(rule.question_name) === normalizedFieldName &&
+    normalizeForComparison(rule.answer_value) === normalizedFieldValue
+  );
+  
+  if (matchingRule) {
+    totalScore += matchingRule.score;
+  }
+}
 ```
 
-```text
-PARA:
-const { data: isSuperAdmin, error: saError } = await supabase
-  .rpc('is_super_admin', { _user_id: user.id });
+**Remover dependência de custom_fields:**
+- A lógica atual busca `custom_fields` para mapear IDs → nomes
+- Isso não é necessário porque `lead_form_field_values` já contém `field_name` diretamente
 
-if (saError || !isSuperAdmin) { ... }
+---
+
+### Fluxo Corrigido
+
+```text
+1. Usuário ajusta pontuações no formulário
+2. Usuário clica "Salvar" com "Atualizar leads existentes" marcado
+3. Frontend chama edge function recalculate-lead-temperatures
+4. Edge function busca leads pelo meta_form_id
+5. Para cada lead:
+   a. Busca valores em lead_form_field_values
+   b. Normaliza field_name e field_value
+   c. Compara com regras normalizadas
+   d. Soma pontuação
+   e. Aplica thresholds (hot >= X, warm >= Y, else cold)
+   f. Atualiza temperatura se mudou
 ```
 
 ---
 
-### Arquivo 2: `supabase/functions/meta-insights/index.ts`
+### Arquivos a Modificar
 
-**Mudança 1 - Ação "sync" (linhas 67-85):**
-
-```text
-DE:
-const { data: superAdmin } = await supabase
-  .from('super_admins')
-  .select('id')
-  .eq('user_id', user.id)
-  .single();
-
-if (!superAdmin && targetAccountId !== userProfile?.account_id) { ... }
-```
-
-```text
-PARA:
-const { data: isSuperAdmin } = await supabase
-  .rpc('is_super_admin', { _user_id: user.id });
-
-if (!isSuperAdmin && targetAccountId !== userProfile?.account_id) { ... }
-```
-
-**Mudança 2 - Ação "sync-all" (linhas 365-375):**
-
-Aplicar a mesma substituição para a verificação na ação `sync-all`.
-
----
-
-### Resumo das Alterações
-
-| Arquivo | Linhas | Alteração |
-|---------|--------|-----------|
-| `meta-oauth/index.ts` | ~86-106 | Substituir query `super_admins` por RPC |
-| `meta-oauth/index.ts` | ~247-258 | Substituir query `super_admins` por RPC |
-| `meta-insights/index.ts` | ~67-85 | Substituir query `super_admins` por RPC |
-| `meta-insights/index.ts` | ~365-375 | Substituir query `super_admins` por RPC |
+1. **`supabase/functions/recalculate-lead-temperatures/index.ts`** - Reescrever lógica de cálculo
 
 ---
 
 ### Resultado Esperado
 
-Após as correções:
-- Leo Henry poderá acessar a aba "Integração Meta" normalmente
-- Todos os 5 usuários da conta Senseys terão acesso igual às funcionalidades Meta
-- As verificações de permissão serão consistentes entre frontend e backend
+| Cenário | Antes | Depois |
+|---------|-------|--------|
+| Lead com `quando_pretende_comprar = "imediatamente_(até_30_dias)"` | Score = 0 → Cold | Score = +2 → Hot |
+| Match de pergunta com `?` | Não encontra | Encontra (normalizado) |
+| Match de resposta snake_case | Não encontra | Encontra (normalizado) |
+
+---
+
+### Testes Recomendados
+
+Após a implementação:
+1. Ajustar uma pontuação em um formulário configurado
+2. Salvar com "Atualizar leads existentes" marcado
+3. Verificar que os leads são recalculados corretamente (não todos frios)
+4. Conferir logs da edge function para ver matches encontrados
