@@ -1,143 +1,216 @@
 
-## Plano: Corrigir Recálculo de Temperatura dos Leads
+## Plano: Buscar Insights do Meta a Nível de Anúncio e Vincular ao Formulário/Imóvel
 
-### Problema Identificado
+### Objetivo
 
-Quando o usuário salva ajustes nas pontuações de um formulário e marca a opção "Atualizar leads existentes", a edge function `recalculate-lead-temperatures` não encontra correspondência entre as regras de scoring e os valores dos leads, resultando em **pontuação total = 0** para todos os leads, que são classificados como "cold" (frios).
+Modificar a sincronização de insights do Meta para buscar dados a nível de **anúncio** (em vez de apenas campanha), permitindo calcular o investimento e CPL **exato** por formulário e, consequentemente, por imóvel.
 
-### Causa Raiz (3 bugs)
+---
 
-| Bug | Onde Ocorre | Impacto |
-|-----|-------------|---------|
-| **1. Tabela errada** | `recalculate-lead-temperatures` busca em `lead_custom_field_values` | Não encontra dados (tabela quase vazia) |
-| **2. Nomes não batem** | Regras: `quando_pretende_comprar?` vs Leads: `quando_pretende_comprar` | Match falha por causa do `?` no final |
-| **3. Valores não batem** | Regras: `Nos próximos 3 meses` vs Leads: `nos_próximos_3_meses` | Match falha por formato diferente |
+### Contexto Atual
 
-### Dados Comprobatórios
+**Dados disponíveis nos leads:**
+| Campo | Exemplo | Descrição |
+|-------|---------|-----------|
+| `meta_form_id` | `1162439922641716` | ID do formulário do Meta |
+| `meta_ad_id` | `6886331767333` | ID do anúncio que gerou o lead |
+| `property_id` | `05959c37-a5b2-...` | Imóvel vinculado ao lead |
+
+**Sincronização atual (`meta-insights`):**
+- Busca insights a nível de **conta** (totais diários)
+- Busca insights a nível de **campanha** (armazenado em `campaign_data` JSONB)
+- **NÃO** busca insights a nível de **anúncio**
+
+**Vínculo formulário → imóvel:**
+- Leads com mesmo `meta_form_id` geralmente pertencem ao mesmo imóvel
+- Exemplo: `form_id: 1162439922641716` → 22 leads → imóvel `AP0189-OSWG`
+
+---
+
+### Solução Proposta
+
+#### 1. Criar Nova Tabela: `meta_ad_insights_by_ad`
+
+Armazenar insights granulares por anúncio:
 
 ```sql
--- Regras de scoring (meta_form_scoring_rules):
-question_name: "quando_pretende_comprar?"
-answer_value: "Nos próximos 3 meses"
+CREATE TABLE meta_ad_insights_by_ad (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  account_id UUID NOT NULL REFERENCES accounts(id),
+  date DATE NOT NULL,
+  ad_id TEXT NOT NULL,
+  ad_name TEXT,
+  adset_id TEXT,
+  adset_name TEXT,
+  campaign_id TEXT,
+  campaign_name TEXT,
+  form_id TEXT,                -- Extraído do lead_gen_id ou cruzamento
+  spend NUMERIC DEFAULT 0,
+  impressions INTEGER DEFAULT 0,
+  clicks INTEGER DEFAULT 0,
+  leads_count INTEGER DEFAULT 0,
+  reach INTEGER DEFAULT 0,
+  cpm NUMERIC DEFAULT 0,
+  cpc NUMERIC DEFAULT 0,
+  cpl NUMERIC DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(account_id, date, ad_id)
+);
 
--- Valores do lead (lead_form_field_values):  
-field_name: "quando_pretende_comprar"  -- SEM interrogação
-field_value: "nos_próximos_3_meses"    -- snake_case minúsculo
+-- Índices para consultas rápidas
+CREATE INDEX idx_ad_insights_account_date ON meta_ad_insights_by_ad(account_id, date);
+CREATE INDEX idx_ad_insights_form_id ON meta_ad_insights_by_ad(form_id);
+CREATE INDEX idx_ad_insights_ad_id ON meta_ad_insights_by_ad(ad_id);
 ```
 
-O webhook `webhook-leads` já tem a função `normalizeForComparison` que resolve isso, mas a edge function `recalculate-lead-temperatures` não a utiliza.
+#### 2. Modificar Edge Function `meta-insights`
 
----
+**Adicionar nova chamada à API do Meta (nível anúncio):**
 
-### Solução
-
-Reescrever a edge function `recalculate-lead-temperatures` para:
-
-1. **Buscar dados da tabela correta**: `lead_form_field_values` em vez de `lead_custom_field_values`
-2. **Usar normalização**: Aplicar a mesma função `normalizeForComparison` do webhook
-3. **Comparar corretamente**: Normalizar tanto `question_name` ↔ `field_name` quanto `answer_value` ↔ `field_value`
-
----
-
-### Mudanças Técnicas
-
-#### Arquivo: `supabase/functions/recalculate-lead-temperatures/index.ts`
-
-**Adicionar função de normalização:**
 ```typescript
-// Normalize values for comparison (handles snake_case vs readable format)
-const normalizeForComparison = (value: string): string => {
-  return value
-    .toLowerCase()
-    .replace(/_/g, ' ')     // underscores -> spaces
-    .replace(/\?/g, '')     // remove question marks
-    .replace(/\s+/g, ' ')   // multiple spaces -> single space
-    .trim();
-};
+// Buscar insights a nível de anúncio
+const adsResponse = await fetch(
+  `https://graph.facebook.com/v19.0/${adAccountId}/insights?` +
+  `fields=ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,reach,actions&` +
+  `time_range={"since":"${startDate}","until":"${endDate}"}&` +
+  `level=ad&` +  // <-- NOVO: nível de anúncio
+  `time_increment=1&` +
+  `access_token=${accessToken}`
+);
 ```
 
-**Mudar busca de dados (de tabela errada para correta):**
+**Processar e salvar dados por anúncio:**
+
 ```typescript
-// ANTES (errado):
-const { data: fieldValues } = await supabase
-  .from('lead_custom_field_values')
-  .select('custom_field_id, value')
-  .eq('lead_id', lead.id);
-
-// DEPOIS (correto):
-const { data: fieldValues } = await supabase
-  .from('lead_form_field_values')
-  .select('field_name, field_value')
-  .eq('lead_id', lead.id);
-```
-
-**Mudar comparação (usar normalização):**
-```typescript
-// ANTES (match exato):
-const questionScores = scoringMap.get(customField.field_key);
-const score = questionScores.get(fieldValue.value.toLowerCase());
-
-// DEPOIS (match normalizado):
-for (const fieldValue of fieldValues) {
-  const normalizedFieldName = normalizeForComparison(fieldValue.field_name);
-  const normalizedFieldValue = normalizeForComparison(fieldValue.field_value);
+for (const adInsight of adsData.data || []) {
+  const leadsAction = adInsight.actions?.find(a => a.action_type === 'lead');
+  const leadsCount = leadsAction?.value ? parseInt(leadsAction.value) : 0;
+  const spend = parseFloat(adInsight.spend || '0');
   
-  // Procurar regra que corresponde (normalizando ambos os lados)
-  const matchingRule = scoringRules.find(rule => 
-    normalizeForComparison(rule.question_name) === normalizedFieldName &&
-    normalizeForComparison(rule.answer_value) === normalizedFieldValue
-  );
+  // Tentar encontrar form_id através dos leads com este ad_id
+  const { data: leadWithForm } = await supabase
+    .from('leads')
+    .select('meta_form_id')
+    .eq('meta_ad_id', adInsight.ad_id)
+    .not('meta_form_id', 'is', null)
+    .limit(1)
+    .single();
   
-  if (matchingRule) {
-    totalScore += matchingRule.score;
-  }
+  await supabase.from('meta_ad_insights_by_ad').upsert({
+    account_id: targetAccountId,
+    date: adInsight.date_start,
+    ad_id: adInsight.ad_id,
+    ad_name: adInsight.ad_name,
+    adset_id: adInsight.adset_id,
+    adset_name: adInsight.adset_name,
+    campaign_id: adInsight.campaign_id,
+    campaign_name: adInsight.campaign_name,
+    form_id: leadWithForm?.meta_form_id || null,
+    spend,
+    impressions: parseInt(adInsight.impressions || '0'),
+    clicks: parseInt(adInsight.clicks || '0'),
+    leads_count: leadsCount,
+    reach: parseInt(adInsight.reach || '0'),
+    cpm: parseFloat(adInsight.cpm || '0'),
+    cpc: parseFloat(adInsight.cpc || '0'),
+    cpl: leadsCount > 0 ? spend / leadsCount : 0,
+  }, { onConflict: 'account_id,date,ad_id' });
 }
 ```
 
-**Remover dependência de custom_fields:**
-- A lógica atual busca `custom_fields` para mapear IDs → nomes
-- Isso não é necessário porque `lead_form_field_values` já contém `field_name` diretamente
+#### 3. Atualizar Relatório de Imóveis (`Reports.tsx`)
 
----
+**Nova lógica de cálculo:**
 
-### Fluxo Corrigido
+```typescript
+// 1. Buscar insights por anúncio no período
+const { data: adInsights } = await supabase
+  .from('meta_ad_insights_by_ad')
+  .select('form_id, spend, leads_count')
+  .gte('date', dateFrom)
+  .lte('date', dateTo);
 
-```text
-1. Usuário ajusta pontuações no formulário
-2. Usuário clica "Salvar" com "Atualizar leads existentes" marcado
-3. Frontend chama edge function recalculate-lead-temperatures
-4. Edge function busca leads pelo meta_form_id
-5. Para cada lead:
-   a. Busca valores em lead_form_field_values
-   b. Normaliza field_name e field_value
-   c. Compara com regras normalizadas
-   d. Soma pontuação
-   e. Aplica thresholds (hot >= X, warm >= Y, else cold)
-   f. Atualiza temperatura se mudou
+// 2. Agregar por form_id
+const spendByFormId = new Map<string, number>();
+for (const insight of adInsights || []) {
+  if (insight.form_id) {
+    const current = spendByFormId.get(insight.form_id) || 0;
+    spendByFormId.set(insight.form_id, current + (insight.spend || 0));
+  }
+}
+
+// 3. Para cada imóvel, buscar leads e somar investimento dos forms
+for (const property of properties) {
+  // Buscar form_ids dos leads deste imóvel
+  const propertyFormIds = leads
+    .filter(l => l.property_id === property.id && l.meta_form_id)
+    .map(l => l.meta_form_id);
+  
+  const uniqueFormIds = [...new Set(propertyFormIds)];
+  
+  // Somar investimento de todos os forms do imóvel
+  let campaignCost = 0;
+  for (const formId of uniqueFormIds) {
+    campaignCost += spendByFormId.get(formId) || 0;
+  }
+  
+  const cpl = leadCount > 0 ? campaignCost / leadCount : 0;
+}
 ```
 
 ---
 
-### Arquivos a Modificar
+### Fluxo de Dados
 
-1. **`supabase/functions/recalculate-lead-temperatures/index.ts`** - Reescrever lógica de cálculo
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│                         META ADS API                            │
+│  GET /{ad_account_id}/insights?level=ad                        │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   meta_ad_insights_by_ad                        │
+│  ad_id │ form_id │ spend │ impressions │ leads_count │ date    │
+│  6886..│ 1162... │ 150.0 │ 5000       │ 3           │ 2026-02-01│
+└────────────────────────────────────────────────────────────────┘
+                              │
+      ┌───────────────────────┼───────────────────────┐
+      │                       │                       │
+      ▼                       ▼                       ▼
+┌──────────────┐      ┌──────────────┐       ┌──────────────┐
+│    leads     │      │meta_form_    │       │  properties  │
+│ meta_form_id │ ──── │ configs      │       │              │
+│ property_id  │──────│ form_id      │───────│ reference_   │
+│              │      │              │       │ code         │
+└──────────────┘      └──────────────┘       └──────────────┘
+```
+
+---
+
+### Arquivos a Modificar/Criar
+
+| Arquivo | Ação | Descrição |
+|---------|------|-----------|
+| **Migration SQL** | Criar | Nova tabela `meta_ad_insights_by_ad` |
+| `supabase/functions/meta-insights/index.ts` | Modificar | Adicionar busca `level=ad` e salvar na nova tabela |
+| `src/pages/Reports.tsx` | Modificar | Usar nova tabela para calcular investimento por imóvel |
 
 ---
 
 ### Resultado Esperado
 
-| Cenário | Antes | Depois |
+| Métrica | Antes | Depois |
 |---------|-------|--------|
-| Lead com `quando_pretende_comprar = "imediatamente_(até_30_dias)"` | Score = 0 → Cold | Score = +2 → Hot |
-| Match de pergunta com `?` | Não encontra | Encontra (normalizado) |
-| Match de resposta snake_case | Não encontra | Encontra (normalizado) |
+| Investimento por Imóvel | R$ 0,00 (manual) | R$ 1.523,45 (calculado do Meta por anúncio/form) |
+| CPL por Imóvel | R$ 0,00 | R$ 22,73 (investimento real ÷ leads reais) |
+| Precisão | Distribuição proporcional | Dados exatos por anúncio vinculado ao formulário |
 
 ---
 
-### Testes Recomendados
+### Considerações Técnicas
 
-Após a implementação:
-1. Ajustar uma pontuação em um formulário configurado
-2. Salvar com "Atualizar leads existentes" marcado
-3. Verificar que os leads são recalculados corretamente (não todos frios)
-4. Conferir logs da edge function para ver matches encontrados
+1. **Volume de dados**: Insights por anúncio podem gerar mais registros, mas a API do Meta suporta paginação
+2. **Vínculo form_id**: O form_id não vem diretamente no insight, mas conseguimos inferir através dos leads que têm aquele `ad_id`
+3. **Período de sincronização**: Manter os mesmos 30 dias padrão
+4. **Retrocompatibilidade**: A tabela antiga `meta_ad_insights` continua funcionando para a aba "Anúncios"
