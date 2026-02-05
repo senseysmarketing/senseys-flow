@@ -6,6 +6,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Normalize values for comparison (handles snake_case vs readable format)
+const normalizeForComparison = (value: string): string => {
+  if (!value) return '';
+  return value
+    .toLowerCase()
+    .replace(/_/g, ' ')     // underscores -> spaces
+    .replace(/\?/g, '')     // remove question marks
+    .replace(/\s+/g, ' ')   // multiple spaces -> single space
+    .trim();
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -59,6 +70,15 @@ serve(async (req) => {
     }
 
     console.log(`Found ${scoringRules?.length || 0} scoring rules`);
+    
+    // Log scoring rules for debugging
+    if (scoringRules && scoringRules.length > 0) {
+      console.log('Scoring rules (normalized):');
+      for (const rule of scoringRules) {
+        console.log(`  - "${rule.question_name}" = "${rule.answer_value}" -> ${rule.score} points`);
+        console.log(`    Normalized: "${normalizeForComparison(rule.question_name)}" = "${normalizeForComparison(rule.answer_value)}"`);
+      }
+    }
 
     // 3. Fetch all leads with this form_id
     const { data: leads, error: leadsError } = await supabase
@@ -88,34 +108,15 @@ serve(async (req) => {
       );
     }
 
-    // 4. Get custom fields for this account
-    const { data: customFields, error: fieldsError } = await supabase
-      .from('custom_fields')
-      .select('id, field_key, name')
-      .eq('account_id', formConfig.account_id);
-
-    if (fieldsError) {
-      console.error('Error fetching custom fields:', fieldsError);
-    }
-
-    // Build scoring map: question_name -> answer_value -> score
-    const scoringMap = new Map<string, Map<string, number>>();
-    for (const rule of scoringRules || []) {
-      if (!scoringMap.has(rule.question_name)) {
-        scoringMap.set(rule.question_name, new Map());
-      }
-      scoringMap.get(rule.question_name)!.set(rule.answer_value.toLowerCase(), rule.score);
-    }
-
     let updated = 0;
     let unchanged = 0;
 
-    // 5. Process each lead
+    // 4. Process each lead
     for (const lead of leads) {
-      // Get custom field values for this lead
+      // Get form field values for this lead (from the correct table!)
       const { data: fieldValues, error: valuesError } = await supabase
-        .from('lead_custom_field_values')
-        .select('custom_field_id, value')
+        .from('lead_form_field_values')
+        .select('field_name, field_value')
         .eq('lead_id', lead.id);
 
       if (valuesError) {
@@ -123,25 +124,29 @@ serve(async (req) => {
         continue;
       }
 
-      // Calculate score
+      // Calculate score using normalized comparison
       let totalScore = 0;
-      for (const fieldValue of fieldValues || []) {
-        // Find the custom field to get the field_key/name
-        const customField = customFields?.find(cf => cf.id === fieldValue.custom_field_id);
-        if (!customField || !fieldValue.value) continue;
+      const matchedRules: string[] = [];
 
-        // Check both field_key and name for matching
-        const questionScores = scoringMap.get(customField.field_key) || scoringMap.get(customField.name);
-        if (questionScores) {
-          const score = questionScores.get(fieldValue.value.toLowerCase());
-          if (score !== undefined) {
-            totalScore += score;
-            console.log(`Lead ${lead.id}: ${customField.name}="${fieldValue.value}" -> +${score}`);
-          }
+      for (const fieldValue of fieldValues || []) {
+        if (!fieldValue.field_value) continue;
+
+        const normalizedFieldName = normalizeForComparison(fieldValue.field_name);
+        const normalizedFieldValue = normalizeForComparison(fieldValue.field_value);
+
+        // Find matching scoring rule (normalizing both sides)
+        const matchingRule = scoringRules?.find(rule => 
+          normalizeForComparison(rule.question_name) === normalizedFieldName &&
+          normalizeForComparison(rule.answer_value) === normalizedFieldValue
+        );
+
+        if (matchingRule) {
+          totalScore += matchingRule.score;
+          matchedRules.push(`${fieldValue.field_name}="${fieldValue.field_value}" -> +${matchingRule.score}`);
         }
       }
 
-      // Determine temperature
+      // Determine temperature based on thresholds
       let newTemperature: string;
       if (totalScore >= formConfig.hot_threshold) {
         newTemperature = 'hot';
@@ -152,6 +157,11 @@ serve(async (req) => {
       }
 
       console.log(`Lead ${lead.id}: totalScore=${totalScore}, currentTemp=${lead.temperature}, newTemp=${newTemperature}`);
+      if (matchedRules.length > 0) {
+        console.log(`  Matched rules: ${matchedRules.join(', ')}`);
+      } else {
+        console.log(`  No matching rules found`);
+      }
 
       // Update if changed
       if (lead.temperature !== newTemperature) {
