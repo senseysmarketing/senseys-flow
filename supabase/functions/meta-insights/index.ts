@@ -9,6 +9,37 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
+// Helper function to fetch all pages from Meta API
+async function fetchAllPages(initialUrl: string): Promise<any[]> {
+  const allData: any[] = [];
+  let url: string | null = initialUrl;
+  let pageCount = 0;
+  
+  while (url) {
+    pageCount++;
+    console.log(`Fetching page ${pageCount}...`);
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.error) {
+      console.error('Meta API error on page', pageCount, ':', data.error);
+      break;
+    }
+    
+    if (data.data) {
+      allData.push(...data.data);
+      console.log(`Page ${pageCount}: got ${data.data.length} items, total: ${allData.length}`);
+    }
+    
+    // Check for next page
+    url = data.paging?.next || null;
+  }
+  
+  console.log(`Finished fetching ${pageCount} pages, total items: ${allData.length}`);
+  return allData;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -122,40 +153,36 @@ serve(async (req) => {
 
       console.log(`Syncing insights for account ${targetAccountId}, ad account ${adAccountId}, from ${startDate} to ${endDate}`);
 
-      // Fetch insights from Meta (account level)
-      const insightsResponse = await fetch(
+      // Fetch ALL insights from Meta with pagination (account level, daily)
+      const insightsUrl = 
         `https://graph.facebook.com/v19.0/${adAccountId}/insights?` +
         `fields=spend,impressions,clicks,reach,cpm,cpc,actions&` +
         `time_range={"since":"${startDate}","until":"${endDate}"}&` +
         `time_increment=1&` +
-        `access_token=${accessToken}`
-      );
+        `access_token=${accessToken}`;
 
-      const insightsData = await insightsResponse.json();
+      console.log('Fetching account insights with pagination...');
+      const allInsights = await fetchAllPages(insightsUrl);
 
-      if (insightsData.error) {
-        console.error('Error fetching insights:', insightsData.error);
-        return new Response(JSON.stringify({ error: insightsData.error.message, code: 'META_ERROR' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+      if (allInsights.length === 0) {
+        console.log('No insights data returned from Meta');
       }
 
-      // Fetch campaign-level insights for detailed breakdown
-      const campaignsResponse = await fetch(
+      // Fetch ALL campaign-level insights with pagination
+      const campaignsUrl = 
         `https://graph.facebook.com/v19.0/${adAccountId}/insights?` +
         `fields=campaign_id,campaign_name,spend,impressions,clicks,reach,actions&` +
         `time_range={"since":"${startDate}","until":"${endDate}"}&` +
         `level=campaign&` +
-        `access_token=${accessToken}`
-      );
+        `access_token=${accessToken}`;
 
-      const campaignsData = await campaignsResponse.json();
-      console.log(`Fetched ${campaignsData.data?.length || 0} campaign insights`);
+      console.log('Fetching campaign insights with pagination...');
+      const allCampaigns = await fetchAllPages(campaignsUrl);
+      console.log(`Total campaign insights fetched: ${allCampaigns.length}`);
 
       // Process campaign data into a map by date
       const campaignsByDate = new Map<string, any[]>();
-      for (const campaign of campaignsData.data || []) {
+      for (const campaign of allCampaigns) {
         const dateKey = campaign.date_start;
         const leadsAction = campaign.actions?.find((a: any) => a.action_type === 'lead');
         const leadsCount = leadsAction?.value ? parseInt(leadsAction.value) : 0;
@@ -175,80 +202,84 @@ serve(async (req) => {
         campaignsByDate.get(dateKey)!.push(campaignInfo);
       }
 
-      // Fetch ad-level insights for granular form/property tracking
-      console.log(`Fetching ad-level insights for account ${adAccountId}`);
-      const adsResponse = await fetch(
+      // Fetch ALL ad-level insights with pagination
+      console.log('Fetching ad-level insights with pagination...');
+      const adsUrl = 
         `https://graph.facebook.com/v19.0/${adAccountId}/insights?` +
         `fields=ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,reach,actions&` +
         `time_range={"since":"${startDate}","until":"${endDate}"}&` +
         `level=ad&` +
         `time_increment=1&` +
-        `access_token=${accessToken}`
-      );
+        `access_token=${accessToken}`;
 
-      const adsData = await adsResponse.json();
+      const allAdInsights = await fetchAllPages(adsUrl);
+      console.log(`Total ad-level insights fetched: ${allAdInsights.length}`);
+
+      // Process and collect ad-level insights for batch insert
+      const adInsightsToUpsert: any[] = [];
       
-      if (adsData.error) {
-        console.error('Error fetching ad-level insights:', adsData.error);
-      } else {
-        console.log(`Fetched ${adsData.data?.length || 0} ad-level insights`);
+      for (const adInsight of allAdInsights) {
+        const leadsAction = adInsight.actions?.find((a: any) => a.action_type === 'lead');
+        const leadsCount = leadsAction?.value ? parseInt(leadsAction.value) : 0;
+        const spend = parseFloat(adInsight.spend || '0');
         
-        // Process and save ad-level insights
-        for (const adInsight of adsData.data || []) {
-          const leadsAction = adInsight.actions?.find((a: any) => a.action_type === 'lead');
-          const leadsCount = leadsAction?.value ? parseInt(leadsAction.value) : 0;
-          const spend = parseFloat(adInsight.spend || '0');
-          
-          // Try to find form_id by looking up leads with this ad_id
-          let formId: string | null = null;
-          const { data: leadWithForm } = await supabase
-            .from('leads')
-            .select('meta_form_id')
-            .eq('account_id', targetAccountId)
-            .eq('meta_ad_id', adInsight.ad_id)
-            .not('meta_form_id', 'is', null)
-            .limit(1)
-            .maybeSingle();
-          
-          if (leadWithForm?.meta_form_id) {
-            formId = leadWithForm.meta_form_id;
-          }
-
-          const adInsightData = {
-            account_id: targetAccountId,
-            date: adInsight.date_start,
-            ad_id: adInsight.ad_id,
-            ad_name: adInsight.ad_name,
-            adset_id: adInsight.adset_id,
-            adset_name: adInsight.adset_name,
-            campaign_id: adInsight.campaign_id,
-            campaign_name: adInsight.campaign_name,
-            form_id: formId,
-            spend,
-            impressions: parseInt(adInsight.impressions || '0'),
-            clicks: parseInt(adInsight.clicks || '0'),
-            leads_count: leadsCount,
-            reach: parseInt(adInsight.reach || '0'),
-            cpm: parseFloat(adInsight.cpm || '0'),
-            cpc: parseFloat(adInsight.cpc || '0'),
-            cpl: leadsCount > 0 ? spend / leadsCount : 0,
-          };
-
-          const { error: adUpsertError } = await supabase
-            .from('meta_ad_insights_by_ad')
-            .upsert(adInsightData, {
-              onConflict: 'account_id,date,ad_id'
-            });
-
-          if (adUpsertError) {
-            console.error('Error saving ad insight:', adUpsertError);
-          }
+        // Try to find form_id by looking up leads with this ad_id
+        let formId: string | null = null;
+        const { data: leadWithForm } = await supabase
+          .from('leads')
+          .select('meta_form_id')
+          .eq('account_id', targetAccountId)
+          .eq('meta_ad_id', adInsight.ad_id)
+          .not('meta_form_id', 'is', null)
+          .limit(1)
+          .maybeSingle();
+        
+        if (leadWithForm?.meta_form_id) {
+          formId = leadWithForm.meta_form_id;
         }
+
+        adInsightsToUpsert.push({
+          account_id: targetAccountId,
+          date: adInsight.date_start,
+          ad_id: adInsight.ad_id,
+          ad_name: adInsight.ad_name,
+          adset_id: adInsight.adset_id,
+          adset_name: adInsight.adset_name,
+          campaign_id: adInsight.campaign_id,
+          campaign_name: adInsight.campaign_name,
+          form_id: formId,
+          spend,
+          impressions: parseInt(adInsight.impressions || '0'),
+          clicks: parseInt(adInsight.clicks || '0'),
+          leads_count: leadsCount,
+          reach: parseInt(adInsight.reach || '0'),
+          cpm: parseFloat(adInsight.cpm || '0'),
+          cpc: parseFloat(adInsight.cpc || '0'),
+          cpl: leadsCount > 0 ? spend / leadsCount : 0,
+        });
       }
 
-      // Process and save each day's data
+      // Batch insert ad insights
+      const BATCH_SIZE = 100;
+      let adInsertErrors = 0;
+      for (let i = 0; i < adInsightsToUpsert.length; i += BATCH_SIZE) {
+        const batch = adInsightsToUpsert.slice(i, i + BATCH_SIZE);
+        const { error: adUpsertError } = await supabase
+          .from('meta_ad_insights_by_ad')
+          .upsert(batch, {
+            onConflict: 'account_id,date,ad_id'
+          });
+
+        if (adUpsertError) {
+          console.error('Error saving ad insights batch:', adUpsertError);
+          adInsertErrors++;
+        }
+      }
+      console.log(`Saved ${adInsightsToUpsert.length} ad insights (${adInsertErrors} batch errors)`);
+
+      // Process and save each day's account-level data
       const savedInsights = [];
-      for (const day of insightsData.data || []) {
+      for (const day of allInsights) {
         // Count leads from actions
         const leadsAction = day.actions?.find((a: any) => a.action_type === 'lead');
         const leadsCount = leadsAction?.value ? parseInt(leadsAction.value) : 0;
@@ -294,6 +325,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ 
         success: true, 
         synced: savedInsights.length,
+        adInsightsSynced: adInsightsToUpsert.length,
         insights: savedInsights
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
