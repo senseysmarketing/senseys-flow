@@ -539,6 +539,24 @@ serve(async (req) => {
 
           console.log(`✅ Lead created successfully: ${newLead.id}`);
 
+          // Save form -> reference_code mapping for property investment tracking
+          if (formId && propertyId && referenceCode) {
+            const { error: mappingError } = await supabase
+              .from('meta_form_property_mapping')
+              .upsert({
+                account_id: metaConfig.account_id,
+                form_id: formId,
+                reference_code: referenceCode,
+                property_id: propertyId
+              }, { onConflict: 'account_id,form_id' });
+            
+            if (mappingError) {
+              console.log(`⚠️ Error saving form mapping: ${mappingError.message}`);
+            } else {
+              console.log(`✅ Saved form mapping: ${formId} -> ${referenceCode}`);
+            }
+          }
+
           // Apply distribution rules and capture assigned broker
           let assignedBrokerId: string | undefined;
           try {

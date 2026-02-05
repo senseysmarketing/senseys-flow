@@ -885,6 +885,54 @@ export type Database = {
         }
         Relationships: []
       }
+      meta_form_property_mapping: {
+        Row: {
+          account_id: string
+          created_at: string | null
+          form_id: string
+          form_name: string | null
+          id: string
+          property_id: string | null
+          reference_code: string
+          updated_at: string | null
+        }
+        Insert: {
+          account_id: string
+          created_at?: string | null
+          form_id: string
+          form_name?: string | null
+          id?: string
+          property_id?: string | null
+          reference_code: string
+          updated_at?: string | null
+        }
+        Update: {
+          account_id?: string
+          created_at?: string | null
+          form_id?: string
+          form_name?: string | null
+          id?: string
+          property_id?: string | null
+          reference_code?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_form_property_mapping_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_form_property_mapping_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meta_form_scoring_rules: {
         Row: {
           answer_value: string
