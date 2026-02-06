@@ -108,7 +108,7 @@ export const LeadsHeroStats = ({ leads, className, onFilterChange }: LeadsHeroSt
   ];
 
   return (
-    <div className={cn("grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3", className)}>
+    <div className={cn("grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 min-w-0 w-full", className)}>
       {stats.map((stat) => {
         const Icon = stat.icon;
         const isActive = activeFilter === stat.key;
@@ -118,7 +118,7 @@ export const LeadsHeroStats = ({ leads, className, onFilterChange }: LeadsHeroSt
             key={stat.key}
             onClick={() => handleClick(stat.key, stat.filterValue)}
             className={cn(
-              "relative overflow-hidden rounded-xl p-4 text-left transition-all duration-300",
+              "relative overflow-hidden rounded-xl p-4 text-left transition-all duration-300 min-w-0",
               "bg-gradient-to-br border",
               stat.gradient,
               isActive
