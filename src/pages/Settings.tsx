@@ -5,11 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, Edit2, Trash2, Move, User, Settings as SettingsIcon, Palette, MessageCircle, Bell, Users, Webhook, Copy, Check, Building2, Shield, Shuffle, Target, Send, Upload } from "lucide-react";
+import { Plus, Edit2, Trash2, Move, User, Bell, MessageCircle, Users, Webhook, Copy, Check, Building2, Shield } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -57,7 +56,7 @@ interface Property {
 }
 
 type TabValue = 'profile' | 'team' | 'notifications' | 'statuses' | 'whatsapp' | 'followup' | 'distribution' | 'webhook' | 'qualification' | 'metacapi' | 'permissions' | 'whitelabel' | 'import';
-type CategoryValue = 'geral' | 'leads' | 'integracoes' | 'avancado';
+type CategoryValue = 'geral' | 'integracoes' | 'avancado';
 
 interface NavItem {
   value: TabValue;
@@ -105,7 +104,7 @@ const SettingsPage = () => {
   const [copiedPropertyId, setCopiedPropertyId] = useState<string | null>(null);
   const [testingWebhook, setTestingWebhook] = useState(false);
 
-  // Navigation structure with categories
+  // Navigation structure with categories - Simplified (leads moved to Leads page, Meta events to Reports)
   const navGroups: NavGroup[] = [
     {
       title: "Geral",
@@ -117,23 +116,10 @@ const SettingsPage = () => {
       ]
     },
     {
-      title: "Gestão de Leads",
-      category: 'leads',
-      items: [
-        { value: 'statuses', label: 'Status dos Leads', icon: <Palette className="h-4 w-4" /> },
-        { value: 'followup', label: 'Follow-up', icon: <Bell className="h-4 w-4" /> },
-        { value: 'distribution', label: 'Distribuição', icon: <Shuffle className="h-4 w-4" /> },
-        { value: 'qualification', label: 'Qualificação', icon: <Target className="h-4 w-4" /> },
-        { value: 'import', label: 'Importação', icon: <Upload className="h-4 w-4" />, permission: 'leads.create' },
-      ]
-    },
-    {
       title: "Integrações",
       category: 'integracoes',
       items: [
-        { value: 'whatsapp', label: 'WhatsApp', icon: <MessageCircle className="h-4 w-4" /> },
         { value: 'webhook', label: 'Webhook', icon: <Webhook className="h-4 w-4" /> },
-        { value: 'metacapi', label: 'Eventos Meta', icon: <Send className="h-4 w-4" /> },
       ]
     },
     {
@@ -510,7 +496,6 @@ const SettingsPage = () => {
   // Categories for the main tabs
   const categories: { value: CategoryValue; label: string }[] = [
     { value: 'geral', label: 'Geral' },
-    { value: 'leads', label: 'Gestão de Leads' },
     { value: 'integracoes', label: 'Integrações' },
     { value: 'avancado', label: 'Avançado' },
   ];

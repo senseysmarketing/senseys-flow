@@ -5,12 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Edit2, Trash2, Building2, MapPin, Bed, Car, Bath, Search, Filter, Eye } from "lucide-react";
+import { Plus, Building2, Search } from "lucide-react";
 import { PropertyDetailModal } from "@/components/PropertyDetailModal";
 import LeadDetailModal from "@/components/LeadDetailModal";
+import { PropertiesKPIs } from "@/components/properties/PropertiesKPIs";
+import { PropertyMetricsCard } from "@/components/properties/PropertyMetricsCard";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
@@ -79,7 +80,6 @@ const PropertiesPage = () => {
   const [filterType, setFilterType] = useState<string>("all");
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isLeadDetailOpen, setIsLeadDetailOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<any>(null);
   
@@ -371,6 +371,7 @@ const PropertiesPage = () => {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Imóveis</h1>
@@ -591,6 +592,9 @@ const PropertiesPage = () => {
         </Dialog>
       </div>
 
+      {/* KPIs */}
+      <PropertiesKPIs />
+
       {/* Filters */}
       <div className="flex flex-wrap gap-4">
         <div className="relative flex-1 min-w-[200px]">
@@ -649,123 +653,19 @@ const PropertiesPage = () => {
             const broker = brokers.find(b => b.user_id === property.assigned_broker_id);
             
             return (
-              <Card 
-                key={property.id} 
-                className="overflow-hidden cursor-pointer hover:shadow-lg hover:border-primary/50 transition-all"
-                onClick={() => {
+              <PropertyMetricsCard
+                key={property.id}
+                property={property}
+                brokerName={broker?.full_name || undefined}
+                statusInfo={statusInfo}
+                typeInfo={typeInfo}
+                onView={() => {
                   setSelectedProperty(property);
                   setIsDetailModalOpen(true);
                 }}
-              >
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <CardTitle className="text-lg truncate">{property.title}</CardTitle>
-                      {property.neighborhood && property.city && (
-                        <CardDescription className="flex items-center gap-1 mt-1">
-                          <MapPin className="h-3 w-3" />
-                          {property.neighborhood}, {property.city}
-                        </CardDescription>
-                      )}
-                    </div>
-                    <Badge className={`${statusInfo.color} text-white shrink-0`}>
-                      {statusInfo.label}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <Badge variant="outline">{typeInfo?.label || property.type}</Badge>
-                    {property.area_m2 && <span>{property.area_m2}m²</span>}
-                    {property.bedrooms && (
-                      <span className="flex items-center gap-1">
-                        <Bed className="h-3 w-3" /> {property.bedrooms}
-                      </span>
-                    )}
-                    {property.bathrooms && (
-                      <span className="flex items-center gap-1">
-                        <Bath className="h-3 w-3" /> {property.bathrooms}
-                      </span>
-                    )}
-                    {property.parking_spots && (
-                      <span className="flex items-center gap-1">
-                        <Car className="h-3 w-3" /> {property.parking_spots}
-                      </span>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-1">
-                    {property.sale_price && (
-                      <p className="text-lg font-bold text-primary">
-                        Venda: {formatPrice(property.sale_price)}
-                      </p>
-                    )}
-                    {property.rent_price && (
-                      <p className="text-sm text-muted-foreground">
-                        Aluguel: {formatPrice(property.rent_price)}/mês
-                      </p>
-                    )}
-                  </div>
-                  
-                  {broker && (
-                    <p className="text-xs text-muted-foreground">
-                      Corretor: {broker.full_name}
-                    </p>
-                  )}
-                  
-                  <div className="flex items-center gap-2 pt-2 border-t">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedProperty(property);
-                        setIsDetailModalOpen(true);
-                      }}
-                      className="flex-1"
-                    >
-                      <Eye className="h-3 w-3 mr-1" />
-                      Detalhes
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditDialog(property);
-                      }}
-                    >
-                      <Edit2 className="h-3 w-3" />
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="text-destructive"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent onClick={(e) => e.stopPropagation()}>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Remover imóvel?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Esta ação não pode ser desfeita.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDelete(property.id)}>
-                            Remover
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </CardContent>
-              </Card>
+                onEdit={() => openEditDialog(property)}
+                onDelete={() => handleDelete(property.id)}
+              />
             );
           })}
         </div>

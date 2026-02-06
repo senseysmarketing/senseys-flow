@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from "recharts";
-import { TrendingUp, TrendingDown, Users, Calendar, Target, DollarSign, Flame, Trophy, Building2, Megaphone, Thermometer, Snowflake, RefreshCw } from "lucide-react";
+import { TrendingUp, Users, Calendar, Target, DollarSign, Flame, Trophy, Building2, Megaphone, Thermometer, Snowflake, RefreshCw, LayoutDashboard } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
@@ -17,6 +17,8 @@ import { ptBR } from "date-fns/locale";
 import BrokerRanking from "@/components/BrokerRanking";
 import AdInsightsTab, { AdStats } from "@/components/reports/AdInsightsTab";
 import PropertyInsightsTab, { PropertyStats } from "@/components/reports/PropertyInsightsTab";
+import { ReportsOverviewTab } from "@/components/reports/ReportsOverviewTab";
+import { ReportsSettingsSheet } from "@/components/reports/ReportsSettingsSheet";
 
 interface LeadStats {
   total: number;
@@ -729,6 +731,8 @@ const ReportsPage = () => {
             </SelectContent>
           </Select>
 
+          <ReportsSettingsSheet />
+
           <Dialog open={showCustomDatePicker} onOpenChange={setShowCustomDatePicker}>
             <DialogContent className="sm:max-w-[400px]">
               <DialogHeader>
@@ -840,8 +844,12 @@ const ReportsPage = () => {
         </Card>
       </div>
 
-      <Tabs defaultValue="leads" className="space-y-6">
+      <Tabs defaultValue="overview" className="space-y-6">
         <TabsList className="flex-wrap">
+          <TabsTrigger value="overview">
+            <LayoutDashboard className="h-4 w-4 mr-2" />
+            Visão Geral
+          </TabsTrigger>
           <TabsTrigger value="leads">
             <Target className="h-4 w-4 mr-2" />
             Leads
@@ -863,6 +871,31 @@ const ReportsPage = () => {
             Eventos
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="overview">
+          <ReportsOverviewTab
+            data={{
+              leadStats: {
+                periodTotal: leadStats.periodTotal,
+                periodHotLeads: leadStats.periodHotLeads,
+                periodWarmLeads: leadStats.periodWarmLeads,
+                periodColdLeads: leadStats.periodColdLeads,
+                byTemperature: leadStats.byTemperature,
+                byCampaign: leadStats.byCampaign,
+                dailyCreated: leadStats.dailyCreated,
+              },
+              adStats: {
+                totalSpend: adStats.totalSpend,
+                totalLeads: adStats.totalLeads,
+                avgCPL: avgCPL,
+                dailyData: adStats.dailyData,
+                campaignData: adStats.campaignData,
+              },
+              propertyStats: propertyStats,
+            }}
+            period={period}
+          />
+        </TabsContent>
 
         <TabsContent value="leads" className="space-y-6">
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
