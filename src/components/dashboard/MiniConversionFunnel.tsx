@@ -136,9 +136,8 @@ export const MiniConversionFunnel = ({ className }: MiniConversionFunnelProps) =
                     <div
                       className="h-full rounded-lg transition-all flex items-center justify-between px-3"
                       style={{
-                        backgroundColor: stage.color + "30",
-                        borderLeft: `4px solid ${stage.color}`,
-                        width: stage.count > 0 ? "100%" : "100%",
+                        backgroundColor: stage.color + "20",
+                        width: "100%",
                       }}
                     >
                       <span className="text-xs font-medium truncate">{stage.name}</span>

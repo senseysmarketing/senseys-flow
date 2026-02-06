@@ -19,23 +19,19 @@ import { toast } from "@/hooks/use-toast";
 const urgencyStyles = {
   critical: {
     badge: "bg-destructive text-destructive-foreground",
-    border: "border-l-destructive",
-    bg: "bg-destructive/5",
+    bg: "bg-destructive/10",
   },
   high: {
     badge: "bg-warning text-warning-foreground",
-    border: "border-l-warning",
-    bg: "bg-warning/5",
+    bg: "bg-warning/10",
   },
   medium: {
     badge: "bg-primary text-primary-foreground",
-    border: "border-l-primary",
-    bg: "bg-primary/5",
+    bg: "bg-primary/10",
   },
   low: {
     badge: "bg-muted text-muted-foreground",
-    border: "border-l-muted",
-    bg: "",
+    bg: "bg-muted/10",
   },
 };
 
@@ -145,8 +141,7 @@ export const QuickLeadActions = ({
               <div
                 key={lead.id}
                 className={cn(
-                  "flex items-center gap-3 p-3 rounded-lg border-l-4 transition-all cursor-pointer hover:shadow-md",
-                  urgencyStyles[lead.urgency].border,
+                  "flex items-center gap-3 p-3 rounded-lg transition-all cursor-pointer hover:shadow-md",
                   urgencyStyles[lead.urgency].bg
                 )}
                 onClick={() => navigate("/leads")}
