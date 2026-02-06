@@ -6,7 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Building2, ChevronRight, Users, Flame } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-
+import { useIsMobile } from "@/hooks/use-mobile";
 interface PropertyWithMetrics {
   id: string;
   title: string;
@@ -31,6 +31,7 @@ export const PropertyHighlights = ({
 }: PropertyHighlightsProps) => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [properties, setProperties] = useState<PropertyWithMetrics[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -153,22 +154,30 @@ export const PropertyHighlights = ({
           {properties.map((property, index) => (
             <div
               key={property.id}
-              className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer"
+              className={cn(
+                "p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer",
+                isMobile ? "flex flex-col gap-2" : "flex items-center gap-3"
+              )}
               onClick={() => navigate("/properties")}
             >
-              {/* Rank indicator */}
-              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold">
-                {index + 1}
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                {/* Rank indicator */}
+                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold">
+                  {index + 1}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-medium text-sm truncate">{property.title}</h4>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {property.neighborhood || property.city || property.type}
+                  </p>
+                </div>
               </div>
 
-              <div className="flex-1 min-w-0">
-                <h4 className="font-medium text-sm truncate">{property.title}</h4>
-                <p className="text-xs text-muted-foreground truncate">
-                  {property.neighborhood || property.city || property.type}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3 flex-shrink-0">
+              <div className={cn(
+                "flex items-center gap-3 flex-shrink-0",
+                isMobile && "justify-end"
+              )}>
                 {/* Total leads */}
                 <div className="flex items-center gap-1 text-xs">
                   <Users className="h-3.5 w-3.5 text-muted-foreground" />

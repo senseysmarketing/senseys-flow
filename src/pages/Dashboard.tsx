@@ -262,37 +262,46 @@ const Dashboard = () => {
                 {recentLeads.map((lead) => (
                   <div 
                     key={lead.id}
-                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer group"
+                    className={cn(
+                      "p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer group",
+                      isMobile ? "flex flex-col gap-2" : "flex items-center gap-3"
+                    )}
                     onClick={() => navigate('/leads')}
                   >
-                    <AvatarFallbackColored name={lead.name} size="sm" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h4 className="font-medium text-sm truncate">{lead.name}</h4>
-                        {lead.temperature && (
-                          <div className={cn(
-                            "w-2 h-2 rounded-full",
-                            getTemperatureColor(lead.temperature)
-                          )} />
-                        )}
-                        {lead.status_name && (
-                          <Badge 
-                            variant="outline"
-                            className="text-[10px] px-1.5 py-0"
-                            style={{ 
-                              borderColor: lead.status_color,
-                              color: lead.status_color 
-                            }}
-                          >
-                            {lead.status_name}
-                          </Badge>
-                        )}
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <AvatarFallbackColored name={lead.name} size="sm" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="font-medium text-sm truncate max-w-[160px]">{lead.name}</h4>
+                          {lead.temperature && (
+                            <div className={cn(
+                              "w-2 h-2 rounded-full flex-shrink-0",
+                              getTemperatureColor(lead.temperature)
+                            )} />
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                          <p className="text-xs text-muted-foreground">
+                            {lead.origem || 'Origem não informada'} • {getRelativeTime(lead.created_at)}
+                          </p>
+                          {lead.status_name && (
+                            <Badge 
+                              variant="outline"
+                              className="text-[10px] px-1.5 py-0 flex-shrink-0"
+                              style={{ 
+                                borderColor: lead.status_color,
+                                color: lead.status_color 
+                              }}
+                            >
+                              {lead.status_name}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        {lead.origem || 'Origem não informada'} • {getRelativeTime(lead.created_at)}
-                      </p>
                     </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    {!isMobile && (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    )}
                   </div>
                 ))}
               </div>
@@ -329,19 +338,33 @@ const Dashboard = () => {
                 {todayEvents.slice(0, 5).map((event) => (
                   <div 
                     key={event.id}
-                    className="flex items-center gap-3 p-3 rounded-lg bg-warning/5 border border-warning/20"
+                    className={cn(
+                      "p-3 rounded-lg bg-warning/5 border border-warning/20",
+                      isMobile ? "flex flex-col gap-1" : "flex items-center gap-3"
+                    )}
                   >
-                    <div className="flex-shrink-0 text-center">
+                    <div className={cn(
+                      "flex-shrink-0",
+                      isMobile ? "flex items-center gap-2" : "text-center"
+                    )}>
                       <div className="text-lg font-bold text-warning">{formatTime(event.start_time)}</div>
+                      {isMobile && <h4 className="font-medium text-sm truncate">{event.title}</h4>}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-sm truncate">{event.title}</h4>
-                      {event.lead_name && (
-                        <p className="text-xs text-muted-foreground">
-                          Lead: {event.lead_name}
-                        </p>
-                      )}
-                    </div>
+                    {!isMobile && (
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-medium text-sm truncate">{event.title}</h4>
+                        {event.lead_name && (
+                          <p className="text-xs text-muted-foreground truncate">
+                            Lead: {event.lead_name}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {isMobile && event.lead_name && (
+                      <p className="text-xs text-muted-foreground truncate">
+                        Lead: {event.lead_name}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
