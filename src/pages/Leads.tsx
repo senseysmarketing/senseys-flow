@@ -696,9 +696,9 @@ const Leads = () => {
   }
 
   return (
-<div className="flex flex-col h-[calc(100vh-8rem)] lg:h-[calc(100vh-6rem)] overflow-x-hidden">
+<div className="flex flex-col h-[calc(100vh-8rem)] lg:h-[calc(100vh-6rem)] overflow-hidden">
       {/* Fixed Header - Does NOT scroll */}
-      <div className="shrink-0 space-y-4 pb-4 w-full max-w-full overflow-x-hidden">
+      <div className="shrink-0 space-y-4 pb-4 w-full max-w-full min-w-0 overflow-hidden">
         {/* Hero Stats Section */}
         <LeadsHeroStats 
           leads={leads}
