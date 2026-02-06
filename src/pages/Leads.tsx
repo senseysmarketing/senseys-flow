@@ -1,13 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -16,21 +14,13 @@ import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea
 import { 
   Plus, 
   Search, 
-   
-  MoreVertical,
-  Phone,
-  Mail,
-  MessageCircle,
   Eye,
-  Edit,
-  Trash,
   Grid,
   Bell,
   BellOff,
   Flame,
   Thermometer,
   Snowflake,
-  Database,
   EyeOff,
   List
 } from "lucide-react";
@@ -40,16 +30,15 @@ import { toast } from "@/hooks/use-toast";
 import { useLeadNotifications } from "@/hooks/use-lead-notifications";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useIsMobile } from "@/hooks/use-mobile";
-import WhatsAppButton from "@/components/WhatsAppButton";
-import TemperatureBadge from "@/components/TemperatureBadge";
-import OriginBadge from "@/components/OriginBadge";
 import LeadDetailModal from "@/components/LeadDetailModal";
 import BrokerSelect from "@/components/BrokerSelect";
 import PropertySelect from "@/components/PropertySelect";
 import LeadsDatabaseView from "@/components/leads/LeadsDatabaseView";
 import LeadsFilters from "@/components/leads/LeadsFilters";
+import { LeadKanbanCard } from "@/components/LeadKanbanCard";
+import LeadMobileCard from "@/components/leads/LeadMobileCard";
 import { LeadsSettingsSheet } from "@/components/leads/LeadsSettingsSheet";
-import { LeadsMiniStats } from "@/components/leads/LeadsMiniStats";
+import { LeadsHeroStats } from "@/components/leads/LeadsHeroStats";
 
 interface Lead {
   id: string;
@@ -583,20 +572,6 @@ const Leads = () => {
     handleStatusChange(leadId, newStatusId);
   };
 
-  const formatPhone = (phone: string) => {
-    const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length === 11) {
-      return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 7)}-${cleaned.slice(7)}`;
-    }
-    return phone;
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const day = date.getDate().toString().padStart(2, '0');
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    return `${day}/${month}`;
-  };
 
 
   // Extract unique values for filters
@@ -724,28 +699,25 @@ const Leads = () => {
     <div className="flex flex-col h-[calc(100vh-8rem)] lg:h-[calc(100vh-6rem)]">
       {/* Fixed Header - Does NOT scroll */}
       <div className="shrink-0 space-y-4 pb-4">
+        {/* Hero Stats Section */}
+        <LeadsHeroStats 
+          leads={leads}
+          onFilterChange={(filter) => {
+            if (filter.type === "clear") {
+              setFilters(prev => ({ ...prev, temperatures: [], noBroker: false }));
+            } else if (filter.type === "unassigned") {
+              setFilters(prev => ({ ...prev, noBroker: true, temperatures: [] }));
+            } else if (filter.value) {
+              setFilters(prev => ({ ...prev, temperatures: [filter.value as string], noBroker: false }));
+            }
+          }}
+        />
+
         {/* Title + New Lead Button */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="space-y-2">
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Leads</h1>
-            </div>
-            {/* Mini Stats */}
-            <LeadsMiniStats leads={leads} />
-          </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-2xl font-bold tracking-tight">Leads</h1>
           
           <div className="flex gap-2">
-            {/* Notifications Toggle */}
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-9 w-9"
-              onClick={toggleNotifications}
-              title={notificationsEnabled ? "Desativar notificações" : "Ativar notificações"}
-            >
-              {notificationsEnabled ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
-            </Button>
-            
             {/* Settings Sheet */}
             <LeadsSettingsSheet />
             
@@ -1021,7 +993,7 @@ const Leads = () => {
         {viewMode === 'kanban' ? (
           isMobile ? (
             // Mobile: Kanban as Accordion with its own scroll
-            <div className="h-full overflow-y-auto space-y-2">
+            <div className="h-full overflow-y-auto space-y-2 pb-20">
               <Accordion type="single" collapsible defaultValue={statuses[0]?.id} className="space-y-2">
                 {statuses.filter(s => !hiddenColumns.includes(s.id)).map((status) => {
                   const statusLeads = getLeadsByStatus(status.id);
@@ -1029,18 +1001,18 @@ const Leads = () => {
                     <AccordionItem 
                       key={status.id} 
                       value={status.id}
-                      className="border rounded-xl overflow-hidden bg-card"
+                      className="border rounded-xl overflow-hidden glass"
                     >
-                      <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+                      <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/30">
                         <div className="flex items-center gap-3 flex-1">
                           <div 
-                            className="w-3 h-3 rounded-full shrink-0" 
-                            style={{ backgroundColor: status.color }}
+                            className="w-2.5 h-2.5 rounded-full shrink-0" 
+                            style={{ backgroundColor: status.color, boxShadow: `0 0 6px ${status.color}60` }}
                           />
-                          <span className="font-semibold">{status.name}</span>
+                          <span className="font-semibold text-sm">{status.name}</span>
                           <Badge 
                             variant="secondary" 
-                            className="ml-auto mr-2 font-bold"
+                            className="ml-auto mr-2 font-bold text-xs"
                             style={{ backgroundColor: `${status.color}20`, color: status.color }}
                           >
                             {statusLeads.length}
@@ -1055,73 +1027,16 @@ const Leads = () => {
                             </p>
                           ) : (
                             statusLeads.map((lead) => (
-                              <div 
+                              <LeadMobileCard
                                 key={lead.id}
-                                className="lead-card cursor-pointer"
-                                onClick={() => handleViewDetails(lead)}
-                              >
-                                <div className="flex items-start justify-between mb-2">
-                                  <div>
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <h4 className="font-medium text-sm">{lead.name}</h4>
-                                      <TemperatureBadge temperature={lead.temperature} showLabel={false} size="sm" />
-                                      <OriginBadge origem={lead.origem} showLabel={false} size="sm" />
-                                    </div>
-                                    <span className="text-xs text-muted-foreground">{formatDate(lead.created_at)}</span>
-                                  </div>
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                                        <MoreVertical className="h-4 w-4" />
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleViewDetails(lead); }}>
-                                        <Eye className="h-4 w-4 mr-2" />
-                                        Ver detalhes
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEditLead(lead); }}>
-                                        <Edit className="h-4 w-4 mr-2" />
-                                        Editar
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem 
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          requestDeleteLead(lead);
-                                        }}
-                                        className="text-destructive"
-                                      >
-                                        <Trash className="h-4 w-4 mr-2" />
-                                        Deletar
-                                      </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
-                                </div>
-                                
-                                <div className="space-y-1 text-xs text-muted-foreground mb-3">
-                                  <div className="flex items-center gap-1">
-                                    <Phone className="h-3 w-3" />
-                                    {formatPhone(lead.phone)}
-                                  </div>
-                                  {lead.properties && (
-                                    <div className="flex items-center gap-1">
-                                      <span>🏠</span>
-                                      <span className="truncate">{lead.properties.title}</span>
-                                    </div>
-                                  )}
-                                </div>
-                                
-                                <div onClick={(e) => e.stopPropagation()}>
-                                  <WhatsAppButton 
-                                    phone={lead.phone} 
-                                    leadName={lead.name}
-                                    leadId={lead.id}
-                                    propertyName={lead.properties?.title}
-                                    interesse={lead.interesse}
-                                    className="w-full h-9"
-                                  />
-                                </div>
-                              </div>
+                                lead={lead}
+                                onViewDetails={handleViewDetails}
+                                onEditLead={handleEditLead}
+                                onDeleteLead={(id) => {
+                                  const l = leads.find(x => x.id === id);
+                                  if (l) requestDeleteLead(l);
+                                }}
+                              />
                             ))
                           )}
                         </div>
@@ -1132,30 +1047,32 @@ const Leads = () => {
               </Accordion>
             </div>
           ) : (
-            // Desktop: Kanban View with horizontal scroll only on columns
+            // Desktop: Kanban View with glassmorphism columns
             <DragDropContext onDragEnd={onDragEnd}>
               {/* Visual container for Kanban board */}
-              <div className="h-full bg-muted/30 rounded-xl border p-4 flex flex-col">
+              <div className="h-full rounded-xl flex flex-col">
                 {/* Kanban columns - horizontal scroll ONLY here */}
                 <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden custom-scrollbar pb-2">
                   <div className="flex gap-4 h-full">
                     {statuses.filter(s => !hiddenColumns.includes(s.id)).map((status) => {
                       const statusLeads = getLeadsByStatus(status.id);
                       return (
-                        <div key={status.id} className="kanban-column w-[330px] flex-shrink-0 h-full flex flex-col">
-                          {/* Column header */}
+                        <div 
+                          key={status.id} 
+                          className="glass w-[330px] flex-shrink-0 h-full flex flex-col rounded-xl p-3"
+                        >
+                          {/* Column header - Compact */}
                           <div 
-                            className="flex items-center gap-3 mb-4 p-3 rounded-lg shrink-0"
-                            style={{ background: `linear-gradient(135deg, ${status.color}20 0%, transparent 100%)` }}
+                            className="flex items-center gap-2 mb-3 pb-3 border-b border-border/50 shrink-0"
                           >
                             <div 
-                              className="w-3 h-3 rounded-full shadow-sm" 
-                              style={{ backgroundColor: status.color, boxShadow: `0 0 8px ${status.color}50` }}
+                              className="w-2.5 h-2.5 rounded-full" 
+                              style={{ backgroundColor: status.color, boxShadow: `0 0 8px ${status.color}60` }}
                             />
-                            <h3 className="font-semibold flex-1">{status.name}</h3>
+                            <h3 className="font-semibold text-sm flex-1">{status.name}</h3>
                             <Badge 
                               variant="secondary" 
-                              className="font-bold"
+                              className="font-bold text-xs px-2 py-0.5"
                               style={{ backgroundColor: `${status.color}20`, color: status.color }}
                             >
                               {statusLeads.length}
@@ -1163,11 +1080,11 @@ const Leads = () => {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-6 w-6 p-0 opacity-50 hover:opacity-100"
+                              className="h-6 w-6 p-0 opacity-40 hover:opacity-100"
                               onClick={() => toggleColumnVisibility(status.id)}
                               title={`Ocultar coluna ${status.name}`}
                             >
-                              <EyeOff className="h-3.5 w-3.5" />
+                              <EyeOff className="h-3 w-3" />
                             </Button>
                           </div>
                           
@@ -1177,10 +1094,18 @@ const Leads = () => {
                               <div
                                 ref={provided.innerRef}
                                 {...provided.droppableProps}
-                                className={`flex-1 min-h-0 overflow-y-auto space-y-3 p-2 rounded-lg transition-colors custom-scrollbar ${
-                                  snapshot.isDraggingOver ? 'bg-muted/50' : ''
+                                className={`flex-1 min-h-0 overflow-y-auto space-y-3 rounded-lg transition-all custom-scrollbar ${
+                                  snapshot.isDraggingOver 
+                                    ? 'bg-primary/5 ring-2 ring-primary/20 ring-inset' 
+                                    : ''
                                 }`}
                               >
+                                {statusLeads.length === 0 && !snapshot.isDraggingOver && (
+                                  <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
+                                    <p className="text-sm">Nenhum lead</p>
+                                    <p className="text-xs mt-1">Arraste um lead para cá</p>
+                                  </div>
+                                )}
                                 {statusLeads.map((lead, index) => (
                                   <Draggable key={lead.id} draggableId={lead.id} index={index}>
                                     {(provided, snapshot) => (
@@ -1188,83 +1113,17 @@ const Leads = () => {
                                         ref={provided.innerRef}
                                         {...provided.draggableProps}
                                         {...provided.dragHandleProps}
-                                        className={`lead-card transition-transform cursor-pointer ${
-                                          snapshot.isDragging ? 'rotate-2 scale-105 shadow-lg' : ''
-                                        }`}
-                                        onDoubleClick={() => handleViewDetails(lead)}
                                       >
-                                        <div className="flex items-start justify-between mb-2">
-                                          <div>
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                              <h4 className="font-medium text-sm">{lead.name}</h4>
-                                              <TemperatureBadge temperature={lead.temperature} showLabel={false} size="sm" />
-                                              <OriginBadge origem={lead.origem} showLabel={false} size="sm" />
-                                            </div>
-                                            <span className="text-xs text-muted-foreground">{formatDate(lead.created_at)}</span>
-                                          </div>
-                                          <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                                                <MoreVertical className="h-3 w-3" />
-                                              </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                              <DropdownMenuItem onClick={() => handleViewDetails(lead)}>
-                                                <Eye className="h-4 w-4 mr-2" />
-                                                Ver detalhes
-                                              </DropdownMenuItem>
-                                              <DropdownMenuItem onClick={() => handleEditLead(lead)}>
-                                                <Edit className="h-4 w-4 mr-2" />
-                                                Editar lead
-                                              </DropdownMenuItem>
-                                              <DropdownMenuItem 
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  requestDeleteLead(lead);
-                                                }}
-                                                className="text-destructive"
-                                              >
-                                                <Trash className="h-4 w-4 mr-2" />
-                                                Deletar
-                                              </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                          </DropdownMenu>
-                                        </div>
-                                        
-                                        <div className="space-y-1 text-xs text-muted-foreground">
-                                          <div className="flex items-center gap-1">
-                                            <span>📞</span>
-                                            {formatPhone(lead.phone)}
-                                          </div>
-                                          {lead.email && (
-                                            <div className="flex items-center gap-1">
-                                              <span>📧</span>
-                                              {lead.email}
-                                            </div>
-                                          )}
-                                          {lead.interesse && (
-                                            <div className="text-xs">
-                                              Interesse: {lead.interesse}
-                                            </div>
-                                          )}
-                                          {lead.properties && (
-                                            <div className="text-xs flex items-center gap-1">
-                                              <span className="text-amber-500">🏠</span>
-                                              <span className="truncate">{lead.properties.title}</span>
-                                            </div>
-                                          )}
-                                        </div>
-                                        
-                                        <div className="flex gap-2 mt-3">
-                                          <WhatsAppButton 
-                                            phone={lead.phone} 
-                                            leadName={lead.name}
-                                            leadId={lead.id}
-                                            propertyName={lead.properties?.title}
-                                            interesse={lead.interesse}
-                                            className="flex-1 h-7 text-xs"
-                                          />
-                                        </div>
+                                        <LeadKanbanCard
+                                          lead={lead}
+                                          onViewDetails={handleViewDetails}
+                                          onEdit={handleEditLead}
+                                          onDelete={(id) => {
+                                            const l = leads.find(x => x.id === id);
+                                            if (l) requestDeleteLead(l);
+                                          }}
+                                          isDragging={snapshot.isDragging}
+                                        />
                                       </div>
                                     )}
                                   </Draggable>

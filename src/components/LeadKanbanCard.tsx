@@ -1,4 +1,4 @@
-import { Phone, Mail, MoreVertical, Eye, Edit, Trash } from "lucide-react";
+import { Phone, Mail, MoreVertical, Eye, Edit, Trash, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AvatarFallbackColored } from "@/components/ui/avatar-fallback-colored";
@@ -52,6 +52,25 @@ function getRelativeTime(dateString: string) {
   return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
 
+// Temperature-based gradient backgrounds
+const temperatureStyles = {
+  hot: {
+    gradient: "bg-gradient-to-br from-orange-500/10 via-transparent to-transparent",
+    ring: "ring-orange-500/30",
+    avatarRing: "ring-2 ring-orange-500",
+  },
+  warm: {
+    gradient: "bg-gradient-to-br from-yellow-500/10 via-transparent to-transparent",
+    ring: "ring-yellow-500/30",
+    avatarRing: "ring-2 ring-yellow-500",
+  },
+  cold: {
+    gradient: "bg-gradient-to-br from-blue-400/10 via-transparent to-transparent",
+    ring: "ring-blue-400/30",
+    avatarRing: "ring-2 ring-blue-400",
+  },
+};
+
 export function LeadKanbanCard({ 
   lead, 
   onViewDetails, 
@@ -59,30 +78,29 @@ export function LeadKanbanCard({
   onDelete,
   isDragging = false 
 }: LeadKanbanCardProps) {
-  const temperatureBorderColor = {
-    hot: "border-l-orange-500",
-    warm: "border-l-yellow-500",
-    cold: "border-l-blue-400",
-  }[lead.temperature || 'warm'] || "border-l-muted";
+  const temp = (lead.temperature as keyof typeof temperatureStyles) || 'warm';
+  const styles = temperatureStyles[temp] || temperatureStyles.warm;
 
   return (
     <div
       className={cn(
-        "bg-card border rounded-xl p-4 transition-all duration-200 cursor-pointer group border-l-4",
-        temperatureBorderColor,
+        "relative overflow-hidden bg-card border rounded-xl p-4 transition-all duration-200 cursor-pointer group",
+        styles.gradient,
         isDragging 
-          ? "rotate-2 scale-105 shadow-xl ring-2 ring-primary/30" 
-          : "hover:shadow-lg hover:border-primary/30 hover:-translate-y-0.5"
+          ? "rotate-1 scale-105 shadow-xl ring-2 ring-primary/40" 
+          : "hover:shadow-lg hover:border-primary/20 hover:-translate-y-0.5"
       )}
       onDoubleClick={() => onViewDetails(lead)}
     >
-      {/* Header */}
+      {/* Header with Avatar and Name */}
       <div className="flex items-start gap-3 mb-3">
-        <AvatarFallbackColored name={lead.name} size="sm" />
+        <div className={cn("rounded-full", styles.avatarRing)}>
+          <AvatarFallbackColored name={lead.name} size="sm" />
+        </div>
         
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h4 className="font-semibold text-sm truncate">{lead.name}</h4>
+            <h4 className="font-semibold text-sm truncate max-w-[140px]">{lead.name}</h4>
           </div>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-xs text-muted-foreground">
@@ -92,6 +110,7 @@ export function LeadKanbanCard({
           </div>
         </div>
 
+        {/* Dropdown appears on hover */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button 
@@ -122,11 +141,11 @@ export function LeadKanbanCard({
         </DropdownMenu>
       </div>
 
-      {/* Contact Info */}
+      {/* Contact Info - Compact */}
       <div className="space-y-1.5 text-xs mb-3">
         <div className="flex items-center gap-2 text-muted-foreground">
           <Phone className="h-3 w-3 flex-shrink-0" />
-          <span className="truncate">{formatPhone(lead.phone)}</span>
+          <span className="truncate font-mono">{formatPhone(lead.phone)}</span>
         </div>
         {lead.email && (
           <div className="flex items-center gap-2 text-muted-foreground">
@@ -136,23 +155,25 @@ export function LeadKanbanCard({
         )}
       </div>
 
-      {/* Tags Row */}
+      {/* Tags Row - Simplified */}
       <div className="flex items-center gap-2 flex-wrap mb-3">
         <OriginBadge origem={lead.origem} showLabel={false} size="sm" />
-        {lead.interesse && (
-          <span className="text-xs bg-muted px-2 py-0.5 rounded-full text-muted-foreground truncate max-w-[120px]">
-            {lead.interesse}
+        {lead.properties && (
+          <span className="inline-flex items-center gap-1 text-xs bg-muted/50 px-2 py-0.5 rounded-full text-muted-foreground truncate max-w-[140px]">
+            <Building2 className="h-3 w-3" />
+            {lead.properties.title}
           </span>
         )}
       </div>
 
-      {/* Action Button */}
+      {/* Action Button - Full width */}
       <WhatsAppButton 
         phone={lead.phone} 
         leadName={lead.name}
         leadId={lead.id}
         propertyName={lead.properties?.title}
         interesse={lead.interesse}
+        className="w-full"
       />
     </div>
   );
