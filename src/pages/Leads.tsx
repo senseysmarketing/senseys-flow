@@ -988,8 +988,8 @@ const Leads = () => {
         )}
       </div>
 
-      {/* Scrollable Content Area - ONLY this scrolls */}
-      <div className="flex-1 min-h-0">
+      {/* Scrollable Content Area - horizontal scroll CONTAINED */}
+      <div className="flex-1 min-h-0 overflow-hidden">
         {viewMode === 'kanban' ? (
           isMobile ? (
             // Mobile: Kanban as Accordion with its own scroll
@@ -1049,9 +1049,9 @@ const Leads = () => {
           ) : (
             // Desktop: Kanban View with glassmorphism columns
             <DragDropContext onDragEnd={onDragEnd}>
-              {/* Visual container for Kanban board */}
-              <div className="h-full rounded-xl flex flex-col">
-                {/* Kanban columns - horizontal scroll ONLY here */}
+              {/* Visual container for Kanban board - overflow hidden to contain scroll */}
+              <div className="h-full flex flex-col overflow-hidden">
+                {/* Kanban columns container - horizontal scroll ONLY here */}
                 <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden custom-scrollbar pb-2">
                   <div className="flex gap-4 h-full">
                     {statuses.filter(s => !hiddenColumns.includes(s.id)).map((status) => {
