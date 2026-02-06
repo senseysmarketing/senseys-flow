@@ -131,11 +131,22 @@ Deno.serve(async (req) => {
         const createData = await createResponse.json()
         console.log('[whatsapp-connect] Create response:', createData)
 
-        if (!createResponse.ok && !createData.error?.includes('already')) {
+        // Check if instance already exists (handle different error formats)
+        const alreadyExists = 
+          createData.error?.includes?.('already') || 
+          createData.response?.message?.[0]?.includes?.('already in use') ||
+          createData.response?.message?.includes?.('already in use')
+
+        if (!createResponse.ok && !alreadyExists) {
           return new Response(JSON.stringify({ error: 'Failed to create instance', details: createData }), {
             status: 500,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           })
+        }
+
+        // If instance already exists, that's fine - just continue to get QR code
+        if (alreadyExists) {
+          console.log('[whatsapp-connect] Instance already exists, continuing...')
         }
 
         // Upsert session record
