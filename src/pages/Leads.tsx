@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -696,9 +697,15 @@ const Leads = () => {
   }
 
   return (
-<div className="flex flex-col h-[calc(100vh-8rem)] lg:h-[calc(100vh-6rem)] overflow-hidden">
-      {/* Fixed Header - Does NOT scroll */}
-      <div className="shrink-0 space-y-4 pb-4 w-full max-w-full min-w-0 overflow-hidden">
+<div className={cn(
+      "flex flex-col",
+      isMobile ? "min-h-0" : "h-[calc(100vh-6rem)] overflow-hidden"
+    )}>
+      {/* Header area */}
+      <div className={cn(
+        "space-y-4 pb-4 w-full max-w-full min-w-0",
+        !isMobile && "shrink-0 overflow-hidden"
+      )}>
         {/* Hero Stats Section */}
         <LeadsHeroStats 
           leads={leads}
@@ -989,11 +996,14 @@ const Leads = () => {
       </div>
 
       {/* Scrollable Content Area - horizontal scroll CONTAINED */}
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className={cn(
+        "flex-1 min-h-0",
+        !isMobile && "overflow-hidden"
+      )}>
         {viewMode === 'kanban' ? (
           isMobile ? (
-            // Mobile: Kanban as Accordion with its own scroll
-            <div className="h-full overflow-y-auto space-y-2 pb-20">
+            // Mobile: Kanban as Accordion - no extra scroll container needed
+            <div className="space-y-2 pb-24">
               <Accordion type="single" collapsible defaultValue={statuses[0]?.id} className="space-y-2">
                 {statuses.filter(s => !hiddenColumns.includes(s.id)).map((status) => {
                   const statusLeads = getLeadsByStatus(status.id);
