@@ -1,81 +1,105 @@
 
+## Correção Definitiva do Scroll Horizontal na Página de Leads
 
-## Correção do Scroll Horizontal na Página de Leads
+### Diagnóstico do Problema
 
-### Problema Identificado
+Analisando o screenshot enviado e a estrutura do código:
 
-Analisando o código e o screenshot, o problema é:
+1. O card "Total" do `LeadsHeroStats` está cortado à esquerda
+2. Os cards de stats (Quentes, Mornos, Frios) estão sendo afetados pelo scroll horizontal
+3. O problema persiste mesmo após adicionar `overflow-x-hidden` nos containers
 
-1. O container principal da página (`div.flex.flex-col`) não tem `overflow-x: hidden`
-2. O header (Hero Stats + controles) está no mesmo contexto de layout que as colunas
-3. Quando o scroll horizontal é ativado nas colunas, ele "vaza" para o container pai
-4. Isso faz com que todo o conteúdo, incluindo o header, se mova horizontalmente
+**Causa raiz identificada**: O `LeadsHeroStats` usa um grid de 5 colunas (`lg:grid-cols-5`) que força uma largura mínima. Quando combinado com o container das colunas do Kanban (que tem scroll horizontal), o scroll está "propagando" para cima e afetando todo o container da página.
 
-### Solução
+### Solução Proposta
 
-Adicionar `overflow-x-hidden` no container principal da página e garantir que **apenas** o container interno das colunas tenha `overflow-x-auto`.
+Precisamos criar uma **isolação completa** entre o header fixo e a área de scroll, usando uma estrutura de layout mais robusta.
 
-### Arquivo a Modificar
+### Mudanças Técnicas
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/pages/Leads.tsx` | Adicionar `overflow-x-hidden` no wrapper principal e no header fixo |
+| Arquivo | Alteração |
+|---------|-----------|
+| `src/pages/Leads.tsx` | Reestruturar layout com isolação absoluta entre header e área de scroll |
+| `src/components/leads/LeadsHeroStats.tsx` | Garantir que o grid não force largura maior que o container |
 
-### Mudanças Específicas
-
-**Linha 699 - Container principal da página:**
-```tsx
-// Antes
-<div className="flex flex-col h-[calc(100vh-8rem)] lg:h-[calc(100vh-6rem)]">
-
-// Depois  
-<div className="flex flex-col h-[calc(100vh-8rem)] lg:h-[calc(100vh-6rem)] overflow-x-hidden">
-```
-
-**Linha 701 - Header fixo (adicionar constraint de largura):**
-```tsx
-// Antes
-<div className="shrink-0 space-y-4 pb-4">
-
-// Depois
-<div className="shrink-0 space-y-4 pb-4 w-full max-w-full overflow-x-hidden">
-```
-
-### Por que isso funciona
-
-1. `overflow-x-hidden` no container principal impede que o scroll horizontal vaze para fora
-2. `w-full max-w-full` no header garante que ele não ultrapasse a largura do viewport
-3. `overflow-x-hidden` no header impede que conteúdo interno expanda além do limite
-4. O `overflow-x-auto` continua apenas no container das colunas do Kanban
-
-### Estrutura Visual do Layout
+### Estrutura de Layout Corrigida
 
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
-│ Container Principal (overflow-x-hidden)                         │
+│ Container Principal (h-full, flex flex-col, overflow-hidden)   │
+│                                                                  │
 │ ┌─────────────────────────────────────────────────────────────┐ │
-│ │ HEADER FIXO (shrink-0, w-full, max-w-full, overflow-x-hidden)│ │
+│ │ HEADER FIXO (shrink-0, overflow-hidden)                     │ │
+│ │ position: relative, width: 100%, max-width: 100%            │ │
 │ │ ┌─────────────────────────────────────────────────────────┐ │ │
-│ │ │ Hero Stats + Controles + Busca + Filtros                │ │ │
-│ │ │ (sempre visível, não scroll horizontal)                 │ │ │
+│ │ │ LeadsHeroStats (grid com min-w-0 para evitar overflow)  │ │ │
+│ │ │ Busca + Filtros + Controles                              │ │ │
 │ │ └─────────────────────────────────────────────────────────┘ │ │
 │ └─────────────────────────────────────────────────────────────┘ │
+│                                                                  │
 │ ┌─────────────────────────────────────────────────────────────┐ │
 │ │ ÁREA DE CONTEÚDO (flex-1, min-h-0, overflow-hidden)         │ │
+│ │ Contexto de scroll ISOLADO do header                        │ │
 │ │ ┌─────────────────────────────────────────────────────────┐ │ │
-│ │ │ KANBAN COLUMNS (overflow-x-auto) ←──scroll horizontal──→│ │ │
-│ │ │ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐            │ │ │
-│ │ │ │Col 1 │ │Col 2 │ │Col 3 │ │Col 4 │ │Col 5 │            │ │ │
-│ │ │ └──────┘ └──────┘ └──────┘ └──────┘ └──────┘            │ │ │
+│ │ │ Kanban Container (h-full, overflow-hidden)               │ │ │
+│ │ │ ┌─────────────────────────────────────────────────────┐ │ │ │
+│ │ │ │ Colunas (overflow-x-auto) ←─ scroll horizontal aqui│ │ │ │
+│ │ │ │ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐                  │ │ │ │
+│ │ │ │ │Col1│ │Col2│ │Col3│ │Col4│ │Col5│                  │ │ │ │
+│ │ │ │ └────┘ └────┘ └────┘ └────┘ └────┘                  │ │ │ │
+│ │ │ └─────────────────────────────────────────────────────┘ │ │ │
 │ │ └─────────────────────────────────────────────────────────┘ │ │
 │ └─────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+### Mudanças Específicas
+
+**1. `src/pages/Leads.tsx` - Linha 699:**
+```tsx
+// Antes
+<div className="flex flex-col h-[calc(100vh-8rem)] lg:h-[calc(100vh-6rem)] overflow-x-hidden">
+
+// Depois - adicionar overflow-hidden (não apenas overflow-x-hidden)
+<div className="flex flex-col h-[calc(100vh-8rem)] lg:h-[calc(100vh-6rem)] overflow-hidden">
+```
+
+**2. `src/pages/Leads.tsx` - Linha 701 (Header):**
+```tsx
+// Antes
+<div className="shrink-0 space-y-4 pb-4 w-full max-w-full overflow-x-hidden">
+
+// Depois - usar min-w-0 para permitir que filhos encolham
+<div className="shrink-0 space-y-4 pb-4 w-full max-w-full min-w-0 overflow-hidden">
+```
+
+**3. `src/components/leads/LeadsHeroStats.tsx` - Linha 111:**
+```tsx
+// Antes
+<div className={cn("grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3", className)}>
+
+// Depois - adicionar min-w-0 e overflow-hidden para conter o grid
+<div className={cn("grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 min-w-0 w-full", className)}>
+```
+
+**4. Também precisamos garantir que cada card de stat não force expansão:**
+```tsx
+// Em cada button/card do LeadsHeroStats, adicionar min-w-0:
+<button
+  className={cn(
+    "relative overflow-hidden rounded-xl p-4 text-left transition-all duration-300 min-w-0",
+    // ... resto das classes
+  )}
+>
+```
+
+### Por que `min-w-0` é essencial
+
+Em flexbox e grid, os elementos filhos têm um `min-width: auto` por padrão, o que significa que eles não podem encolher abaixo do seu conteúdo. Adicionando `min-w-0`, permitimos que os elementos encolham para caber no container pai, evitando que forcem scroll horizontal.
+
 ### Resultado Esperado
 
-- Header com Hero Stats e controles **sempre fixo e visível**
+- Header com Hero Stats e controles **sempre fixo e totalmente visível**
+- Cards de stats se adaptam à largura disponível sem forçar scroll
 - Scroll horizontal **restrito apenas às colunas do Kanban**
-- Nenhum elemento do header se move ou é cortado ao scrollar
-- Comportamento consistente em todas as resoluções
-
+- Nenhum elemento do header se move ou é cortado ao scrollar as colunas
