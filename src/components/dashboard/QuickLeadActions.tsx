@@ -15,6 +15,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const urgencyStyles = {
   critical: {
@@ -46,6 +47,7 @@ export const QuickLeadActions = ({
 }: QuickLeadActionsProps) => {
   const { priorityLeads, loading, stats, markAsContacted } = useLeadPriorities(maxItems);
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
   const handleMarkContacted = async (e: React.MouseEvent, lead: PriorityLead) => {
     e.stopPropagation();
@@ -141,29 +143,38 @@ export const QuickLeadActions = ({
               <div
                 key={lead.id}
                 className={cn(
-                  "flex items-center gap-3 p-3 rounded-lg transition-all cursor-pointer hover:shadow-md",
-                  urgencyStyles[lead.urgency].bg
+                  "p-3 rounded-lg transition-all cursor-pointer hover:shadow-md",
+                  urgencyStyles[lead.urgency].bg,
+                  isMobile ? "flex flex-col gap-2" : "flex items-center gap-3"
                 )}
                 onClick={() => navigate("/leads")}
               >
-                <AvatarFallbackColored name={lead.name} size="sm" />
-                
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-medium text-sm truncate">{lead.name}</h4>
-                    <TemperatureBadge temperature={lead.temperature} size="sm" />
-                  </div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <Clock className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">
-                      {lead.daysSinceUpdate === 0 
-                        ? "Hoje" 
-                        : `${lead.daysSinceUpdate} dia${lead.daysSinceUpdate > 1 ? 's' : ''} sem contato`}
-                    </span>
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <AvatarFallbackColored name={lead.name} size="sm" />
+                  
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="font-medium text-sm truncate max-w-[140px]">{lead.name}</h4>
+                      <TemperatureBadge temperature={lead.temperature} size="sm" />
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <Clock className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">
+                        {lead.daysSinceUpdate === 0 
+                          ? "Hoje" 
+                          : `${lead.daysSinceUpdate} dia${lead.daysSinceUpdate > 1 ? 's' : ''} sem contato`}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <div 
+                  className={cn(
+                    "flex items-center gap-2",
+                    isMobile && "justify-end"
+                  )} 
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <WhatsAppButton phone={lead.phone} leadName={lead.name} size="sm" variant="icon" />
                   <Button
                     variant="ghost"
