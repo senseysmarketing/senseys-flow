@@ -7,10 +7,10 @@ import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 const insightTypeStyles = {
-  warning: "border-l-warning bg-warning/5",
-  success: "border-l-success bg-success/5",
-  info: "border-l-primary bg-primary/5",
-  action: "border-l-destructive bg-destructive/5",
+  warning: "bg-warning/10",
+  success: "bg-success/10",
+  info: "bg-primary/10",
+  action: "bg-destructive/10",
 };
 
 const insightIconStyles = {
@@ -112,7 +112,7 @@ export const InsightsPanel = ({
                 <div
                   key={insight.id}
                   className={cn(
-                    "flex items-start gap-3 p-3 rounded-lg border-l-4 transition-all",
+                    "flex items-start gap-3 p-3 rounded-lg transition-all",
                     insightTypeStyles[insight.type],
                     insight.action && "cursor-pointer hover:shadow-md"
                   )}
