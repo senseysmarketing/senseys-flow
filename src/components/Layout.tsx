@@ -76,7 +76,7 @@ const Layout = ({ children, fullHeight = false }: LayoutProps) => {
       <div className="min-h-screen flex w-full bg-background">
         <AppSidebar />
 
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 min-w-0 overflow-hidden flex flex-col">
           {/* Support Mode Banner */}
           {isSupportMode && (
             <div className="bg-amber-500/20 border-b border-amber-500/30 px-4 py-2">

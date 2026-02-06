@@ -139,6 +139,13 @@
     @apply dark;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
   }
+
+  /* Prevent horizontal scroll at root level */
+  html, body, #root {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
 }
 
 /* Custom animations and components */
