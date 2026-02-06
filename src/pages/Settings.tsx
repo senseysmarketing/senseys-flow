@@ -24,6 +24,7 @@ import MetaFormScoringManager from "@/components/MetaFormScoringManager";
 import MetaEventMappingManager from "@/components/MetaEventMappingManager";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import DataImporter from "@/components/DataImporter";
+import { WhatsAppIntegrationSettings } from "@/components/whatsapp/WhatsAppIntegrationSettings";
 
 interface Profile {
   id: string;
@@ -55,7 +56,7 @@ interface Property {
   city: string | null;
 }
 
-type TabValue = 'profile' | 'team' | 'notifications' | 'statuses' | 'whatsapp' | 'followup' | 'distribution' | 'webhook' | 'qualification' | 'metacapi' | 'permissions' | 'whitelabel' | 'import';
+type TabValue = 'profile' | 'team' | 'notifications' | 'statuses' | 'whatsapp' | 'followup' | 'distribution' | 'webhook' | 'whatsapp-integration' | 'qualification' | 'metacapi' | 'permissions' | 'whitelabel' | 'import';
 type CategoryValue = 'geral' | 'integracoes' | 'avancado';
 
 interface NavItem {
@@ -120,6 +121,7 @@ const SettingsPage = () => {
       category: 'integracoes',
       items: [
         { value: 'webhook', label: 'Webhook', icon: <Webhook className="h-4 w-4" /> },
+        { value: 'whatsapp-integration', label: 'WhatsApp', icon: <MessageCircle className="h-4 w-4" /> },
       ]
     },
     {
@@ -1086,6 +1088,9 @@ const SettingsPage = () => {
 
       case 'whitelabel':
         return <WhiteLabelSettings />;
+
+      case 'whatsapp-integration':
+        return <WhatsAppIntegrationSettings />;
 
       case 'import':
         return <DataImporter />;

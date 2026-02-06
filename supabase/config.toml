@@ -53,3 +53,12 @@ verify_jwt = true
 
 [functions.send-fcm-notification]
 verify_jwt = true
+
+[functions.whatsapp-connect]
+verify_jwt = false
+
+[functions.whatsapp-send]
+verify_jwt = false
+
+[functions.whatsapp-webhook]
+verify_jwt = false
