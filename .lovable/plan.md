@@ -1,132 +1,152 @@
 
-## Plano de Correcao do Dashboard Mobile
+## Plano de Ajuste das Seções do Dashboard no Mobile
 
-### Problemas Identificados
+### Problema Identificado
 
-Analisando a screenshot, os principais problemas sao:
+Analisando a screenshot, as seguintes seções estão com elementos cortados no mobile:
 
-1. **QuickLeadActions (Leads Prioritarios)**: Os badges de temperatura (`Quente`) estao sendo cortados no lado direito porque os botoes de acao (WhatsApp, telefone) e o badge competem pelo espaco horizontal
-2. **BrokerRanking**: Este componente tem uma estrutura de grid complexa (`grid-cols-6`) que nao e responsiva para mobile - esta sendo incluido na Dashboard mas e muito denso para telas pequenas
-3. **Espacamento geral**: Os cards precisam de mais espaco inferior para evitar que o BottomNav sobreponha conteudo
+1. **Leads Recentes** (linhas 262-297 do Dashboard.tsx): Nomes longos como "Alan Ely - Consultoria & Assessoria de..." e badges "Novo Lead" estão sendo cortados porque todos os elementos (nome, indicador de temperatura, badge de status) estão na mesma linha horizontal.
 
-### Estrutura Atual do QuickLeadActions
+2. **Agenda de Hoje** (linhas 328-346): Títulos de eventos longos podem ser cortados.
 
-```text
-+------------------------------------------------------------------+
-| [Avatar] | [Nome........] [Badge Quente] | [WhatsApp] [Telefone] |
-|          | 31 dias sem contato           |                       |
-+------------------------------------------------------------------+
-                                       ^
-                               Muito apertado - badge cortado
-```
+3. **Top Corretores** - Já foi corrigido com prop `compact` no commit anterior.
 
-### Estrutura Proposta para Mobile
+4. **Imóveis em Destaque** - Títulos longos podem ser cortados quando há muitos indicadores.
 
-```text
-+----------------------------------+
-| [Avatar] [Nome]                  |
-|          31 dias sem... [Quente] |
-|                                  |
-| [WhatsApp icon] [Telefone icon]  |
-+----------------------------------+
-```
+### Solução
 
-### Mudancas Necessarias
+Aplicar a mesma estratégia usada no `QuickLeadActions.tsx`: usar o hook `useIsMobile` e reorganizar o layout para ser vertical no mobile, similar ao padrão já estabelecido.
 
-#### 1. Arquivo: `src/components/dashboard/QuickLeadActions.tsx`
+### Mudanças Necessárias
 
-**Problema**: O layout usa `flex items-center` com todos os elementos na mesma linha, causando overflow.
+#### Arquivo: `src/pages/Dashboard.tsx`
 
-**Solucao**: Detectar mobile e ajustar o layout para ser vertical quando necessario:
-
-- Adicionar `useIsMobile` hook
-- No mobile, reorganizar o card para que nome/badge fiquem em uma linha e botoes de acao em outra
-- Usar `flex-wrap` ou layout de coluna para evitar corte
-
-#### 2. Arquivo: `src/pages/Dashboard.tsx`
-
-**Problema**: O `BrokerRanking` e muito denso para mobile.
-
-**Solucao**: 
-- No mobile, mostrar apenas uma versao compacta do ranking (top 3 corretores)
-- Esconder graficos complexos no mobile
-- Aumentar o padding inferior para `pb-24` para evitar sobreposicao com BottomNav
-
-#### 3. Arquivo: `src/components/BrokerRanking.tsx`
-
-**Problema**: O grid de 6 colunas (`grid-cols-6`) nao e responsivo.
-
-**Solucao**:
-- Criar uma versao compacta para mobile que mostra apenas informacoes essenciais
-- Usar `useIsMobile` para alternar entre layouts
-
-### Detalhes Tecnicos das Mudancas
-
-#### QuickLeadActions.tsx - Mudancas no layout do card (linhas 140-180)
+**Mudança 1**: Na seção "Leads Recentes" (linhas 262-297)
+- Reorganizar para que no mobile o nome fique em uma linha e as informações de status/origem em outra
+- Usar `flex-wrap` para permitir que badges quebrem linha
 
 ```typescript
-// Adicionar useIsMobile
-import { useIsMobile } from "@/hooks/use-mobile";
+// DE (linha 265):
+<div 
+  className="flex items-center gap-3 p-3 rounded-lg..."
+>
+  <AvatarFallbackColored name={lead.name} size="sm" />
+  <div className="flex-1 min-w-0">
+    <div className="flex items-center gap-2">
+      <h4 className="font-medium text-sm truncate">{lead.name}</h4>
+      {lead.temperature && (...)}
+      {lead.status_name && (<Badge>...</Badge>)}
+    </div>
+    <p className="text-xs text-muted-foreground">...</p>
+  </div>
+  <ChevronRight />
+</div>
 
-// Dentro do componente
-const isMobile = useIsMobile();
-
-// Modificar o layout do card para:
-<div className={cn(
-  "p-3 rounded-lg transition-all cursor-pointer hover:shadow-md",
-  urgencyStyles[lead.urgency].bg,
-  isMobile && "flex-col gap-2"
-)}>
+// PARA:
+<div 
+  className={cn(
+    "p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer group",
+    isMobile ? "flex flex-col gap-2" : "flex items-center gap-3"
+  )}
+>
   <div className="flex items-center gap-3">
     <AvatarFallbackColored name={lead.name} size="sm" />
     <div className="flex-1 min-w-0">
       <div className="flex items-center gap-2 flex-wrap">
-        <h4 className="font-medium text-sm truncate max-w-[140px]">{lead.name}</h4>
-        <TemperatureBadge temperature={lead.temperature} size="sm" />
+        <h4 className="font-medium text-sm truncate max-w-[160px]">{lead.name}</h4>
+        {lead.temperature && (...)}
       </div>
-      <div className="flex items-center gap-2 mt-0.5">
-        <Clock className="h-3 w-3 text-muted-foreground" />
-        <span className="text-xs text-muted-foreground">...</span>
+      <div className="flex items-center gap-2 flex-wrap mt-0.5">
+        <p className="text-xs text-muted-foreground">
+          {lead.origem || 'Origem não informada'} • {getRelativeTime(lead.created_at)}
+        </p>
+        {lead.status_name && (<Badge>...</Badge>)}
       </div>
     </div>
-  </div>
-  
-  {/* Botoes de acao em linha separada no mobile */}
-  <div className={cn(
-    "flex items-center gap-2",
-    isMobile && "justify-end"
-  )}>
-    <WhatsAppButton ... />
-    <Button ... />
+    {!isMobile && <ChevronRight />}
   </div>
 </div>
 ```
 
-#### Dashboard.tsx - Padding inferior e condicional do ranking
+**Mudança 2**: Na seção "Agenda de Hoje" (linhas 328-346)
+- Aplicar layout similar para eventos com títulos longos
 
 ```typescript
-// Linha 189-190 - Adicionar padding inferior adequado
-<div className="space-y-6 sm:space-y-8 pb-24">
-
-// Linha 352-355 - Condicionar BrokerRanking para desktop ou versao simples
-{!isMobile && <BrokerRanking />}
-{isMobile && <BrokerRankingCompact />} // ou apenas esconder no mobile
+// Ajustar para usar flex-wrap e truncate adequado
+<div className={cn(
+  "p-3 rounded-lg bg-warning/5 border border-warning/20",
+  isMobile ? "flex flex-col gap-2" : "flex items-center gap-3"
+)}>
+  <div className="flex-shrink-0 text-center">
+    <div className="text-lg font-bold text-warning">{formatTime(event.start_time)}</div>
+  </div>
+  <div className="flex-1 min-w-0">
+    <h4 className="font-medium text-sm truncate">{event.title}</h4>
+    {event.lead_name && (
+      <p className="text-xs text-muted-foreground truncate">
+        Lead: {event.lead_name}
+      </p>
+    )}
+  </div>
+</div>
 ```
 
-#### BrokerRanking.tsx - Versao responsiva
+#### Arquivo: `src/components/dashboard/PropertyHighlights.tsx`
 
-Para o BrokerRanking, a solucao mais limpa e criar uma prop `compact` que mostra apenas top 3 corretores em formato simples no mobile, sem graficos e sem a tabela densa.
+**Mudança**: Ajustar o layout dos cards de imóveis para mobile (linhas 153-187)
 
-### Resumo das Alteracoes por Arquivo
+```typescript
+// Usar layout vertical no mobile para evitar cortes
+<div
+  className={cn(
+    "p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer",
+    isMobile ? "flex flex-col gap-2" : "flex items-center gap-3"
+  )}
+>
+  <div className="flex items-center gap-3 flex-1 min-w-0">
+    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary...">
+      {index + 1}
+    </div>
+    <div className="flex-1 min-w-0">
+      <h4 className="font-medium text-sm truncate">{property.title}</h4>
+      <p className="text-xs text-muted-foreground truncate">...</p>
+    </div>
+  </div>
+  <div className={cn("flex items-center gap-3", isMobile && "justify-end")}>
+    {/* Metrics */}
+  </div>
+</div>
+```
 
-| Arquivo | Tipo de Mudanca |
+### Resumo das Alterações
+
+| Arquivo | Tipo de Mudança |
 |---------|-----------------|
-| `src/components/dashboard/QuickLeadActions.tsx` | Layout responsivo para cards de lead |
-| `src/pages/Dashboard.tsx` | Adicionar useIsMobile, padding inferior, e condicionar BrokerRanking |
-| `src/components/BrokerRanking.tsx` | Adicionar prop compact e layout mobile simplificado |
+| `src/pages/Dashboard.tsx` | Layout responsivo nas seções "Leads Recentes" e "Agenda de Hoje" |
+| `src/components/dashboard/PropertyHighlights.tsx` | Layout responsivo nos cards de imóveis |
+
+### Padrão de Design Mobile
+
+O padrão estabelecido para cards no mobile é:
+
+```text
++----------------------------------+
+| [Avatar/Rank] [Nome truncado]    |
+|              Info secundária     |
+|                                  |
+| [Badges/Métricas à direita]      |
++----------------------------------+
+```
+
+Em vez de tudo na mesma linha horizontal:
+```text
++-----------------------------------------------------+
+| [Avatar] [Nome...] [Badge] [Metric] [Metric] [>]    | <- CORTA
++-----------------------------------------------------+
+```
 
 ### Impacto
 
-- **Risco**: Baixo - mudancas visuais isoladas ao mobile
-- **Tempo estimado**: 15-20 minutos
-- **Beneficio**: Dashboard completamente funcional no mobile sem cortes ou overflow
+- **Risco**: Baixo - apenas ajustes de layout CSS condicionais ao mobile
+- **Tempo estimado**: 10 minutos
+- **Benefício**: Todas as seções do Dashboard visíveis e funcionais no mobile
