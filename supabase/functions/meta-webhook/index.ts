@@ -1,294 +1,206 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
-
-const VERIFY_TOKEN = Deno.env.get('META_WEBHOOK_VERIFY_TOKEN') || '';
-const META_APP_SECRET = Deno.env.get('META_APP_SECRET') || '';
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-hub-signature-256',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-hub-signature-256",
 };
 
-// Common excluded fields (basic lead data)
-const EXCLUDED_FIELDS = new Set([
-  'full_name', 'full name', 'fullname', 'first_name', 'first name', 
-  'nome', 'name', 'nome_completo', 'nome completo',
-  'phone_number', 'telefone', 'phone', 'celular', 'whatsapp',
-  'email', 'e-mail',
-  'reference_code', 'codigo_referencia', 'ref', 'código_de_referência', 'codigo_imovel', 'imovel_ref'
-]);
-
-// Fields that are basic data but NOT ref fields (used for scoring)
-const BASIC_DATA_FIELDS = new Set([
-  'full_name', 'full name', 'fullname', 'first_name', 'first name', 
-  'nome', 'name', 'nome_completo', 'nome completo',
-  'phone_number', 'telefone', 'phone', 'celular', 'whatsapp',
-  'email', 'e-mail'
-]);
+const VERIFY_TOKEN = Deno.env.get("META_WEBHOOK_VERIFY_TOKEN") || "";
+const META_APP_SECRET = Deno.env.get("META_APP_SECRET") || "";
 
 async function verifySignature(payload: string, signature: string): Promise<boolean> {
   if (!signature || !META_APP_SECRET) return false;
-  const expectedSignature = signature.replace('sha256=', '');
+  const expected = signature.replace("sha256=", "");
   const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey('raw', encoder.encode(META_APP_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const signatureBuffer = await crypto.subtle.sign('HMAC', key, encoder.encode(payload));
-  return Array.from(new Uint8Array(signatureBuffer)).map(b => b.toString(16).padStart(2, '0')).join('') === expectedSignature;
+  const key = await crypto.subtle.importKey("raw", encoder.encode(META_APP_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const buf = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("") === expected;
 }
 
-function normalizeForComparison(value: string): string {
-  return value.toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+function normalize(value: string): string {
+  return value.toLowerCase().replace(/_/g, " ").replace(/\s+/g, " ").trim();
 }
 
 async function hashData(data: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(data));
-  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(data));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function calculateLeadTemperature(supabase: any, accountId: string, formId: string, fieldData: Record<string, string>): Promise<{ temperature: string; score: number; referenceCode: string | null }> {
-  let temperature = 'warm', score = 0, referenceCode: string | null = null;
+const BASIC_FIELDS = new Set(["full_name", "full name", "nome", "name", "phone_number", "telefone", "phone", "email", "e-mail"]);
+const EXCLUDED_FIELDS = new Set([...BASIC_FIELDS, "reference_code", "ref", "codigo_referencia", "codigo_imovel"]);
 
-  try {
-    const { data: formConfig, error: configError } = await supabase
-      .from('meta_form_configs').select('*').eq('account_id', accountId).eq('form_id', formId).single();
-
-    if (configError || !formConfig) {
-      console.log(`No form config for form ${formId}, creating...`);
-      const { data: newConfig, error: createError } = await supabase
-        .from('meta_form_configs')
-        .insert({ account_id: accountId, form_id: formId, hot_threshold: 3, warm_threshold: 1, is_configured: false })
-        .select().single();
-
-      if (!createError && newConfig) {
-        let rulesCreated = 0;
-        for (const [fieldName, fieldValue] of Object.entries(fieldData)) {
-          if (fieldValue && !BASIC_DATA_FIELDS.has(fieldName.toLowerCase())) {
-            await supabase.from('meta_form_scoring_rules').upsert({
-              form_config_id: newConfig.id, question_name: fieldName,
-              question_label: fieldName.replace(/_/g, ' ').replace(/\?/g, ''),
-              answer_value: fieldValue, score: 0,
-            }, { onConflict: 'form_config_id,question_name,answer_value' });
-            rulesCreated++;
-          }
-        }
-        console.log(`✅ Created form config and ${rulesCreated} rules`);
-      }
-      return { temperature: 'warm', score: 0, referenceCode: null };
-    }
-
-    const { data: rules } = await supabase.from('meta_form_scoring_rules').select('*').eq('form_config_id', formConfig.id);
-    
-    if (formConfig.reference_field_name && fieldData[formConfig.reference_field_name]) {
-      referenceCode = fieldData[formConfig.reference_field_name];
-      console.log(`Found reference: ${referenceCode}`);
-    }
-
-    for (const rule of rules || []) {
-      const fieldValue = fieldData[rule.question_name];
-      if (fieldValue && normalizeForComparison(fieldValue) === normalizeForComparison(rule.answer_value)) {
-        score += rule.score;
-      }
-    }
-
-    for (const [fieldName, fieldValue] of Object.entries(fieldData)) {
-      if (!fieldValue || BASIC_DATA_FIELDS.has(fieldName.toLowerCase())) continue;
-      if (!(rules || []).find(r => r.question_name === fieldName && normalizeForComparison(r.answer_value) === normalizeForComparison(fieldValue))) {
-        await supabase.from('meta_form_scoring_rules').upsert({
-          form_config_id: formConfig.id, question_name: fieldName,
-          question_label: fieldName.replace(/_/g, ' ').replace(/\?/g, ''),
-          answer_value: fieldValue, score: 0,
-        }, { onConflict: 'form_config_id,question_name,answer_value' });
-      }
-    }
-
-    temperature = score >= formConfig.hot_threshold ? 'hot' : score >= formConfig.warm_threshold ? 'warm' : 'cold';
-    console.log(`Score: ${score}, Temp: ${temperature}`);
-  } catch (error) { console.error('Error calculating temp:', error); }
-
-  return { temperature, score, referenceCode };
-}
-
-serve(async (req) => {
+const handler = async (req: Request): Promise<Response> => {
   const url = new URL(req.url);
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-  // Diagnostic test
-  if (url.searchParams.get('test') === 'true') {
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const { data: tokenData } = await supabase.from('meta_agency_token').select('id, user_name, created_at').eq('id', '00000000-0000-0000-0000-000000000001').single();
-    const { data: configs } = await supabase.from('account_meta_config').select('account_id, page_id, ad_account_id, is_active');
-    return new Response(JSON.stringify({
-      status: 'Webhook active', verify_token_configured: !!VERIFY_TOKEN, app_secret_configured: !!META_APP_SECRET,
-      meta_token: tokenData ? { exists: true, user_name: tokenData.user_name } : { exists: false },
-      configured_accounts: configs || [],
-    }, null, 2), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  // Test endpoint
+  if (url.searchParams.get("test") === "true") {
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { data: token } = await supabase.from("meta_agency_token").select("user_name").eq("id", "00000000-0000-0000-0000-000000000001").single();
+    const { data: configs } = await supabase.from("account_meta_config").select("account_id, page_id, is_active");
+    return new Response(JSON.stringify({ status: "Webhook active", verify_token: !!VERIFY_TOKEN, app_secret: !!META_APP_SECRET, token: token ? { exists: true, user_name: token.user_name } : { exists: false }, accounts: configs || [] }, null, 2), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
-  // Webhook Verification (GET)
-  if (req.method === 'GET') {
-    const mode = url.searchParams.get('hub.mode'), token = url.searchParams.get('hub.verify_token'), challenge = url.searchParams.get('hub.challenge');
-    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-      console.log('✅ Webhook verified');
-      return new Response(challenge, { status: 200, headers: corsHeaders });
+  // Webhook verification (GET)
+  if (req.method === "GET") {
+    const mode = url.searchParams.get("hub.mode");
+    const token = url.searchParams.get("hub.verify_token");
+    const challenge = url.searchParams.get("hub.challenge");
+    if (mode === "subscribe" && token === VERIFY_TOKEN) {
+      console.log("Webhook verified");
+      return new Response(challenge, { headers: corsHeaders });
     }
-    return new Response('Forbidden', { status: 403, headers: corsHeaders });
+    return new Response("Forbidden", { status: 403, headers: corsHeaders });
   }
 
-  // Handle webhook events (POST)
-  if (req.method === 'POST') {
+  // Handle POST
+  if (req.method === "POST") {
     try {
       const body = await req.text();
-      const signature = req.headers.get('x-hub-signature-256');
-      
-      if (signature && META_APP_SECRET && !(await verifySignature(body, signature))) {
-        return new Response('Invalid signature', { status: 401, headers: corsHeaders });
+      const sig = req.headers.get("x-hub-signature-256");
+      if (sig && META_APP_SECRET && !(await verifySignature(body, sig))) {
+        return new Response("Invalid signature", { status: 401, headers: corsHeaders });
       }
 
       const data = JSON.parse(body);
-      if (data.object !== 'page') return new Response('OK', { status: 200, headers: corsHeaders });
+      if (data.object !== "page") return new Response("OK", { headers: corsHeaders });
 
-      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-      const { data: tokenData, error: tokenError } = await supabase.from('meta_agency_token').select('access_token').eq('id', '00000000-0000-0000-0000-000000000001').single();
-      if (tokenError || !tokenData?.access_token) return new Response('OK', { status: 200, headers: corsHeaders });
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      const { data: tokenData } = await supabase.from("meta_agency_token").select("access_token").eq("id", "00000000-0000-0000-0000-000000000001").single();
+      if (!tokenData?.access_token) return new Response("OK", { headers: corsHeaders });
 
       for (const entry of data.entry || []) {
         const pageId = entry.id;
-        const { data: metaConfig } = await supabase.from('account_meta_config').select('account_id, ad_account_id').eq('page_id', pageId).eq('is_active', true).single();
-        if (!metaConfig) continue;
+        const { data: cfg } = await supabase.from("account_meta_config").select("account_id").eq("page_id", pageId).eq("is_active", true).single();
+        if (!cfg) continue;
 
         for (const change of entry.changes || []) {
-          if (change.field !== 'leadgen') continue;
-          const { leadgen_id: leadgenId, form_id: formId, ad_id: adId, adgroup_id: adgroupId } = change.value;
+          if (change.field !== "leadgen") continue;
+          const { leadgen_id, form_id, ad_id, adgroup_id } = change.value;
 
-          const leadResponse = await fetch(`https://graph.facebook.com/v19.0/${leadgenId}?access_token=${tokenData.access_token}`);
-          const leadData = await leadResponse.json();
-          if (leadData.error) continue;
+          const leadRes = await fetch(`https://graph.facebook.com/v19.0/${leadgen_id}?access_token=${tokenData.access_token}`);
+          const leadJson = await leadRes.json();
+          if (leadJson.error) continue;
 
-          const fieldData: Record<string, string> = {};
-          for (const field of leadData.field_data || []) fieldData[field.name.toLowerCase()] = field.values?.[0] || '';
+          const fields: Record<string, string> = {};
+          for (const f of leadJson.field_data || []) fields[f.name.toLowerCase()] = f.values?.[0] || "";
 
-          const name = fieldData['full_name'] || fieldData['full name'] || fieldData['nome'] || fieldData['name'] || 'Lead do Facebook';
-          const phone = fieldData['phone_number'] || fieldData['telefone'] || fieldData['phone'] || '';
-          const email = fieldData['email'] || fieldData['e-mail'] || '';
+          const name = fields["full_name"] || fields["nome"] || fields["name"] || "Lead do Facebook";
+          const phone = fields["phone_number"] || fields["telefone"] || fields["phone"] || "";
+          const email = fields["email"] || fields["e-mail"] || "";
 
-          const { temperature, score, referenceCode: scoringRefCode } = await calculateLeadTemperature(supabase, metaConfig.account_id, formId, fieldData);
-          const referenceCode = scoringRefCode || fieldData['reference_code'] || fieldData['ref'] || fieldData['codigo_referencia'] || '';
+          // Calculate temperature
+          let temp = "warm", score = 0, refCode: string | null = null;
+          const { data: formCfg } = await supabase.from("meta_form_configs").select("*").eq("account_id", cfg.account_id).eq("form_id", form_id).single();
+          if (formCfg) {
+            if (formCfg.reference_field_name && fields[formCfg.reference_field_name]) refCode = fields[formCfg.reference_field_name];
+            const { data: rules } = await supabase.from("meta_form_scoring_rules").select("*").eq("form_config_id", formCfg.id);
+            for (const r of rules || []) if (fields[r.question_name] && normalize(fields[r.question_name]) === normalize(r.answer_value)) score += r.score;
+            temp = score >= formCfg.hot_threshold ? "hot" : score >= formCfg.warm_threshold ? "warm" : "cold";
+          } else {
+            await supabase.from("meta_form_configs").insert({ account_id: cfg.account_id, form_id, hot_threshold: 3, warm_threshold: 1, is_configured: false });
+          }
 
-          let adName = '', campaignName = '', campaignId = '', isInstagram = false, adsetName = '';
-          if (adId) {
+          const finalRef = refCode || fields["reference_code"] || fields["ref"] || "";
+          let adName = "", campName = "", campId = "", isIg = false, adsetName = "";
+
+          if (ad_id) {
             try {
-              const adData = await (await fetch(`https://graph.facebook.com/v19.0/${adId}?fields=name,campaign{id,name},effective_instagram_media_id&access_token=${tokenData.access_token}`)).json();
-              if (!adData.error) { adName = adData.name || ''; campaignName = adData.campaign?.name || ''; campaignId = adData.campaign?.id || ''; isInstagram = !!adData.effective_instagram_media_id; }
+              const ad = await (await fetch(`https://graph.facebook.com/v19.0/${ad_id}?fields=name,campaign{id,name},effective_instagram_media_id&access_token=${tokenData.access_token}`)).json();
+              if (!ad.error) { adName = ad.name || ""; campName = ad.campaign?.name || ""; campId = ad.campaign?.id || ""; isIg = !!ad.effective_instagram_media_id; }
             } catch {}
           }
-          if (adgroupId) {
+          if (adgroup_id) {
             try {
-              const adsetData = await (await fetch(`https://graph.facebook.com/v19.0/${adgroupId}?fields=name&access_token=${tokenData.access_token}`)).json();
-              if (!adsetData.error) adsetName = adsetData.name || '';
+              const adset = await (await fetch(`https://graph.facebook.com/v19.0/${adgroup_id}?fields=name&access_token=${tokenData.access_token}`)).json();
+              if (!adset.error) adsetName = adset.name || "";
             } catch {}
           }
 
-          const { data: existingLead } = await supabase.from('leads').select('id').eq('meta_lead_id', leadgenId).single();
-          if (existingLead) continue;
+          const { data: existing } = await supabase.from("leads").select("id").eq("meta_lead_id", leadgen_id).single();
+          if (existing) continue;
 
-          let propertyId = null;
-          if (referenceCode) {
-            const { data: property } = await supabase.from('properties').select('id').eq('account_id', metaConfig.account_id).eq('reference_code', referenceCode).single();
-            propertyId = property?.id || null;
+          let propId = null;
+          if (finalRef) {
+            const { data: prop } = await supabase.from("properties").select("id").eq("account_id", cfg.account_id).eq("reference_code", finalRef).single();
+            propId = prop?.id || null;
           }
 
-          const { data: statusData } = await supabase.from('lead_status').select('id').eq('account_id', metaConfig.account_id).eq('name', 'Novo Lead').single();
-          let statusId = statusData?.id;
+          const { data: statusRow } = await supabase.from("lead_status").select("id").eq("account_id", cfg.account_id).eq("name", "Novo Lead").single();
+          let statusId = statusRow?.id;
           if (!statusId) {
-            const { data: defaultStatus } = await supabase.from('lead_status').select('id').eq('account_id', metaConfig.account_id).eq('is_default', true).single();
-            statusId = defaultStatus?.id;
+            const { data: def } = await supabase.from("lead_status").select("id").eq("account_id", cfg.account_id).eq("is_default", true).single();
+            statusId = def?.id;
           }
 
-          const { data: newLead, error: insertError } = await supabase.from('leads').insert({
-            account_id: metaConfig.account_id, name, phone, email: email || null,
-            origem: isInstagram ? 'Instagram' : 'Facebook', campanha: campaignName || null, conjunto: adsetName || null, anuncio: adName || null,
-            status_id: statusId, property_id: propertyId, meta_lead_id: leadgenId, meta_form_id: formId,
-            meta_ad_id: adId, meta_campaign_id: campaignId, meta_ad_name: adName, meta_campaign_name: campaignName, temperature,
-          }).select('id').single();
+          const { data: newLead, error: insertErr } = await supabase.from("leads").insert({
+            account_id: cfg.account_id, name, phone, email: email || null, origem: isIg ? "Instagram" : "Facebook",
+            campanha: campName || null, conjunto: adsetName || null, anuncio: adName || null, status_id: statusId,
+            property_id: propId, meta_lead_id: leadgen_id, meta_form_id: form_id, meta_ad_id: ad_id,
+            meta_campaign_id: campId, meta_ad_name: adName, meta_campaign_name: campName, temperature: temp,
+          }).select("id").single();
 
-          if (insertError) continue;
-          console.log(`✅ Lead created: ${newLead.id}`);
+          if (insertErr || !newLead) continue;
+          console.log("Lead created:", newLead.id);
 
-          // Save form -> ref mapping
-          if (formId && propertyId && referenceCode) {
-            await supabase.from('meta_form_property_mapping').upsert({ account_id: metaConfig.account_id, form_id: formId, reference_code: referenceCode, property_id: propertyId }, { onConflict: 'account_id,form_id' });
-          }
-
-          // Apply distribution rules
-          let assignedBrokerId: string | undefined;
+          // Distribution rules
+          let brokerId: string | undefined;
           try {
-            const distResult = await supabase.functions.invoke('apply-distribution-rules', { body: { lead_id: newLead.id, account_id: metaConfig.account_id } });
-            if (distResult.data?.success) assignedBrokerId = distResult.data.broker_id;
+            const dist = await supabase.functions.invoke("apply-distribution-rules", { body: { lead_id: newLead.id, account_id: cfg.account_id } });
+            if (dist.data?.success) brokerId = dist.data.broker_id;
           } catch {}
 
           // Store custom fields
-          for (const [key, value] of Object.entries(fieldData)) {
-            if (EXCLUDED_FIELDS.has(key) || !value) continue;
-            const { data: customField } = await supabase.from('custom_fields').select('id').eq('account_id', metaConfig.account_id).eq('field_key', key).single();
-            if (customField) {
-              await supabase.from('lead_custom_field_values').insert({ lead_id: newLead.id, custom_field_id: customField.id, value });
-            } else {
-              const { data: newCF } = await supabase.from('custom_fields').insert({ account_id: metaConfig.account_id, name: key.replace(/_/g, ' '), field_key: key, field_type: 'text', is_active: true, is_required: false }).select('id').single();
-              if (newCF) await supabase.from('lead_custom_field_values').insert({ lead_id: newLead.id, custom_field_id: newCF.id, value });
+          for (const [k, v] of Object.entries(fields)) {
+            if (EXCLUDED_FIELDS.has(k) || !v) continue;
+            const { data: cf } = await supabase.from("custom_fields").select("id").eq("account_id", cfg.account_id).eq("field_key", k).single();
+            if (cf) await supabase.from("lead_custom_field_values").insert({ lead_id: newLead.id, custom_field_id: cf.id, value: v });
+            else {
+              const { data: nCf } = await supabase.from("custom_fields").insert({ account_id: cfg.account_id, name: k.replace(/_/g, " "), field_key: k, field_type: "text", is_active: true, is_required: false }).select("id").single();
+              if (nCf) await supabase.from("lead_custom_field_values").insert({ lead_id: newLead.id, custom_field_id: nCf.id, value: v });
             }
           }
 
-          // Log activity
-          await supabase.from('lead_activities').insert({
-            lead_id: newLead.id, account_id: metaConfig.account_id, activity_type: 'created',
-            description: `Lead via Facebook Lead Ads${campaignName ? ` (${campaignName})` : ''} - ${temperature === 'hot' ? 'Quente' : temperature === 'warm' ? 'Morno' : 'Frio'} (Score: ${score})`,
-          });
+          await supabase.from("lead_activities").insert({ lead_id: newLead.id, account_id: cfg.account_id, activity_type: "created", description: `Lead via Facebook${campName ? ` (${campName})` : ""} - ${temp === "hot" ? "Quente" : temp === "warm" ? "Morno" : "Frio"}` });
 
-          // Send notifications
+          // Notify
           try {
-            let propertyName = null;
-            if (propertyId) {
-              const { data: prop } = await supabase.from('properties').select('title').eq('id', propertyId).single();
-              propertyName = prop?.title || null;
-            }
-            await supabase.functions.invoke('notify-new-lead', {
-              body: { lead_id: newLead.id, lead_name: name, lead_phone: phone, lead_email: email, lead_temperature: temperature, lead_origem: 'Facebook Lead Ads', property_name: propertyName, account_id: metaConfig.account_id, assigned_broker_id: assignedBrokerId }
-            });
+            let propName = null;
+            if (propId) { const { data: p } = await supabase.from("properties").select("title").eq("id", propId).single(); propName = p?.title || null; }
+            await supabase.functions.invoke("notify-new-lead", { body: { lead_id: newLead.id, lead_name: name, lead_phone: phone, lead_email: email, lead_temperature: temp, lead_origem: "Facebook Lead Ads", property_name: propName, account_id: cfg.account_id, assigned_broker_id: brokerId } });
           } catch {}
 
-          // CAPI for hot leads
-          if (temperature === 'hot') {
+          // CAPI
+          if (temp === "hot") {
             try {
-              const { data: metaPixel } = await supabase.from('account_meta_config').select('pixel_id').eq('account_id', metaConfig.account_id).single();
-              if (metaPixel?.pixel_id) {
-                const timestamp = Math.floor(Date.now() / 1000);
-                const eventId = `${newLead.id}_Lead_qualified_${timestamp}`;
-                const userData: Record<string, any> = { lead_id: leadgenId };
-                if (email) userData.em = [await hashData(email.toLowerCase().trim())];
-                if (phone) {
-                  let p = phone.replace(/\D/g, '');
-                  if (p.length === 10 || p.length === 11) p = '55' + p;
-                  userData.ph = [await hashData(p)];
-                }
-                const eventPayload = { data: [{ event_name: 'Lead', event_time: timestamp, event_id: eventId, action_source: 'system_generated', user_data: userData, custom_data: { lead_event_source: 'Senseys CRM', lead_type: 'qualified', qualification_score: score } }] };
-                const capiRes = await fetch(`https://graph.facebook.com/v19.0/${metaPixel.pixel_id}/events?access_token=${tokenData.access_token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(eventPayload) });
-                const capiResult = await capiRes.json();
-                await supabase.from('meta_capi_events_log').insert({ lead_id: newLead.id, account_id: metaConfig.account_id, event_name: 'Lead', event_id: eventId, pixel_id: metaPixel.pixel_id, status_code: capiRes.status, response_body: capiResult, error_message: capiResult.error?.message || null });
+              const { data: px } = await supabase.from("account_meta_config").select("pixel_id").eq("account_id", cfg.account_id).single();
+              if (px?.pixel_id) {
+                const ts = Math.floor(Date.now() / 1000);
+                const evtId = `${newLead.id}_Lead_${ts}`;
+                const ud: Record<string, any> = { lead_id: leadgen_id };
+                if (email) ud.em = [await hashData(email.toLowerCase().trim())];
+                if (phone) { let p = phone.replace(/\D/g, ""); if (p.length <= 11) p = "55" + p; ud.ph = [await hashData(p)]; }
+                const payload = { data: [{ event_name: "Lead", event_time: ts, event_id: evtId, action_source: "system_generated", user_data: ud, custom_data: { lead_event_source: "Senseys CRM", lead_type: "qualified", qualification_score: score } }] };
+                const capiRes = await fetch(`https://graph.facebook.com/v19.0/${px.pixel_id}/events?access_token=${tokenData.access_token}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+                const capiJson = await capiRes.json();
+                await supabase.from("meta_capi_events_log").insert({ lead_id: newLead.id, account_id: cfg.account_id, event_name: "Lead", event_id: evtId, pixel_id: px.pixel_id, status_code: capiRes.status, response_body: capiJson, error_message: capiJson.error?.message || null });
               }
             } catch {}
           }
         }
       }
-
-      return new Response('OK', { status: 200, headers: corsHeaders });
-    } catch (error) {
-      console.error('Webhook error:', error);
-      return new Response('OK', { status: 200, headers: corsHeaders });
+      return new Response("OK", { headers: corsHeaders });
+    } catch (e) {
+      console.error("Webhook error:", e);
+      return new Response("OK", { headers: corsHeaders });
     }
   }
 
-  return new Response('Method not allowed', { status: 405, headers: corsHeaders });
-});
+  return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+};
+
+serve(handler);
