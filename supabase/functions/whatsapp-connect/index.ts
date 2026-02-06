@@ -60,6 +60,10 @@ Deno.serve(async (req) => {
     const instanceName = `senseys_${accountId.replace(/-/g, '_')}`
     const url = new URL(req.url)
     const action = url.searchParams.get('action') || 'status'
+    
+    // Build webhook URL for Evolution API callbacks
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`
 
     console.log(`[whatsapp-connect] Action: ${action}, Account: ${accountId}, Instance: ${instanceName}`)
 
@@ -114,7 +118,7 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Create or recreate instance
+        // Create or recreate instance with webhook configuration
         const createResponse = await fetch(`${EVOLUTION_API_URL}/instance/create`, {
           method: 'POST',
           headers: {
@@ -125,6 +129,17 @@ Deno.serve(async (req) => {
             instanceName,
             qrcode: true,
             integration: 'WHATSAPP-BAILEYS',
+            webhook: {
+              url: webhookUrl,
+              webhook_by_events: false,
+              events: [
+                'CONNECTION_UPDATE',
+                'QRCODE_UPDATED',
+                'MESSAGES_UPSERT',
+                'MESSAGES_UPDATE',
+                'SEND_MESSAGE'
+              ]
+            }
           }),
         })
 
@@ -144,9 +159,33 @@ Deno.serve(async (req) => {
           })
         }
 
-        // If instance already exists, that's fine - just continue to get QR code
+        // If instance already exists, configure webhook on it
         if (alreadyExists) {
-          console.log('[whatsapp-connect] Instance already exists, continuing...')
+          console.log('[whatsapp-connect] Instance already exists, configuring webhook...')
+          
+          try {
+            const webhookResponse = await fetch(`${EVOLUTION_API_URL}/webhook/set/${instanceName}`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': EVOLUTION_API_KEY,
+              },
+              body: JSON.stringify({
+                url: webhookUrl,
+                webhook_by_events: false,
+                events: [
+                  'CONNECTION_UPDATE',
+                  'QRCODE_UPDATED',
+                  'MESSAGES_UPSERT',
+                  'MESSAGES_UPDATE'
+                ]
+              }),
+            })
+            const webhookData = await webhookResponse.json()
+            console.log('[whatsapp-connect] Webhook config response:', webhookData)
+          } catch (e) {
+            console.log('[whatsapp-connect] Error configuring webhook:', e)
+          }
         }
 
         // Upsert session record
