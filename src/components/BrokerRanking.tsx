@@ -3,10 +3,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { Trophy, TrendingUp, Users, Target, Clock, Flame } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { Trophy, Users, Target, Clock, Flame } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { subDays, differenceInHours } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface BrokerStats {
   user_id: string;
@@ -20,7 +21,11 @@ interface BrokerStats {
   avg_response_time: number | null;
 }
 
-const BrokerRanking = () => {
+interface BrokerRankingProps {
+  compact?: boolean;
+}
+
+const BrokerRanking = ({ compact = false }: BrokerRankingProps) => {
   const [loading, setLoading] = useState(true);
   const [brokerStats, setBrokerStats] = useState<BrokerStats[]>([]);
   const [period, setPeriod] = useState("30");
@@ -137,14 +142,12 @@ const BrokerRanking = () => {
 
   const chartData = brokerStats
     .filter(b => b.total_leads > 0)
-    .slice(0, 10)
+    .slice(0, compact ? 3 : 10)
     .map(b => ({
       name: b.full_name?.split(" ")[0] || "?",
       leads: b.total_leads,
       fechados: b.closed_leads,
     }));
-
-  const COLORS = ["#81afd1", "#a6c8e1", "#465666", "#5a5f65", "#2b2d2c"];
 
   if (loading) {
     return (
@@ -154,6 +157,77 @@ const BrokerRanking = () => {
     );
   }
 
+  // Compact mobile view - shows only top 3 brokers
+  if (compact) {
+    const topBrokers = brokerStats.slice(0, 3);
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Trophy className="h-5 w-5 text-yellow-500" />
+                Top Corretores
+              </CardTitle>
+              <CardDescription>Últimos {period} dias</CardDescription>
+            </div>
+            <Select value={period} onValueChange={setPeriod}>
+              <SelectTrigger className="w-28 h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">7 dias</SelectItem>
+                <SelectItem value="30">30 dias</SelectItem>
+                <SelectItem value="90">90 dias</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {topBrokers.length === 0 ? (
+            <p className="text-center text-muted-foreground py-4 text-sm">
+              Nenhum corretor encontrado
+            </p>
+          ) : (
+            topBrokers.map((broker, index) => (
+              <div
+                key={broker.user_id}
+                className={cn(
+                  "flex items-center gap-3 p-3 rounded-lg",
+                  index === 0 && "bg-yellow-500/10",
+                  index === 1 && "bg-muted/50",
+                  index === 2 && "bg-amber-600/10"
+                )}
+              >
+                {getRankBadge(index)}
+                <Avatar className="h-9 w-9">
+                  <AvatarFallback className="bg-primary/10 text-primary text-sm">
+                    {getInitials(broker.full_name)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">
+                    {broker.full_name || "Sem nome"}
+                  </p>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>{broker.total_leads} leads</span>
+                    <span>•</span>
+                    <span className="text-green-500">{broker.conversion_rate.toFixed(0)}%</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-green-500">{broker.closed_leads}</p>
+                  <p className="text-xs text-muted-foreground">fechados</p>
+                </div>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Full desktop view
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">

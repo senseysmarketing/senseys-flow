@@ -14,6 +14,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 // Dashboard Components
 import { DailyStats } from "@/components/dashboard/DailyStats";
@@ -49,6 +50,7 @@ interface TodayEvent {
 const Dashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [recentLeads, setRecentLeads] = useState<RecentLead[]>([]);
   const [todayEvents, setTodayEvents] = useState<TodayEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -187,7 +189,7 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="space-y-6 sm:space-y-8">
+    <div className="space-y-6 sm:space-y-8 pb-24">
       {/* Hero Section */}
       <div className="flex flex-col gap-4 sm:gap-6 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
@@ -350,7 +352,7 @@ const Dashboard = () => {
 
       {/* Bottom Grid - Ranking + Properties */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <BrokerRanking />
+        <BrokerRanking compact={isMobile} />
         <PropertyHighlights maxItems={4} />
       </div>
     </div>
