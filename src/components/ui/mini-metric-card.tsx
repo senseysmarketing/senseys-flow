@@ -8,6 +8,7 @@ interface MiniMetricCardProps {
   previousValue?: number;
   currentValue?: number;
   icon?: LucideIcon;
+  iconColor?: string;
   variant?: "default" | "primary" | "success" | "warning" | "destructive";
   invertColors?: boolean;
   className?: string;
@@ -36,6 +37,7 @@ export const MiniMetricCard = ({
   previousValue,
   currentValue,
   icon: Icon,
+  iconColor,
   variant = "default",
   invertColors = false,
   className,
@@ -52,7 +54,7 @@ export const MiniMetricCard = ({
       onClick={onClick}
     >
       {Icon && (
-        <div className={cn("flex-shrink-0", iconVariantStyles[variant])}>
+        <div className={cn("flex-shrink-0", iconColor || iconVariantStyles[variant])}>
           <Icon className="h-5 w-5" />
         </div>
       )}
