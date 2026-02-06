@@ -62,7 +62,6 @@ Deno.serve(async (req) => {
     const action = url.searchParams.get('action') || 'status'
     
     // Build webhook URL for Evolution API callbacks
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`
 
     console.log(`[whatsapp-connect] Action: ${action}, Account: ${accountId}, Instance: ${instanceName}`)
