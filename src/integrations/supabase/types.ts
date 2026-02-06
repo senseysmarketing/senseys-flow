@@ -1413,30 +1413,93 @@ export type Database = {
           },
         ]
       }
+      whatsapp_automation_rules: {
+        Row: {
+          account_id: string
+          created_at: string | null
+          delay_seconds: number | null
+          id: string
+          is_active: boolean | null
+          name: string
+          template_id: string | null
+          trigger_config: Json | null
+          trigger_type: string
+          updated_at: string | null
+        }
+        Insert: {
+          account_id: string
+          created_at?: string | null
+          delay_seconds?: number | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          template_id?: string | null
+          trigger_config?: Json | null
+          trigger_type: string
+          updated_at?: string | null
+        }
+        Update: {
+          account_id?: string
+          created_at?: string | null
+          delay_seconds?: number | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          template_id?: string | null
+          trigger_config?: Json | null
+          trigger_type?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_automation_rules_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_automation_rules_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_message_log: {
         Row: {
           account_id: string | null
+          delivery_status: string | null
           id: string
           lead_id: string | null
           message_content: string
+          message_id: string | null
+          send_type: string | null
           sent_at: string | null
           sent_by: string | null
           template_id: string | null
         }
         Insert: {
           account_id?: string | null
+          delivery_status?: string | null
           id?: string
           lead_id?: string | null
           message_content: string
+          message_id?: string | null
+          send_type?: string | null
           sent_at?: string | null
           sent_by?: string | null
           template_id?: string | null
         }
         Update: {
           account_id?: string | null
+          delivery_status?: string | null
           id?: string
           lead_id?: string | null
           message_content?: string
+          message_id?: string | null
+          send_type?: string | null
           sent_at?: string | null
           sent_by?: string | null
           template_id?: string | null
@@ -1461,6 +1524,130 @@ export type Database = {
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "whatsapp_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_message_queue: {
+        Row: {
+          account_id: string
+          automation_rule_id: string | null
+          created_at: string | null
+          error_message: string | null
+          id: string
+          lead_id: string
+          message: string
+          phone: string
+          retry_count: number | null
+          scheduled_for: string
+          sent_at: string | null
+          status: string | null
+          template_id: string | null
+        }
+        Insert: {
+          account_id: string
+          automation_rule_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          lead_id: string
+          message: string
+          phone: string
+          retry_count?: number | null
+          scheduled_for: string
+          sent_at?: string | null
+          status?: string | null
+          template_id?: string | null
+        }
+        Update: {
+          account_id?: string
+          automation_rule_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          lead_id?: string
+          message?: string
+          phone?: string
+          retry_count?: number | null
+          scheduled_for?: string
+          sent_at?: string | null
+          status?: string | null
+          template_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_message_queue_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_message_queue_automation_rule_id_fkey"
+            columns: ["automation_rule_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_automation_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_message_queue_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_message_queue_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_sessions: {
+        Row: {
+          account_id: string
+          connected_at: string | null
+          created_at: string | null
+          id: string
+          instance_name: string
+          phone_number: string | null
+          qr_code: string | null
+          qr_code_expires_at: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          account_id: string
+          connected_at?: string | null
+          created_at?: string | null
+          id?: string
+          instance_name: string
+          phone_number?: string | null
+          qr_code?: string | null
+          qr_code_expires_at?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          account_id?: string
+          connected_at?: string | null
+          created_at?: string | null
+          id?: string
+          instance_name?: string
+          phone_number?: string | null
+          qr_code?: string | null
+          qr_code_expires_at?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_sessions_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: true
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]
