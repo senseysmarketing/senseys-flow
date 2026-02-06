@@ -5,7 +5,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL') || ''
+// Ensure URL has protocol prefix (fallback for misconfigured secrets)
+const rawEvolutionUrl = Deno.env.get('EVOLUTION_API_URL') || ''
+const EVOLUTION_API_URL = rawEvolutionUrl.startsWith('http') 
+  ? rawEvolutionUrl 
+  : `https://${rawEvolutionUrl}`
 const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || ''
 
 Deno.serve(async (req) => {
