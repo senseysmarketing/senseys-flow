@@ -48,6 +48,8 @@ import BrokerSelect from "@/components/BrokerSelect";
 import PropertySelect from "@/components/PropertySelect";
 import LeadsDatabaseView from "@/components/leads/LeadsDatabaseView";
 import LeadsFilters from "@/components/leads/LeadsFilters";
+import { LeadsSettingsSheet } from "@/components/leads/LeadsSettingsSheet";
+import { LeadsMiniStats } from "@/components/leads/LeadsMiniStats";
 
 interface Lead {
   id: string;
@@ -723,25 +725,37 @@ const Leads = () => {
       {/* Fixed Header - Does NOT scroll */}
       <div className="shrink-0 space-y-4 pb-4">
         {/* Title + New Lead Button */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-1">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="space-y-2">
             <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold tracking-tight">Gestão de Leads</h1>
-              <Badge variant="secondary" className="text-sm">
-                {filteredLeads.length} leads
-              </Badge>
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Leads</h1>
             </div>
-            <p className="text-muted-foreground">
-              Gerencie seus leads e acompanhe o funil de vendas
-            </p>
+            {/* Mini Stats */}
+            <LeadsMiniStats leads={leads} />
           </div>
           
           <div className="flex gap-2">
+            {/* Notifications Toggle */}
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
+              onClick={toggleNotifications}
+              title={notificationsEnabled ? "Desativar notificações" : "Ativar notificações"}
+            >
+              {notificationsEnabled ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+            </Button>
+            
+            {/* Settings Sheet */}
+            <LeadsSettingsSheet />
+            
+            {/* New Lead Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="gap-2">
                   <Plus className="h-4 w-4" />
-                  Novo Lead
+                  <span className="hidden sm:inline">Novo Lead</span>
+                  <span className="sm:hidden">Novo</span>
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-[600px]">
