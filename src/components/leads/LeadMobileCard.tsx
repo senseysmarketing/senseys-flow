@@ -6,10 +6,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreVertical, Eye, Edit, Trash, Phone, Mail } from "lucide-react";
+import { MoreVertical, Eye, Edit, Trash, Phone, Mail, Building2 } from "lucide-react";
+import { AvatarFallbackColored } from "@/components/ui/avatar-fallback-colored";
 import TemperatureBadge from "@/components/TemperatureBadge";
 import OriginBadge from "@/components/OriginBadge";
 import WhatsAppButton from "@/components/WhatsAppButton";
+import { cn } from "@/lib/utils";
 
 interface Lead {
   id: string;
@@ -59,6 +61,22 @@ const getRelativeTime = (dateString: string) => {
   return `${Math.floor(diffInSeconds / 86400)}d`;
 };
 
+// Temperature-based gradient backgrounds
+const temperatureStyles = {
+  hot: {
+    gradient: "bg-gradient-to-br from-orange-500/10 via-transparent to-transparent",
+    avatarRing: "ring-2 ring-orange-500",
+  },
+  warm: {
+    gradient: "bg-gradient-to-br from-yellow-500/10 via-transparent to-transparent",
+    avatarRing: "ring-2 ring-yellow-500",
+  },
+  cold: {
+    gradient: "bg-gradient-to-br from-blue-400/10 via-transparent to-transparent",
+    avatarRing: "ring-2 ring-blue-400",
+  },
+};
+
 const LeadMobileCard = ({
   lead,
   onViewDetails,
@@ -67,40 +85,51 @@ const LeadMobileCard = ({
   isSelected,
   onSelect,
 }: LeadMobileCardProps) => {
+  const temp = (lead.temperature as keyof typeof temperatureStyles) || 'warm';
+  const styles = temperatureStyles[temp] || temperatureStyles.warm;
+
   return (
     <div
-      className={`p-4 rounded-xl border bg-card transition-all active:scale-[0.98] ${
-        isSelected ? "ring-2 ring-primary bg-primary/5" : ""
-      }`}
+      className={cn(
+        "relative overflow-hidden p-4 rounded-xl border bg-card transition-all active:scale-[0.99]",
+        styles.gradient,
+        isSelected ? "ring-2 ring-primary" : ""
+      )}
       onClick={() => onViewDetails(lead)}
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-1">
-            <h4 className="font-semibold text-base truncate">{lead.name}</h4>
-            <TemperatureBadge temperature={lead.temperature as any} size="sm" showLabel={false} />
+        <div className="flex items-start gap-3 flex-1 min-w-0">
+          <div className={cn("rounded-full flex-shrink-0", styles.avatarRing)}>
+            <AvatarFallbackColored name={lead.name} size="sm" />
           </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>{getRelativeTime(lead.created_at)}</span>
-            {lead.origem && (
-              <>
-                <span>•</span>
-                <OriginBadge origem={lead.origem} size="sm" showLabel={false} />
-              </>
-            )}
+          
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <h4 className="font-semibold text-base truncate">{lead.name}</h4>
+              <TemperatureBadge temperature={lead.temperature as any} size="sm" showLabel={false} />
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{getRelativeTime(lead.created_at)}</span>
+              {lead.origem && (
+                <>
+                  <span>•</span>
+                  <OriginBadge origem={lead.origem} size="sm" showLabel={false} />
+                </>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-shrink-0">
           {lead.lead_status && (
             <Badge
               variant="outline"
-              className="text-[10px] px-1.5 py-0.5 shrink-0"
+              className="text-[10px] px-1.5 py-0.5"
               style={{
                 borderColor: lead.lead_status.color,
                 color: lead.lead_status.color,
-                backgroundColor: `${lead.lead_status.color}10`,
+                backgroundColor: `${lead.lead_status.color}15`,
               }}
             >
               {lead.lead_status.name}
@@ -108,7 +137,7 @@ const LeadMobileCard = ({
           )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+              <Button variant="ghost" size="icon" className="h-8 w-8">
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -145,14 +174,15 @@ const LeadMobileCard = ({
             <span className="truncate">{lead.email}</span>
           </div>
         )}
-        {lead.interesse && (
-          <p className="text-xs text-muted-foreground line-clamp-1">
-            💡 {lead.interesse}
-          </p>
-        )}
         {lead.properties && (
-          <p className="text-xs text-muted-foreground">
-            🏠 {lead.properties.title}
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Building2 className="h-3.5 w-3.5" />
+            <span className="truncate">{lead.properties.title}</span>
+          </div>
+        )}
+        {lead.interesse && (
+          <p className="text-xs text-muted-foreground line-clamp-1 pl-5">
+            💡 {lead.interesse}
           </p>
         )}
       </div>
