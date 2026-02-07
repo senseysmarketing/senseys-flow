@@ -16,14 +16,13 @@ import {
   Shuffle,
   Target,
   Bell,
-  MessageCircle,
   Upload,
   ChevronRight,
 } from "lucide-react";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-type SettingsTab = "status" | "distribution" | "qualification" | "followup" | "whatsapp" | "import";
+type SettingsTab = "status" | "distribution" | "qualification" | "followup" | "import";
 
 interface LeadsSettingsSheetProps {
   children?: React.ReactNode;
@@ -54,12 +53,6 @@ const settingsItems = [
     icon: Bell,
     label: "Follow-up Automático",
     description: "Configure lembretes e alertas de follow-up",
-  },
-  {
-    id: "whatsapp" as SettingsTab,
-    icon: MessageCircle,
-    label: "Templates WhatsApp",
-    description: "Crie mensagens prontas para contato via WhatsApp",
   },
   {
     id: "import" as SettingsTab,
