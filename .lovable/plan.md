@@ -1,78 +1,114 @@
 
 
-## Plano: Corrigir Exibição do Número de Telefone na Inicialização
+## Plano: Corrigir Busca do Número de Telefone do WhatsApp
 
 ### Problema Identificado
 
-Quando a página de configurações é carregada:
-1. O componente chama apenas `fetchSession()` que lê diretamente do banco de dados
-2. O banco tem `phone_number = null` porque foi conectado antes do código de captura
-3. A edge function `whatsapp-connect?action=status` (que busca o número) só é chamada durante o polling do QR modal
+Analisando os logs da edge function:
+
+```
+[whatsapp-connect] Fetched phone number: null
+[whatsapp-connect] Status data: { instance: { instanceName: "...", state: "open" } }
+```
+
+A função `fetchPhoneNumber` está retornando `null` porque:
+1. O endpoint `/instance/fetchInstances` não está retornando o campo `owner` 
+2. Ou a estrutura da resposta é diferente do esperado
+
+Segundo a documentação da Evolution API, a resposta deveria ser:
+```json
+[{"instance": {"owner": "5516981057418@s.whatsapp.net", ...}}]
+```
 
 ### Solução
 
-Modificar o componente `WhatsAppIntegrationSettings.tsx` para chamar a edge function de status quando a sessão estiver conectada mas sem número de telefone.
+Modificar a função `fetchPhoneNumber` para:
+1. **Adicionar logging detalhado** da resposta da API
+2. **Verificar estruturas alternativas** de resposta
+3. **Incluir fallback** usando o endpoint `/instance/connectionState` que pode retornar informações adicionais
 
 ### Mudanças Necessárias
 
-#### Arquivo: `src/components/whatsapp/WhatsAppIntegrationSettings.tsx`
+#### Arquivo: `supabase/functions/whatsapp-connect/index.ts`
 
-##### Atualizar a função `fetchSession` para chamar a edge function quando necessário
+##### Atualizar função `fetchPhoneNumber` com logging e fallbacks
 
 ```typescript
-const fetchSession = useCallback(async () => {
-  if (!user) return;
-
-  const { data, error } = await supabase
-    .from('whatsapp_sessions')
-    .select('*')
-    .maybeSingle();
-
-  if (!error && data) {
-    setSession(data);
+async function fetchPhoneNumber(instanceName: string): Promise<string | null> {
+  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) return null
+  
+  try {
+    const response = await fetch(
+      `${EVOLUTION_API_URL}/instance/fetchInstances?instanceName=${instanceName}`,
+      { headers: { 'apikey': EVOLUTION_API_KEY } }
+    )
+    const data = await response.json()
     
-    // Se conectado mas sem número, buscar da API
-    if (data.status === 'connected' && !data.phone_number) {
-      try {
-        const response = await supabase.functions.invoke('whatsapp-connect?action=status');
-        if (response.data?.phoneNumber) {
-          // Atualizar estado local com o número
-          setSession(prev => prev ? { ...prev, phone_number: response.data.phoneNumber } : null);
-        }
-      } catch (e) {
-        console.log('Error fetching phone number:', e);
+    // Log para debug da estrutura de resposta
+    console.log('[whatsapp-connect] fetchInstances response:', JSON.stringify(data).substring(0, 500))
+    
+    // Tentar diferentes estruturas de resposta
+    let owner = data[0]?.instance?.owner
+    
+    // Fallback: algumas versões podem ter estrutura diferente
+    if (!owner && data?.instance?.owner) {
+      owner = data.instance.owner
+    }
+    
+    // Fallback: objeto direto sem array
+    if (!owner && data?.owner) {
+      owner = data.owner
+    }
+    
+    // Fallback: buscar de profileName ou outros campos
+    if (!owner) {
+      // Tentar buscar número do campo 'number' ou 'phone'
+      const number = data[0]?.instance?.number || 
+                     data[0]?.number || 
+                     data?.instance?.number ||
+                     data?.number
+      if (number) {
+        owner = `${number}@s.whatsapp.net`
       }
     }
-  } else {
-    setSession(null);
+    
+    console.log('[whatsapp-connect] Extracted owner:', owner)
+    
+    if (owner) {
+      const phoneRaw = owner.split('@')[0]
+      if (phoneRaw.length >= 12) {
+        const countryCode = phoneRaw.slice(0, 2)
+        const areaCode = phoneRaw.slice(2, 4)
+        const firstPart = phoneRaw.slice(4, 9)
+        const secondPart = phoneRaw.slice(9)
+        return `+${countryCode} (${areaCode}) ${firstPart}-${secondPart}`
+      }
+      return `+${phoneRaw}`
+    }
+  } catch (e) {
+    console.log('[whatsapp-connect] Error fetching phone:', e)
   }
-}, [user]);
+  return null
+}
 ```
 
-### Fluxo Após Correção
+### Fluxo de Debug
 
-```text
-Página carrega
-     ↓
-fetchSession() busca do banco
-     ↓
-status === 'connected' && phone_number === null?
-     ↓
-Sim → Chama edge function status
-     ↓
-Edge function busca número da Evolution API
-     ↓
-Atualiza banco E retorna número
-     ↓
-Frontend atualiza estado local
-     ↓
-Número exibido na UI
-```
+1. Deploy da nova versão com logging detalhado
+2. Acessar a página de configurações do WhatsApp
+3. Verificar os logs para ver a estrutura real da resposta
+4. Ajustar o código conforme necessário
 
 ### Resultado Esperado
 
-Ao abrir a página de configurações do WhatsApp:
-- O número do telefone conectado será exibido automaticamente
-- Formato: `+55 (16) 98105-7418`
-- Aparecerá na linha "Número: +55 (16) 98105-7418  Conectado desde: 06/02/2026"
+Após a correção:
+- Logs mostrarão exatamente o que a Evolution API está retornando
+- O código tentará múltiplas estruturas de resposta
+- O número será capturado e exibido na interface
+
+### Arquivos Afetados
+
+| Arquivo | Mudança |
+|---------|---------|
+| `supabase/functions/whatsapp-connect/index.ts` | Atualizar `fetchPhoneNumber` com logging e fallbacks |
 
