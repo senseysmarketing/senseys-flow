@@ -360,7 +360,7 @@ const Leads = () => {
                   .replace(/{telefone}/gi, newLead.phone || '')
                   .replace(/{email}/gi, newLead.email || '');
                 
-                await supabase.from('whatsapp_message_queue').insert({
+                const { error: queueError } = await supabase.from('whatsapp_message_queue').insert({
                   account_id: profile.account_id,
                   lead_id: insertedLead.id,
                   phone: newLead.phone,
@@ -371,7 +371,11 @@ const Leads = () => {
                   status: 'pending'
                 });
                 
-                console.log(`WhatsApp greeting scheduled for manual lead ${insertedLead.id}`);
+                if (queueError) {
+                  console.error('WhatsApp queue insert error:', queueError);
+                } else {
+                  console.log(`WhatsApp greeting scheduled for manual lead ${insertedLead.id}`);
+                }
               }
             }
           }
