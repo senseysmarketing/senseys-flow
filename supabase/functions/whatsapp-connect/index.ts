@@ -12,6 +12,35 @@ const EVOLUTION_API_URL = rawEvolutionUrl.startsWith('http')
   : `https://${rawEvolutionUrl}`
 const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || ''
 
+// Helper function to fetch phone number from Evolution API
+async function fetchPhoneNumber(instanceName: string): Promise<string | null> {
+  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) return null
+  
+  try {
+    const response = await fetch(
+      `${EVOLUTION_API_URL}/instance/fetchInstances?instanceName=${instanceName}`,
+      { headers: { 'apikey': EVOLUTION_API_KEY } }
+    )
+    const data = await response.json()
+    const owner = data[0]?.instance?.owner
+    
+    if (owner) {
+      const phoneRaw = owner.split('@')[0]
+      if (phoneRaw.length >= 12) {
+        const countryCode = phoneRaw.slice(0, 2)
+        const areaCode = phoneRaw.slice(2, 4)
+        const firstPart = phoneRaw.slice(4, 9)
+        const secondPart = phoneRaw.slice(9)
+        return `+${countryCode} (${areaCode}) ${firstPart}-${secondPart}`
+      }
+      return `+${phoneRaw}`
+    }
+  } catch (e) {
+    console.log('[whatsapp-connect] Error fetching phone:', e)
+  }
+  return null
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -246,10 +275,14 @@ Deno.serve(async (req) => {
 
         // Check if already connected
         if (connectData.instance?.state === 'open') {
+          // Fetch phone number when already connected
+          const phoneNumber = await fetchPhoneNumber(instanceName)
+          
           await supabase
             .from('whatsapp_sessions')
             .update({ 
               status: 'connected',
+              phone_number: phoneNumber,
               connected_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
             })
@@ -258,6 +291,7 @@ Deno.serve(async (req) => {
           return new Response(JSON.stringify({ 
             success: true, 
             status: 'connected',
+            phoneNumber: phoneNumber,
             message: 'Already connected'
           }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -312,11 +346,19 @@ Deno.serve(async (req) => {
             const isConnected = statusData.instance?.state === 'open'
             const newStatus = isConnected ? 'connected' : session.status
 
-            if (newStatus !== session.status) {
+            // Fetch phone number if connected but not saved yet
+            let phoneNumber = session.phone_number
+            if (isConnected && !phoneNumber) {
+              phoneNumber = await fetchPhoneNumber(instanceName)
+              console.log('[whatsapp-connect] Fetched phone number:', phoneNumber)
+            }
+
+            if (newStatus !== session.status || (isConnected && !session.phone_number && phoneNumber)) {
               await supabase
                 .from('whatsapp_sessions')
                 .update({ 
                   status: newStatus,
+                  phone_number: phoneNumber || session.phone_number,
                   connected_at: isConnected ? new Date().toISOString() : session.connected_at,
                   updated_at: new Date().toISOString()
                 })
@@ -326,7 +368,7 @@ Deno.serve(async (req) => {
             return new Response(JSON.stringify({ 
               status: newStatus,
               connected: isConnected,
-              phoneNumber: session.phone_number,
+              phoneNumber: phoneNumber,
               instanceName: session.instance_name
             }), {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
