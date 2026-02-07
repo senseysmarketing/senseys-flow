@@ -1,117 +1,78 @@
 
 
-## Plano: Corrigir Exibição do Número de Telefone Conectado
+## Plano: Corrigir Exibição do Número de Telefone na Inicialização
 
 ### Problema Identificado
 
-O número de telefone está `null` no banco de dados (`whatsapp_sessions.phone_number`). Isso aconteceu porque:
-
-1. O código para capturar o número foi adicionado no `whatsapp-webhook`, que recebe eventos de `connection.update`
-2. Porém, a conexão já estava estabelecida **antes** desse código ser implementado
-3. Como o evento de conexão já passou, o webhook nunca recebeu o `connection.update` com o novo código
+Quando a página de configurações é carregada:
+1. O componente chama apenas `fetchSession()` que lê diretamente do banco de dados
+2. O banco tem `phone_number = null` porque foi conectado antes do código de captura
+3. A edge function `whatsapp-connect?action=status` (que busca o número) só é chamada durante o polling do QR modal
 
 ### Solução
 
-Atualizar a edge function `whatsapp-connect` para buscar e salvar o número de telefone nas ações `status` e `qr-code` (quando já conectado), garantindo que o número seja capturado mesmo para sessões existentes.
+Modificar o componente `WhatsAppIntegrationSettings.tsx` para chamar a edge function de status quando a sessão estiver conectada mas sem número de telefone.
 
 ### Mudanças Necessárias
 
-#### Arquivo: `supabase/functions/whatsapp-connect/index.ts`
+#### Arquivo: `src/components/whatsapp/WhatsAppIntegrationSettings.tsx`
 
-##### 1. Criar função auxiliar para buscar número de telefone
+##### Atualizar a função `fetchSession` para chamar a edge function quando necessário
 
 ```typescript
-async function fetchPhoneNumber(instanceName: string): Promise<string | null> {
-  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) return null
-  
-  try {
-    const response = await fetch(
-      `${EVOLUTION_API_URL}/instance/fetchInstances?instanceName=${instanceName}`,
-      { headers: { 'apikey': EVOLUTION_API_KEY } }
-    )
-    const data = await response.json()
-    const owner = data[0]?.instance?.owner
+const fetchSession = useCallback(async () => {
+  if (!user) return;
+
+  const { data, error } = await supabase
+    .from('whatsapp_sessions')
+    .select('*')
+    .maybeSingle();
+
+  if (!error && data) {
+    setSession(data);
     
-    if (owner) {
-      const phoneRaw = owner.split('@')[0]
-      if (phoneRaw.length >= 12) {
-        const countryCode = phoneRaw.slice(0, 2)
-        const areaCode = phoneRaw.slice(2, 4)
-        const firstPart = phoneRaw.slice(4, 9)
-        const secondPart = phoneRaw.slice(9)
-        return `+${countryCode} (${areaCode}) ${firstPart}-${secondPart}`
+    // Se conectado mas sem número, buscar da API
+    if (data.status === 'connected' && !data.phone_number) {
+      try {
+        const response = await supabase.functions.invoke('whatsapp-connect?action=status');
+        if (response.data?.phoneNumber) {
+          // Atualizar estado local com o número
+          setSession(prev => prev ? { ...prev, phone_number: response.data.phoneNumber } : null);
+        }
+      } catch (e) {
+        console.log('Error fetching phone number:', e);
       }
-      return `+${phoneRaw}`
     }
-  } catch (e) {
-    console.log('[whatsapp-connect] Error fetching phone:', e)
+  } else {
+    setSession(null);
   }
-  return null
-}
-```
-
-##### 2. Atualizar ação `status` para buscar número quando conectado
-
-Na ação `status`, quando `isConnected === true`, buscar o número se ainda não existir:
-
-```typescript
-if (isConnected && !session.phone_number) {
-  const phoneNumber = await fetchPhoneNumber(instanceName)
-  if (phoneNumber) {
-    await supabase
-      .from('whatsapp_sessions')
-      .update({ phone_number: phoneNumber })
-      .eq('account_id', accountId)
-  }
-}
-```
-
-##### 3. Atualizar ação `qr-code` para buscar número quando já conectado
-
-Na parte que detecta que já está conectado (`connectData.instance?.state === 'open'`):
-
-```typescript
-// Buscar número de telefone
-const phoneNumber = await fetchPhoneNumber(instanceName)
-
-await supabase
-  .from('whatsapp_sessions')
-  .update({ 
-    status: 'connected',
-    phone_number: phoneNumber,
-    connected_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  })
-  .eq('account_id', accountId)
+}, [user]);
 ```
 
 ### Fluxo Após Correção
 
 ```text
-Usuário abre página de configurações
-         ↓
-Frontend chama whatsapp-connect?action=status
-         ↓
-Detecta que está conectado mas phone_number é null
-         ↓
-Busca número via Evolution API (/instance/fetchInstances)
-         ↓
-Atualiza banco com phone_number formatado
-         ↓
-Frontend exibe "Número: +55 (16) 98105-7418"
+Página carrega
+     ↓
+fetchSession() busca do banco
+     ↓
+status === 'connected' && phone_number === null?
+     ↓
+Sim → Chama edge function status
+     ↓
+Edge function busca número da Evolution API
+     ↓
+Atualiza banco E retorna número
+     ↓
+Frontend atualiza estado local
+     ↓
+Número exibido na UI
 ```
 
 ### Resultado Esperado
 
-Após a correção, quando o usuário acessar a página de configurações do WhatsApp:
-
-- O sistema automaticamente buscará o número do telefone conectado
-- O número será exibido no formato: `+55 (16) 98105-7418`
-- A informação aparecerá ao lado de "Conectado desde:"
-
-### Arquivos Afetados
-
-| Arquivo | Mudança |
-|---------|---------|
-| `supabase/functions/whatsapp-connect/index.ts` | Adicionar função auxiliar e lógica para buscar número nas ações `status` e `qr-code` |
+Ao abrir a página de configurações do WhatsApp:
+- O número do telefone conectado será exibido automaticamente
+- Formato: `+55 (16) 98105-7418`
+- Aparecerá na linha "Número: +55 (16) 98105-7418  Conectado desde: 06/02/2026"
 
