@@ -7,11 +7,12 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { MessageCircle, Wifi, WifiOff, QrCode, RefreshCw, Loader2, Clock, Zap, AlertCircle } from 'lucide-react';
+import { MessageCircle, Wifi, WifiOff, QrCode, RefreshCw, Loader2, Clock, Zap, AlertCircle, Settings2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from '@/hooks/use-toast';
+import { WhatsAppTemplatesModal } from './WhatsAppTemplatesModal';
 
 interface WhatsAppSession {
   id: string;
@@ -55,6 +56,7 @@ export function WhatsAppIntegrationSettings() {
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
   const [pollingActive, setPollingActive] = useState(false);
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false);
 
   const fetchSession = useCallback(async () => {
     if (!user) return;
@@ -490,6 +492,15 @@ export function WhatsAppIntegrationSettings() {
                           ))}
                         </SelectContent>
                       </Select>
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="h-auto p-0 text-xs"
+                        onClick={() => setShowTemplatesModal(true)}
+                      >
+                        <Settings2 className="h-3 w-3 mr-1" />
+                        Personalizar Templates
+                      </Button>
                     </div>
 
                     <div className="space-y-2">
@@ -664,6 +675,13 @@ export function WhatsAppIntegrationSettings() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Templates Management Modal */}
+      <WhatsAppTemplatesModal
+        open={showTemplatesModal}
+        onOpenChange={setShowTemplatesModal}
+        onTemplatesChange={fetchTemplates}
+      />
     </div>
   );
 }
