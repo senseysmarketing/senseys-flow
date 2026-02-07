@@ -23,38 +23,15 @@ async function fetchPhoneNumber(instanceName: string): Promise<string | null> {
     )
     const data = await response.json()
     
-    // Log para debug da estrutura de resposta
     console.log('[whatsapp-connect] fetchInstances response:', JSON.stringify(data).substring(0, 500))
     
-    // Tentar diferentes estruturas de resposta
-    let owner = data[0]?.instance?.owner
+    // Estrutura real: data[0].ownerJid = "5516994213312@s.whatsapp.net"
+    const ownerJid = data[0]?.ownerJid
     
-    // Fallback: algumas versões podem ter estrutura diferente
-    if (!owner && data?.instance?.owner) {
-      owner = data.instance.owner
-    }
+    console.log('[whatsapp-connect] Extracted ownerJid:', ownerJid)
     
-    // Fallback: objeto direto sem array
-    if (!owner && data?.owner) {
-      owner = data.owner
-    }
-    
-    // Fallback: buscar de profileName ou outros campos
-    if (!owner) {
-      // Tentar buscar número do campo 'number' ou 'phone'
-      const number = data[0]?.instance?.number || 
-                     data[0]?.number || 
-                     data?.instance?.number ||
-                     data?.number
-      if (number) {
-        owner = `${number}@s.whatsapp.net`
-      }
-    }
-    
-    console.log('[whatsapp-connect] Extracted owner:', owner)
-    
-    if (owner) {
-      const phoneRaw = owner.split('@')[0]
+    if (ownerJid) {
+      const phoneRaw = ownerJid.split('@')[0]
       if (phoneRaw.length >= 12) {
         const countryCode = phoneRaw.slice(0, 2)
         const areaCode = phoneRaw.slice(2, 4)
