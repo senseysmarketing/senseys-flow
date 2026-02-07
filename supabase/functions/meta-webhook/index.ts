@@ -174,6 +174,62 @@ const handler = async (req: Request): Promise<Response> => {
             await supabase.functions.invoke("notify-new-lead", { body: { lead_id: newLead.id, lead_name: name, lead_phone: phone, lead_email: email, lead_temperature: temp, lead_origem: "Facebook Lead Ads", property_name: propName, account_id: cfg.account_id, assigned_broker_id: brokerId } });
           } catch {}
 
+          // Check for WhatsApp automation rule (new_lead) for meta source
+          try {
+            const { data: automationRule } = await supabase
+              .from("whatsapp_automation_rules")
+              .select("*")
+              .eq("account_id", cfg.account_id)
+              .eq("trigger_type", "new_lead")
+              .eq("is_active", true)
+              .single();
+
+            if (automationRule) {
+              const sources = automationRule.trigger_sources || { meta: true };
+              const metaEnabled = typeof sources === "object" && sources !== null 
+                ? (sources as Record<string, boolean>).meta !== false 
+                : true;
+
+              if (automationRule.template_id && metaEnabled) {
+                const { data: session } = await supabase
+                  .from("whatsapp_sessions")
+                  .select("status")
+                  .eq("account_id", cfg.account_id)
+                  .eq("status", "connected")
+                  .single();
+
+                if (session) {
+                  const scheduledFor = new Date(Date.now() + ((automationRule.delay_seconds || 0) * 1000));
+                  
+                  const { data: template } = await supabase
+                    .from("whatsapp_templates")
+                    .select("template")
+                    .eq("id", automationRule.template_id)
+                    .single();
+                  
+                  if (template) {
+                    let message = template.template
+                      .replace(/{nome}/gi, name || "")
+                      .replace(/{telefone}/gi, phone || "")
+                      .replace(/{email}/gi, email || "");
+                    
+                    await supabase.from("whatsapp_message_queue").insert({
+                      account_id: cfg.account_id,
+                      lead_id: newLead.id,
+                      phone: phone,
+                      message: message,
+                      template_id: automationRule.template_id,
+                      automation_rule_id: automationRule.id,
+                      scheduled_for: scheduledFor.toISOString(),
+                      status: "pending"
+                    });
+                    console.log(`WhatsApp scheduled for Meta lead ${newLead.id}`);
+                  }
+                }
+              }
+            }
+          } catch {}
+
           // CAPI
           if (temp === "hot") {
             try {

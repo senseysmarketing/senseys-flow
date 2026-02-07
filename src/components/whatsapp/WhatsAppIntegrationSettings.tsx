@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { MessageCircle, Wifi, WifiOff, QrCode, RefreshCw, Loader2, Clock, Zap, AlertCircle } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from '@/hooks/use-toast';
@@ -27,6 +28,12 @@ interface WhatsAppTemplate {
   template: string;
 }
 
+interface TriggerSources {
+  manual?: boolean;
+  meta?: boolean;
+  webhook?: boolean;
+}
+
 interface AutomationRule {
   id: string;
   name: string;
@@ -34,6 +41,7 @@ interface AutomationRule {
   template_id: string | null;
   is_active: boolean;
   delay_seconds: number;
+  trigger_sources?: TriggerSources | null;
 }
 
 export function WhatsAppIntegrationSettings() {
@@ -79,7 +87,11 @@ export function WhatsAppIntegrationSettings() {
       .select('*')
       .order('created_at');
     
-    setAutomationRules(data || []);
+    // Cast data to our interface
+    setAutomationRules((data || []).map(rule => ({
+      ...rule,
+      trigger_sources: rule.trigger_sources as TriggerSources | null
+    })));
   }, []);
 
   useEffect(() => {
@@ -297,6 +309,24 @@ export function WhatsAppIntegrationSettings() {
     }
   };
 
+  const updateRuleSources = async (ruleId: string, sources: TriggerSources) => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await supabase
+        .from('whatsapp_automation_rules')
+        .update({ trigger_sources: sources } as any)
+        .eq('id', ruleId);
+      
+      fetchAutomationRules();
+    } catch {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Não foi possível atualizar as fontes.',
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -421,41 +451,85 @@ export function WhatsAppIntegrationSettings() {
               </div>
 
               {newLeadRule.is_active && (
-                <div className="grid gap-4 sm:grid-cols-2 pl-12">
-                  <div className="space-y-2">
-                    <Label>Template de Mensagem</Label>
-                    <Select
-                      value={newLeadRule.template_id || ''}
-                      onValueChange={(value) => updateRuleTemplate(newLeadRule.id, value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione um template" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {templates.map((t) => (
-                          <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                <div className="space-y-4 pl-12">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Template de Mensagem</Label>
+                      <Select
+                        value={newLeadRule.template_id || ''}
+                        onValueChange={(value) => updateRuleTemplate(newLeadRule.id, value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione um template" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {templates.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Delay</Label>
+                      <Select
+                        value={String(newLeadRule.delay_seconds)}
+                        onValueChange={(value) => updateRuleDelay(newLeadRule.id, parseInt(value))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="0">Imediato</SelectItem>
+                          <SelectItem value="30">30 segundos</SelectItem>
+                          <SelectItem value="60">1 minuto</SelectItem>
+                          <SelectItem value="300">5 minutos</SelectItem>
+                          <SelectItem value="600">10 minutos</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Delay</Label>
-                    <Select
-                      value={String(newLeadRule.delay_seconds)}
-                      onValueChange={(value) => updateRuleDelay(newLeadRule.id, parseInt(value))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="0">Imediato</SelectItem>
-                        <SelectItem value="30">30 segundos</SelectItem>
-                        <SelectItem value="60">1 minuto</SelectItem>
-                        <SelectItem value="300">5 minutos</SelectItem>
-                        <SelectItem value="600">10 minutos</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="space-y-3 pt-2 border-t">
+                    <Label>Enviar para leads de:</Label>
+                    <div className="flex flex-wrap gap-4">
+                      <div className="flex items-center gap-2">
+                        <Checkbox 
+                          id="source-manual"
+                          checked={newLeadRule.trigger_sources?.manual !== false}
+                          onCheckedChange={(checked) => updateRuleSources(newLeadRule.id, {
+                            manual: !!checked,
+                            meta: newLeadRule.trigger_sources?.meta !== false,
+                            webhook: newLeadRule.trigger_sources?.webhook !== false,
+                          })}
+                        />
+                        <Label htmlFor="source-manual" className="font-normal cursor-pointer">Cadastro Manual</Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Checkbox 
+                          id="source-meta"
+                          checked={newLeadRule.trigger_sources?.meta !== false}
+                          onCheckedChange={(checked) => updateRuleSources(newLeadRule.id, {
+                            manual: newLeadRule.trigger_sources?.manual !== false,
+                            meta: !!checked,
+                            webhook: newLeadRule.trigger_sources?.webhook !== false,
+                          })}
+                        />
+                        <Label htmlFor="source-meta" className="font-normal cursor-pointer">Meta Ads</Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Checkbox 
+                          id="source-webhook"
+                          checked={newLeadRule.trigger_sources?.webhook !== false}
+                          onCheckedChange={(checked) => updateRuleSources(newLeadRule.id, {
+                            manual: newLeadRule.trigger_sources?.manual !== false,
+                            meta: newLeadRule.trigger_sources?.meta !== false,
+                            webhook: !!checked,
+                          })}
+                        />
+                        <Label htmlFor="source-webhook" className="font-normal cursor-pointer">Webhook</Label>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

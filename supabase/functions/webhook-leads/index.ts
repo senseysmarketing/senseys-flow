@@ -500,6 +500,69 @@ serve(async (req) => {
       }
     }
 
+    // Check for WhatsApp automation rule (new_lead) for webhook source
+    try {
+      const { data: automationRule } = await supabase
+        .from('whatsapp_automation_rules')
+        .select('*')
+        .eq('account_id', accountId)
+        .eq('trigger_type', 'new_lead')
+        .eq('is_active', true)
+        .single()
+
+      if (automationRule) {
+        // Check if webhook source is enabled
+        const sources = automationRule.trigger_sources || { webhook: true }
+        const webhookEnabled = typeof sources === 'object' && sources !== null 
+          ? (sources as Record<string, boolean>).webhook !== false 
+          : true
+
+        if (automationRule.template_id && webhookEnabled) {
+          // Check if WhatsApp is connected
+          const { data: whatsappSession } = await supabase
+            .from('whatsapp_sessions')
+            .select('status')
+            .eq('account_id', accountId)
+            .eq('status', 'connected')
+            .single()
+
+          if (whatsappSession) {
+            const scheduledFor = new Date(Date.now() + ((automationRule.delay_seconds || 0) * 1000))
+            
+            // Get template to compose message
+            const { data: template } = await supabase
+              .from('whatsapp_templates')
+              .select('template')
+              .eq('id', automationRule.template_id)
+              .single()
+            
+            if (template) {
+              // Replace variables in template
+              let message = template.template
+                .replace(/{nome}/gi, lead.name || '')
+                .replace(/{telefone}/gi, lead.phone || '')
+                .replace(/{email}/gi, lead.email || '')
+              
+              await supabase.from('whatsapp_message_queue').insert({
+                account_id: accountId,
+                lead_id: lead.id,
+                phone: lead.phone,
+                message: message,
+                template_id: automationRule.template_id,
+                automation_rule_id: automationRule.id,
+                scheduled_for: scheduledFor.toISOString(),
+                status: 'pending'
+              })
+              
+              console.log(`WhatsApp greeting scheduled for webhook lead ${lead.id} at ${scheduledFor.toISOString()}`)
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.log('WhatsApp automation check error:', e)
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true, 

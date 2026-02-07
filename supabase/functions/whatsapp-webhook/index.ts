@@ -51,21 +51,72 @@ Deno.serve(async (req) => {
 
         if (state === 'open') {
           newStatus = 'connected'
-        } else if (state === 'close' || state === 'connecting') {
-          newStatus = state === 'connecting' ? 'connecting' : 'disconnected'
-        }
-
-        if (newStatus !== session.status) {
+          
+          // Fetch instance info to get phone number
+          const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL') || ''
+          const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || ''
+          
+          let phoneNumber: string | null = null
+          
+          if (EVOLUTION_API_URL && EVOLUTION_API_KEY) {
+            try {
+              const apiUrl = EVOLUTION_API_URL.startsWith('http') 
+                ? EVOLUTION_API_URL 
+                : `https://${EVOLUTION_API_URL}`
+              
+              const instanceResponse = await fetch(
+                `${apiUrl}/instance/fetchInstances?instanceName=${instance}`,
+                { headers: { 'apikey': EVOLUTION_API_KEY } }
+              )
+              const instanceData = await instanceResponse.json()
+              console.log('[whatsapp-webhook] Instance data:', JSON.stringify(instanceData).substring(0, 500))
+              
+              // Extract phone from owner field (format: 5516981057418@s.whatsapp.net)
+              const owner = instanceData[0]?.instance?.owner
+              if (owner) {
+                const phoneRaw = owner.split('@')[0]
+                // Format: +55 (16) 98105-7418
+                if (phoneRaw.length >= 12) {
+                  const countryCode = phoneRaw.slice(0, 2)
+                  const areaCode = phoneRaw.slice(2, 4)
+                  const firstPart = phoneRaw.slice(4, 9)
+                  const secondPart = phoneRaw.slice(9)
+                  phoneNumber = `+${countryCode} (${areaCode}) ${firstPart}-${secondPart}`
+                } else {
+                  phoneNumber = `+${phoneRaw}`
+                }
+                console.log(`[whatsapp-webhook] Phone number extracted: ${phoneNumber}`)
+              }
+            } catch (e) {
+              console.log('[whatsapp-webhook] Could not fetch phone number:', e)
+            }
+          }
+          
           await supabase
             .from('whatsapp_sessions')
             .update({ 
               status: newStatus,
-              connected_at: newStatus === 'connected' ? new Date().toISOString() : session.connected_at,
+              phone_number: phoneNumber,
+              connected_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
             })
             .eq('id', session.id)
           
-          console.log(`[whatsapp-webhook] Updated session status: ${session.status} -> ${newStatus}`)
+          console.log(`[whatsapp-webhook] Updated session status: ${session.status} -> ${newStatus}, phone: ${phoneNumber}`)
+        } else if (state === 'close' || state === 'connecting') {
+          newStatus = state === 'connecting' ? 'connecting' : 'disconnected'
+          
+          if (newStatus !== session.status) {
+            await supabase
+              .from('whatsapp_sessions')
+              .update({ 
+                status: newStatus,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', session.id)
+            
+            console.log(`[whatsapp-webhook] Updated session status: ${session.status} -> ${newStatus}`)
+          }
         }
         break
       }
