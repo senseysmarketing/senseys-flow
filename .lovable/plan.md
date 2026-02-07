@@ -1,154 +1,199 @@
 
+## Plano: Corrigir Disparo Automático de Mensagens WhatsApp
 
-## Plano: Modal de Gerenciamento de Templates WhatsApp
+### Problemas Identificados
 
-### Objetivo
+1. **Fila está pendente mas não processada**: A mensagem foi corretamente enfileirada na `whatsapp_message_queue` com status `pending`, mas a função `process-whatsapp-queue` nunca foi chamada para processá-la.
 
-Adicionar um botão "Personalizar Templates" abaixo do seletor de template que abre um modal completo para criar, editar e excluir templates de mensagens WhatsApp, incluindo documentação das variáveis dinâmicas disponíveis.
+2. **Conflito de autenticação**: A função `whatsapp-send` exige token de autenticação do usuário, mas quando chamada internamente pela `process-whatsapp-queue` (via `supabase.functions.invoke`), não há token de usuário disponível.
 
-### Design Proposto
+3. **Formatação de número inconsistente**: Números podem vir em diferentes formatos:
+   - Meta Ads: `+5516981057418` (com + e país)
+   - Manual: `16981057418` (sem país)
+   - Outros: `(16) 98105-7418` (formatado)
 
-O modal terá duas seções:
-1. **Lista de Templates**: Cards com os templates existentes, botões de editar/excluir
-2. **Variáveis Disponíveis**: Painel informativo mostrando os códigos que podem ser usados
+### Solução Proposta
 
-### Variáveis Disponíveis
+#### 1. Modificar `whatsapp-send` para Aceitar Chamadas Internas
 
-| Variável | Descrição |
-|----------|-----------|
-| `{nome}` | Nome do lead |
-| `{email}` | Email do lead |
-| `{telefone}` | Telefone do lead |
-| `{imovel}` | Nome do imóvel vinculado |
-| `{corretor}` | Nome do corretor responsável |
-| `{empresa}` | Nome da empresa/imobiliária |
+Permitir que a função seja chamada sem autenticação quando vinda de outra edge function (usando service role key):
 
-### Arquivos a Criar/Modificar
-
-#### 1. Novo Componente: `src/components/whatsapp/WhatsAppTemplatesModal.tsx`
-
-Componente modal que permite:
-- Listar templates existentes em cards visuais
-- Criar novo template com nome e mensagem
-- Editar template existente
-- Excluir template (com confirmação)
-- Mostrar painel de variáveis disponíveis
-- Preview da mensagem com variáveis substituídas por exemplos
-
-#### 2. Modificar: `src/components/whatsapp/WhatsAppIntegrationSettings.tsx`
-
-Adicionar:
-- Importação do novo modal
-- Estado para controlar abertura do modal
-- Botão "Personalizar Templates" abaixo do Select de template
-- Callback para atualizar lista de templates após mudanças no modal
-
-### Estrutura do Modal
-
-```text
-+-----------------------------------------------+
-| Gerenciar Templates de Mensagem          [X]  |
-+-----------------------------------------------+
-|                                               |
-| [+ Novo Template]                             |
-|                                               |
-| +-------------------------------------------+ |
-| | Bom dia                              [✏️][🗑️] | |
-| | Olá {nome}! Obrigado pelo seu interesse   | |
-| | no imóvel {imovel}...                     | |
-| +-------------------------------------------+ |
-|                                               |
-| +-------------------------------------------+ |
-| | Boas vindas                        [✏️][🗑️] | |
-| | Olá {nome}, seja bem-vindo(a)!            | |
-| +-------------------------------------------+ |
-|                                               |
-| --- Variáveis Disponíveis ------------------- |
-|                                               |
-| {nome}      Nome do lead                      |
-| {email}     Email do lead                     |
-| {telefone}  Telefone do lead                  |
-| {imovel}    Nome do imóvel vinculado          |
-| {corretor}  Nome do corretor responsável      |
-| {empresa}   Nome da empresa                   |
-|                                               |
-+-----------------------------------------------+
-```
-
-### Formulário de Criação/Edição
-
-Quando o usuário clicar em "+ Novo Template" ou editar um existente:
-
-```text
-+-----------------------------------------------+
-| Novo Template                            [X]  |
-+-----------------------------------------------+
-|                                               |
-| Nome do Template                              |
-| [________________________]                    |
-|                                               |
-| Mensagem                                      |
-| +-------------------------------------------+ |
-| | Olá {nome}! Obrigado pelo interesse no    | |
-| | imóvel {imovel}. Sou {corretor}, vou te   | |
-| | ajudar a encontrar seu imóvel ideal.      | |
-| +-------------------------------------------+ |
-|                                               |
-| Variáveis: clique para inserir                |
-| [{nome}] [{email}] [{imovel}] [{corretor}]   |
-|                                               |
-|                       [Cancelar] [Salvar]     |
-+-----------------------------------------------+
-```
-
-### Fluxo de Uso
-
-```text
-Usuário está em "Template de Mensagem"
-        ↓
-Clica em "Personalizar Templates"
-        ↓
-Modal abre mostrando templates existentes
-        ↓
-Usuário pode:
-  - Ver templates e variáveis disponíveis
-  - Criar novo template
-  - Editar template existente
-  - Excluir template
-        ↓
-Ao fechar modal, lista de templates atualiza
-        ↓
-Novo template disponível no Select
-```
-
-### Detalhes Técnicos
-
-**Props do Modal:**
 ```typescript
-interface WhatsAppTemplatesModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onTemplatesChange: () => void; // Callback para atualizar lista
+// Verificar se é chamada interna (service role) ou externa (user token)
+const authHeader = req.headers.get('Authorization')
+const isInternalCall = req.headers.get('x-internal-call') === 'true'
+
+if (!authHeader && !isInternalCall) {
+  return unauthorized response
+}
+
+// Para chamadas internas, obter account_id do body
+if (isInternalCall) {
+  accountId = body.account_id
+} else {
+  // Fluxo atual de autenticação de usuário
 }
 ```
 
-**Variáveis disponíveis (array para facilitar manutenção):**
+#### 2. Melhorar Formatação de Número
+
+Criar função robusta que lida com todos os formatos:
+
 ```typescript
-const TEMPLATE_VARIABLES = [
-  { code: '{nome}', label: 'Nome do lead', example: 'João Silva' },
-  { code: '{email}', label: 'Email do lead', example: 'joao@email.com' },
-  { code: '{telefone}', label: 'Telefone do lead', example: '(11) 99999-9999' },
-  { code: '{imovel}', label: 'Imóvel vinculado', example: 'Apartamento Centro' },
-  { code: '{corretor}', label: 'Corretor responsável', example: 'Maria Santos' },
-  { code: '{empresa}', label: 'Nome da empresa', example: 'Imobiliária ABC' },
-];
+function formatPhoneForEvolution(phone: string): string {
+  // Remove tudo que não é dígito
+  let cleaned = phone.replace(/\D/g, '')
+  
+  // Remove o "+" que pode ter ficado (se houver)
+  if (cleaned.startsWith('+')) {
+    cleaned = cleaned.substring(1)
+  }
+  
+  // Se já começa com 55, está ok
+  if (cleaned.startsWith('55')) {
+    return cleaned
+  }
+  
+  // Se tem 10-11 dígitos (DDD + número), adiciona 55
+  if (cleaned.length >= 10 && cleaned.length <= 11) {
+    return '55' + cleaned
+  }
+  
+  // Retorna como está (pode ser número internacional)
+  return cleaned
+}
 ```
+
+#### 3. Adicionar Trigger para Processar Fila Automaticamente
+
+Opção A - Chamar `process-whatsapp-queue` imediatamente após inserir na fila (no frontend)
+Opção B - Usar pg_cron para executar a cada minuto (requer configuração adicional)
+
+Vamos usar **Opção A** por ser mais simples e imediata.
+
+### Arquivos a Modificar
+
+| Arquivo | Mudança |
+|---------|---------|
+| `supabase/functions/whatsapp-send/index.ts` | Aceitar chamadas internas sem auth de usuário |
+| `supabase/functions/process-whatsapp-queue/index.ts` | Adicionar header de chamada interna + melhorar formatação |
+| `src/components/whatsapp/WhatsAppIntegrationSettings.tsx` | Chamar processamento da fila após inserir mensagem |
+
+### Detalhes Técnicos
+
+#### Arquivo: `supabase/functions/whatsapp-send/index.ts`
+
+```typescript
+// Adicionar suporte para chamadas internas
+const authHeader = req.headers.get('Authorization')
+const isInternalCall = req.headers.get('x-internal-call') === 'true'
+
+let accountId: string
+
+if (isInternalCall) {
+  // Chamada interna - account_id vem no body
+  const body = await req.json()
+  accountId = body.account_id
+  
+  if (!accountId) {
+    return Response 400 - account_id required for internal calls
+  }
+} else {
+  // Chamada externa - validar token de usuário
+  if (!authHeader) {
+    return Response 401 - Unauthorized
+  }
+  // ... validação de usuário existente ...
+}
+```
+
+#### Arquivo: `supabase/functions/process-whatsapp-queue/index.ts`
+
+```typescript
+// Função melhorada de formatação
+function formatPhoneForEvolution(phone: string): string {
+  let cleaned = phone.replace(/\D/g, '')
+  
+  if (cleaned.startsWith('55') && cleaned.length >= 12) {
+    return cleaned
+  }
+  
+  if (cleaned.length >= 10 && cleaned.length <= 11) {
+    return '55' + cleaned
+  }
+  
+  return cleaned
+}
+
+// Na chamada da função whatsapp-send
+const sendResponse = await fetch(
+  `${supabaseUrl}/functions/v1/whatsapp-send`,
+  {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${supabaseServiceKey}`,
+      'x-internal-call': 'true'
+    },
+    body: JSON.stringify({
+      account_id: msg.account_id,
+      phone: formatPhoneForEvolution(phone),
+      message: message,
+      lead_id: msg.lead_id,
+      template_id: msg.template_id
+    })
+  }
+)
+```
+
+#### Arquivo: `src/components/whatsapp/WhatsAppIntegrationSettings.tsx`
+
+Adicionar chamada para processar fila após inserir mensagem (já existe trigger automático via regras de automação, mas precisamos garantir que a função de processamento seja chamada):
+
+```typescript
+// Após inserir mensagem na fila, chamar processamento
+const processQueue = async () => {
+  await supabase.functions.invoke('process-whatsapp-queue')
+}
+
+// Chamar após salvar regra de automação ou quando lead é criado
+```
+
+### Fluxo Corrigido
+
+```text
+Lead criado (manual/meta/webhook)
+        ↓
+Frontend verifica regras de automação
+        ↓
+Mensagem inserida na whatsapp_message_queue
+        ↓
+Frontend chama process-whatsapp-queue  ← NOVO
+        ↓
+process-whatsapp-queue busca mensagens pending
+        ↓
+Formata número corretamente
+        ↓
+Chama whatsapp-send com x-internal-call: true
+        ↓
+whatsapp-send envia para Evolution API
+        ↓
+Mensagem entregue!
+```
+
+### Formato de Número - Regras
+
+| Entrada | Saída (para Evolution) |
+|---------|----------------------|
+| `+5516981057418` | `5516981057418` |
+| `5516981057418` | `5516981057418` |
+| `16981057418` | `5516981057418` |
+| `(16) 98105-7418` | `5516981057418` |
+| `981057418` | `55981057418` (assume sem DDD) |
 
 ### Resultado Esperado
 
-- Usuário pode gerenciar templates diretamente da tela de automações
-- Documentação clara das variáveis disponíveis
-- Inserção rápida de variáveis com clique
-- Preview visual de como a mensagem ficará
-- Templates criados ficam imediatamente disponíveis no select
-
+- Mensagens serão processadas imediatamente após inserção na fila
+- Números serão formatados corretamente independente da origem
+- Logs detalhados para debugging
+- Compatibilidade com Meta, webhooks e leads manuais
