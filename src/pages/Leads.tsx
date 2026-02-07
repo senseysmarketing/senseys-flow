@@ -318,6 +318,68 @@ const Leads = () => {
         console.error('Notification error:', notifyError);
       }
 
+      // Check for WhatsApp automation rule (new_lead) for manual source
+      try {
+        const { data: automationRule } = await supabase
+          .from('whatsapp_automation_rules')
+          .select('*')
+          .eq('account_id', profile.account_id)
+          .eq('trigger_type', 'new_lead')
+          .eq('is_active', true)
+          .single();
+
+        if (automationRule) {
+          const sources = automationRule.trigger_sources || { manual: true };
+          const manualEnabled = typeof sources === 'object' && sources !== null 
+            ? (sources as Record<string, boolean>).manual !== false 
+            : true;
+
+          if (automationRule.template_id && manualEnabled) {
+            // Check if WhatsApp is connected
+            const { data: session } = await supabase
+              .from('whatsapp_sessions')
+              .select('status')
+              .eq('account_id', profile.account_id)
+              .eq('status', 'connected')
+              .single();
+
+            if (session) {
+              const scheduledFor = new Date(Date.now() + ((automationRule.delay_seconds || 0) * 1000));
+              
+              // Get template to compose message
+              const { data: template } = await supabase
+                .from('whatsapp_templates')
+                .select('template')
+                .eq('id', automationRule.template_id)
+                .single();
+              
+              if (template) {
+                // Replace variables in template
+                let message = template.template
+                  .replace(/{nome}/gi, newLead.name || '')
+                  .replace(/{telefone}/gi, newLead.phone || '')
+                  .replace(/{email}/gi, newLead.email || '');
+                
+                await supabase.from('whatsapp_message_queue').insert({
+                  account_id: profile.account_id,
+                  lead_id: insertedLead.id,
+                  phone: newLead.phone,
+                  message: message,
+                  template_id: automationRule.template_id,
+                  automation_rule_id: automationRule.id,
+                  scheduled_for: scheduledFor.toISOString(),
+                  status: 'pending'
+                });
+                
+                console.log(`WhatsApp greeting scheduled for manual lead ${insertedLead.id}`);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.log('WhatsApp automation check error:', e);
+      }
+
       toast({
         title: "Lead criado com sucesso!",
         description: "O lead foi adicionado ao sistema.",
