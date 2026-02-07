@@ -1,92 +1,131 @@
 
 
-## Plano: Corrigir Permissões RLS para Fila de Mensagens WhatsApp
+## Plano: Simplificar Botão WhatsApp para Acesso Direto
 
-### Problema Identificado
+### Objetivo
 
-O log do console mostra:
-```
-WhatsApp greeting scheduled for manual lead e92abd87-74ee-4920-bb0c-439bdc97120b
-```
-
-**Mas a tabela `whatsapp_message_queue` está vazia!**
-
-O problema está nas políticas RLS:
-
-| Policy | Comando | Quem pode |
-|--------|---------|-----------|
-| `Service role can manage queue` | ALL | ❌ Apenas service_role |
-| `Users can view own account queue` | SELECT | ✅ Usuários podem ver |
-
-**O frontend usa `anon` key**, então o INSERT silenciosamente falha por falta de permissão.
-
-### Solução
-
-Adicionar uma política RLS que permite usuários inserir mensagens na fila da própria conta.
+Transformar o botão de WhatsApp em um "acesso rápido" que abre diretamente a conversa no WhatsApp do lead, sem exibir o popover de seleção de templates. O sistema de templates permanecerá apenas para envios automáticos.
 
 ### Mudanças Necessárias
 
-#### 1. Criar nova política RLS via SQL Migration
+#### Arquivo: `src/components/WhatsAppButton.tsx`
 
-```sql
--- Permitir usuários inserir na fila da própria conta
-CREATE POLICY "Users can insert in own account queue" 
-ON public.whatsapp_message_queue 
-FOR INSERT 
-WITH CHECK (account_id = get_user_account_id());
-```
+Simplificar o componente removendo:
+- ❌ Estado de templates e popover
+- ❌ Fetch de templates do banco
+- ❌ Sistema de seleção de mensagem
+- ❌ Componentes Popover, PopoverContent, PopoverTrigger
 
-#### 2. Atualizar código para capturar erro (opcional, recomendado)
+Manter apenas:
+- ✅ Abertura direta do WhatsApp via `wa.me`
+- ✅ Log da mensagem enviada (opcional, para histórico)
+- ✅ Variantes visuais do botão (icon, outline, default)
 
-No arquivo `src/pages/Leads.tsx`, adicionar tratamento de erro após o insert:
+### Código Simplificado
 
 ```typescript
-const { error: queueError } = await supabase.from('whatsapp_message_queue').insert({
-  account_id: profile.account_id,
-  lead_id: insertedLead.id,
-  phone: newLead.phone,
-  message: message,
-  template_id: automationRule.template_id,
-  automation_rule_id: automationRule.id,
-  scheduled_for: scheduledFor.toISOString(),
-  status: 'pending'
-});
+import { MessageCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
-if (queueError) {
-  console.error('WhatsApp queue insert error:', queueError);
-} else {
-  console.log(`WhatsApp greeting scheduled for manual lead ${insertedLead.id}`);
+interface WhatsAppButtonProps {
+  phone: string;
+  className?: string;
+  variant?: 'default' | 'icon' | 'outline';
+  size?: 'sm' | 'default';
 }
+
+const WhatsAppButton = ({ 
+  phone, 
+  className,
+  variant = 'default',
+  size = 'sm'
+}: WhatsAppButtonProps) => {
+  
+  const openWhatsApp = () => {
+    const cleanPhone = phone.replace(/\D/g, '');
+    // Adiciona 55 apenas se não começar com 55
+    const fullPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+    const whatsappUrl = `https://wa.me/${fullPhone}`;
+    window.open(whatsappUrl, '_blank');
+  };
+
+  if (variant === 'icon') {
+    return (
+      <Button 
+        variant="ghost" 
+        size="sm" 
+        className={cn("h-8 w-8 p-0", className)}
+        onClick={openWhatsApp}
+      >
+        <MessageCircle className="h-4 w-4 text-green-500" />
+      </Button>
+    );
+  }
+
+  if (variant === 'outline') {
+    return (
+      <Button 
+        variant="outline" 
+        size={size}
+        className={cn("gap-2", className)}
+        onClick={openWhatsApp}
+      >
+        <MessageCircle className="h-4 w-4" />
+        WhatsApp
+      </Button>
+    );
+  }
+
+  return (
+    <Button 
+      size="sm" 
+      variant="outline" 
+      className={cn(
+        "w-full h-8 text-xs gap-2 hover:bg-success/10 hover:text-success hover:border-success/30 transition-colors",
+        className
+      )}
+      onClick={openWhatsApp}
+    >
+      <MessageCircle className="h-3.5 w-3.5" />
+      WhatsApp
+    </Button>
+  );
+};
+
+export default WhatsAppButton;
 ```
 
-### Fluxo Após Correção
+### Componentes que Usam WhatsAppButton
+
+Os seguintes componentes passam props extras (leadName, leadId, etc.) que não serão mais necessárias:
+
+| Componente | Local |
+|------------|-------|
+| `LeadKanbanCard.tsx` | Card no Kanban |
+| `LeadMobileCard.tsx` | Card mobile |
+| `LeadDetailModal.tsx` | Modal de detalhes |
+| `LeadsTable.tsx` | Tabela de leads |
+
+Esses componentes continuarão funcionando - as props extras serão ignoradas pelo novo componente simplificado.
+
+### Resultado
+
+| Antes | Depois |
+|-------|--------|
+| Clique abre popover com templates | Clique abre WhatsApp diretamente |
+| Precisa selecionar mensagem | Acesso imediato à conversa |
+| Busca templates do banco | Sem requisições extras |
+
+### Fluxo
 
 ```text
-Usuário cria lead manual
+Usuário clica no botão WhatsApp
         ↓
-Insert no banco de dados
+Formata número (adiciona 55 se necessário)
         ↓
-Verifica regra de automação WhatsApp
+Abre wa.me/{numero} em nova aba
         ↓
-INSERT em whatsapp_message_queue
-        ↓
-✅ RLS permite (account_id = própria conta)
-        ↓
-Mensagem enfileirada
-        ↓
-Cron job processa e envia
+WhatsApp Web/App abre conversa
 ```
-
-### Arquivos Afetados
-
-| Tipo | Arquivo/Ação | Descrição |
-|------|--------------|-----------|
-| SQL Migration | Nova migration | Adicionar política RLS de INSERT |
-| Frontend | `src/pages/Leads.tsx` | Adicionar tratamento de erro |
-
-### Resultado Esperado
-
-- ✅ Leads manuais terão mensagens enfileiradas corretamente
-- ✅ Erro será logado se o insert falhar
-- ✅ Segurança mantida (usuários só inserem na própria conta)
 
