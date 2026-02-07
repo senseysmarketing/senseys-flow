@@ -5,6 +5,25 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Robust phone formatting for Evolution API
+function formatPhoneForEvolution(phone: string): string {
+  // Remove all non-digit characters
+  let cleaned = phone.replace(/\D/g, '')
+  
+  // If already starts with 55 and has proper length (12-13 digits), it's valid
+  if (cleaned.startsWith('55') && cleaned.length >= 12) {
+    return cleaned
+  }
+  
+  // If has 10-11 digits (DDD + number without country code), add 55
+  if (cleaned.length >= 10 && cleaned.length <= 11) {
+    return '55' + cleaned
+  }
+  
+  // Return as is (might be international or incomplete)
+  return cleaned
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -103,27 +122,65 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Format phone number
-        let phone = msg.phone || lead?.phone || ''
-        phone = phone.replace(/\D/g, '')
-        if (phone.length <= 11) {
-          phone = '55' + phone
+        // Get broker and company info
+        if (msg.account_id) {
+          // Get assigned broker name
+          const { data: leadWithBroker } = await supabase
+            .from('leads')
+            .select('assigned_broker_id, profiles!leads_assigned_broker_id_fkey(full_name)')
+            .eq('id', msg.lead_id)
+            .single()
+          
+          if (leadWithBroker?.profiles) {
+            message = message.replace(/{corretor}/gi, (leadWithBroker.profiles as { full_name: string }).full_name || '')
+          } else {
+            message = message.replace(/{corretor}/gi, '')
+          }
+
+          // Get company name
+          const { data: account } = await supabase
+            .from('accounts')
+            .select('name, company_name')
+            .eq('id', msg.account_id)
+            .single()
+          
+          if (account) {
+            message = message.replace(/{empresa}/gi, account.company_name || account.name || '')
+          } else {
+            message = message.replace(/{empresa}/gi, '')
+          }
         }
 
-        console.log(`[process-whatsapp-queue] Sending message to ${phone} via instance ${session.instance_name}`)
+        // Format phone number properly
+        let phone = msg.phone || lead?.phone || ''
+        const formattedPhone = formatPhoneForEvolution(phone)
 
-        // Call whatsapp-send function
-        const sendResult = await supabase.functions.invoke('whatsapp-send', {
-          body: {
-            phone: phone,
-            message: message,
-            lead_id: msg.lead_id,
-            template_id: msg.template_id
+        console.log(`[process-whatsapp-queue] Processing message ${msg.id} to ${phone} -> ${formattedPhone}`)
+
+        // Call whatsapp-send function via HTTP with internal call header
+        const sendResponse = await fetch(
+          `${supabaseUrl}/functions/v1/whatsapp-send`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+              'x-internal-call': 'true'
+            },
+            body: JSON.stringify({
+              account_id: msg.account_id,
+              phone: formattedPhone,
+              message: message,
+              lead_id: msg.lead_id,
+              template_id: msg.template_id
+            })
           }
-        })
+        )
 
-        if (sendResult.error) {
-          throw new Error(sendResult.error.message || 'Failed to send message')
+        const sendResult = await sendResponse.json()
+
+        if (!sendResponse.ok) {
+          throw new Error(sendResult.error || 'Failed to send message')
         }
 
         // Update queue status to sent
