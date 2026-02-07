@@ -1,131 +1,135 @@
 
 
-## Plano: Simplificar Botão WhatsApp para Acesso Direto
+## Plano: Detectar Desconexão do WhatsApp em Tempo Real
 
-### Objetivo
+### Problema Identificado
 
-Transformar o botão de WhatsApp em um "acesso rápido" que abre diretamente a conversa no WhatsApp do lead, sem exibir o popover de seleção de templates. O sistema de templates permanecerá apenas para envios automáticos.
+O código atual na action `status` da edge function `whatsapp-connect` tem um bug na linha 353:
+
+```typescript
+const isConnected = statusData.instance?.state === 'open'
+const newStatus = isConnected ? 'connected' : session.status  // ← Bug aqui!
+```
+
+Quando o WhatsApp é desconectado pelo celular:
+- A Evolution API retorna `state: 'close'`
+- O código mantém `session.status` (que é `'connected'`)
+- O banco nunca é atualizado para `'disconnected'`
+
+### Solução
+
+1. **Corrigir a lógica de status**: Atualizar para `'disconnected'` quando não conectado
+2. **Adicionar verificação periódica**: Verificar status ao carregar a página de configurações
+3. **Melhorar feedback**: Mostrar quando a última verificação foi feita
 
 ### Mudanças Necessárias
 
-#### Arquivo: `src/components/WhatsAppButton.tsx`
+#### 1. Edge Function: `supabase/functions/whatsapp-connect/index.ts`
 
-Simplificar o componente removendo:
-- ❌ Estado de templates e popover
-- ❌ Fetch de templates do banco
-- ❌ Sistema de seleção de mensagem
-- ❌ Componentes Popover, PopoverContent, PopoverTrigger
-
-Manter apenas:
-- ✅ Abertura direta do WhatsApp via `wa.me`
-- ✅ Log da mensagem enviada (opcional, para histórico)
-- ✅ Variantes visuais do botão (icon, outline, default)
-
-### Código Simplificado
+Na action `status` (linha 352-354), corrigir a lógica:
 
 ```typescript
-import { MessageCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+// Antes (bug)
+const isConnected = statusData.instance?.state === 'open'
+const newStatus = isConnected ? 'connected' : session.status
 
-interface WhatsAppButtonProps {
-  phone: string;
-  className?: string;
-  variant?: 'default' | 'icon' | 'outline';
-  size?: 'sm' | 'default';
-}
-
-const WhatsAppButton = ({ 
-  phone, 
-  className,
-  variant = 'default',
-  size = 'sm'
-}: WhatsAppButtonProps) => {
-  
-  const openWhatsApp = () => {
-    const cleanPhone = phone.replace(/\D/g, '');
-    // Adiciona 55 apenas se não começar com 55
-    const fullPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
-    const whatsappUrl = `https://wa.me/${fullPhone}`;
-    window.open(whatsappUrl, '_blank');
-  };
-
-  if (variant === 'icon') {
-    return (
-      <Button 
-        variant="ghost" 
-        size="sm" 
-        className={cn("h-8 w-8 p-0", className)}
-        onClick={openWhatsApp}
-      >
-        <MessageCircle className="h-4 w-4 text-green-500" />
-      </Button>
-    );
-  }
-
-  if (variant === 'outline') {
-    return (
-      <Button 
-        variant="outline" 
-        size={size}
-        className={cn("gap-2", className)}
-        onClick={openWhatsApp}
-      >
-        <MessageCircle className="h-4 w-4" />
-        WhatsApp
-      </Button>
-    );
-  }
-
-  return (
-    <Button 
-      size="sm" 
-      variant="outline" 
-      className={cn(
-        "w-full h-8 text-xs gap-2 hover:bg-success/10 hover:text-success hover:border-success/30 transition-colors",
-        className
-      )}
-      onClick={openWhatsApp}
-    >
-      <MessageCircle className="h-3.5 w-3.5" />
-      WhatsApp
-    </Button>
-  );
-};
-
-export default WhatsAppButton;
+// Depois (corrigido)
+const isConnected = statusData.instance?.state === 'open'
+const newStatus = isConnected ? 'connected' : 'disconnected'
 ```
 
-### Componentes que Usam WhatsAppButton
+Também atualizar a condição de update (linha 362) para sempre atualizar quando o status mudar.
 
-Os seguintes componentes passam props extras (leadName, leadId, etc.) que não serão mais necessárias:
+#### 2. Frontend: `src/components/whatsapp/WhatsAppIntegrationSettings.tsx`
 
-| Componente | Local |
-|------------|-------|
-| `LeadKanbanCard.tsx` | Card no Kanban |
-| `LeadMobileCard.tsx` | Card mobile |
-| `LeadDetailModal.tsx` | Modal de detalhes |
-| `LeadsTable.tsx` | Tabela de leads |
+Adicionar verificação automática de status quando a página é carregada:
 
-Esses componentes continuarão funcionando - as props extras serão ignoradas pelo novo componente simplificado.
+```typescript
+// Na função fetchSession, sempre verificar status na API quando mostra como conectado
+const checkRealStatus = async () => {
+  if (!user) return;
+  
+  const response = await supabase.functions.invoke('whatsapp-connect?action=status');
+  
+  // Se API diz desconectado mas banco diz conectado, atualizar UI
+  if (response.data && !response.data.connected) {
+    setSession(prev => prev ? { ...prev, status: 'disconnected' } : null);
+    
+    if (session?.status === 'connected') {
+      toast({
+        variant: 'destructive',
+        title: 'WhatsApp Desconectado',
+        description: 'A conexão com o WhatsApp foi perdida. Reconecte para continuar.',
+      });
+    }
+  }
+};
+```
 
-### Resultado
-
-| Antes | Depois |
-|-------|--------|
-| Clique abre popover com templates | Clique abre WhatsApp diretamente |
-| Precisa selecionar mensagem | Acesso imediato à conversa |
-| Busca templates do banco | Sem requisições extras |
-
-### Fluxo
+### Fluxo Após Correção
 
 ```text
-Usuário clica no botão WhatsApp
+Usuário desconecta WhatsApp no celular
         ↓
-Formata número (adiciona 55 se necessário)
+Evolution API: state = 'close'
         ↓
-Abre wa.me/{numero} em nova aba
+Usuário abre página de configurações
         ↓
-WhatsApp Web/App abre conversa
+Frontend chama action=status
+        ↓
+Edge function verifica Evolution API
+        ↓
+state !== 'open' → newStatus = 'disconnected'
+        ↓
+Atualiza banco de dados
+        ↓
+Retorna { connected: false }
+        ↓
+Frontend atualiza UI + mostra alerta
 ```
+
+### Arquivos Afetados
+
+| Arquivo | Mudança |
+|---------|---------|
+| `supabase/functions/whatsapp-connect/index.ts` | Corrigir lógica de status (linha 353) |
+| `src/components/whatsapp/WhatsAppIntegrationSettings.tsx` | Adicionar verificação proativa |
+
+### Detalhes Técnicos
+
+A correção principal está na edge function:
+
+```typescript
+case 'status': {
+  // ...existing code...
+  
+  if (statusResponse.ok) {
+    const statusData = await statusResponse.json()
+    const isConnected = statusData.instance?.state === 'open'
+    
+    // CORREÇÃO: Atualizar para 'disconnected' quando não conectado
+    const newStatus = isConnected ? 'connected' : 'disconnected'
+    
+    // Se desconectado, limpar dados de conexão
+    if (!isConnected && session.status === 'connected') {
+      await supabase
+        .from('whatsapp_sessions')
+        .update({ 
+          status: 'disconnected',
+          connected_at: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('account_id', accountId)
+    }
+    // ...rest of code...
+  }
+}
+```
+
+### Resultado Esperado
+
+- Quando WhatsApp desconectado pelo celular, status será atualizado para "Desconectado"
+- Usuário verá alerta informando que precisa reconectar
+- Botão "Conectar WhatsApp" aparecerá novamente
+- Automações serão automaticamente desabilitadas
 
