@@ -67,16 +67,25 @@ export function WhatsAppIntegrationSettings() {
     if (!error && data) {
       setSession(data);
       
-      // Se conectado mas sem número, buscar da API
-      if (data.status === 'connected' && !data.phone_number) {
+      // Sempre verificar status real na Evolution API quando mostrar como conectado
+      if (data.status === 'connected') {
         try {
           const response = await supabase.functions.invoke('whatsapp-connect?action=status');
-          if (response.data?.phoneNumber) {
-            // Atualizar estado local com o número
+          
+          // Se API diz desconectado mas banco dizia conectado, atualizar UI e alertar
+          if (response.data && !response.data.connected) {
+            setSession(prev => prev ? { ...prev, status: 'disconnected', connected_at: null } : null);
+            toast({
+              variant: 'destructive',
+              title: 'WhatsApp Desconectado',
+              description: 'A conexão com o WhatsApp foi perdida. Reconecte para continuar enviando mensagens.',
+            });
+          } else if (response.data?.phoneNumber && !data.phone_number) {
+            // Atualizar estado local com o número se não tiver
             setSession(prev => prev ? { ...prev, phone_number: response.data.phoneNumber } : null);
           }
         } catch (e) {
-          console.log('Error fetching phone number:', e);
+          console.log('Error checking real status:', e);
         }
       }
     } else {

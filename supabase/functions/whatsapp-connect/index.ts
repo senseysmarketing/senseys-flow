@@ -350,7 +350,8 @@ Deno.serve(async (req) => {
             console.log('[whatsapp-connect] Status data:', statusData)
 
             const isConnected = statusData.instance?.state === 'open'
-            const newStatus = isConnected ? 'connected' : session.status
+            // CORREÇÃO: Sempre atualizar para 'disconnected' quando não conectado
+            const newStatus = isConnected ? 'connected' : 'disconnected'
 
             // Fetch phone number if connected but not saved yet
             let phoneNumber = session.phone_number
@@ -359,13 +360,15 @@ Deno.serve(async (req) => {
               console.log('[whatsapp-connect] Fetched phone number:', phoneNumber)
             }
 
+            // Sempre atualizar quando status mudar
             if (newStatus !== session.status || (isConnected && !session.phone_number && phoneNumber)) {
+              console.log('[whatsapp-connect] Status changed:', session.status, '->', newStatus)
               await supabase
                 .from('whatsapp_sessions')
                 .update({ 
                   status: newStatus,
-                  phone_number: phoneNumber || session.phone_number,
-                  connected_at: isConnected ? new Date().toISOString() : session.connected_at,
+                  phone_number: isConnected ? (phoneNumber || session.phone_number) : session.phone_number,
+                  connected_at: isConnected ? (session.connected_at || new Date().toISOString()) : null,
                   updated_at: new Date().toISOString()
                 })
                 .eq('account_id', accountId)
