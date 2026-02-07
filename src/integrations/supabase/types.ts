@@ -1423,6 +1423,7 @@ export type Database = {
           name: string
           template_id: string | null
           trigger_config: Json | null
+          trigger_sources: Json | null
           trigger_type: string
           updated_at: string | null
         }
@@ -1435,6 +1436,7 @@ export type Database = {
           name: string
           template_id?: string | null
           trigger_config?: Json | null
+          trigger_sources?: Json | null
           trigger_type: string
           updated_at?: string | null
         }
@@ -1447,6 +1449,7 @@ export type Database = {
           name?: string
           template_id?: string | null
           trigger_config?: Json | null
+          trigger_sources?: Json | null
           trigger_type?: string
           updated_at?: string | null
         }
