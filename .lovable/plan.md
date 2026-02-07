@@ -1,37 +1,26 @@
 
 
-## Plano: Corrigir Busca do Número de Telefone do WhatsApp
+## Plano: Corrigir Extração do Número de Telefone
 
 ### Problema Identificado
 
-Analisando os logs da edge function:
+O código atual está buscando em caminhos errados:
+- ❌ `data[0]?.instance?.owner`
+- ❌ `data?.instance?.owner`
+- ❌ `data?.owner`
 
-```
-[whatsapp-connect] Fetched phone number: null
-[whatsapp-connect] Status data: { instance: { instanceName: "...", state: "open" } }
-```
-
-A função `fetchPhoneNumber` está retornando `null` porque:
-1. O endpoint `/instance/fetchInstances` não está retornando o campo `owner` 
-2. Ou a estrutura da resposta é diferente do esperado
-
-Segundo a documentação da Evolution API, a resposta deveria ser:
-```json
-[{"instance": {"owner": "5516981057418@s.whatsapp.net", ...}}]
-```
+**Caminho correto encontrado nos logs:**
+- ✅ `data[0]?.ownerJid` = `"5516994213312@s.whatsapp.net"`
 
 ### Solução
 
-Modificar a função `fetchPhoneNumber` para:
-1. **Adicionar logging detalhado** da resposta da API
-2. **Verificar estruturas alternativas** de resposta
-3. **Incluir fallback** usando o endpoint `/instance/connectionState` que pode retornar informações adicionais
+Atualizar a função `fetchPhoneNumber` para buscar o campo `ownerJid` diretamente do primeiro elemento do array.
 
 ### Mudanças Necessárias
 
 #### Arquivo: `supabase/functions/whatsapp-connect/index.ts`
 
-##### Atualizar função `fetchPhoneNumber` com logging e fallbacks
+Atualizar a função `fetchPhoneNumber`:
 
 ```typescript
 async function fetchPhoneNumber(instanceName: string): Promise<string | null> {
@@ -44,38 +33,15 @@ async function fetchPhoneNumber(instanceName: string): Promise<string | null> {
     )
     const data = await response.json()
     
-    // Log para debug da estrutura de resposta
     console.log('[whatsapp-connect] fetchInstances response:', JSON.stringify(data).substring(0, 500))
     
-    // Tentar diferentes estruturas de resposta
-    let owner = data[0]?.instance?.owner
+    // Estrutura real: data[0].ownerJid = "5516994213312@s.whatsapp.net"
+    const ownerJid = data[0]?.ownerJid
     
-    // Fallback: algumas versões podem ter estrutura diferente
-    if (!owner && data?.instance?.owner) {
-      owner = data.instance.owner
-    }
+    console.log('[whatsapp-connect] Extracted ownerJid:', ownerJid)
     
-    // Fallback: objeto direto sem array
-    if (!owner && data?.owner) {
-      owner = data.owner
-    }
-    
-    // Fallback: buscar de profileName ou outros campos
-    if (!owner) {
-      // Tentar buscar número do campo 'number' ou 'phone'
-      const number = data[0]?.instance?.number || 
-                     data[0]?.number || 
-                     data?.instance?.number ||
-                     data?.number
-      if (number) {
-        owner = `${number}@s.whatsapp.net`
-      }
-    }
-    
-    console.log('[whatsapp-connect] Extracted owner:', owner)
-    
-    if (owner) {
-      const phoneRaw = owner.split('@')[0]
+    if (ownerJid) {
+      const phoneRaw = ownerJid.split('@')[0]
       if (phoneRaw.length >= 12) {
         const countryCode = phoneRaw.slice(0, 2)
         const areaCode = phoneRaw.slice(2, 4)
@@ -92,23 +58,16 @@ async function fetchPhoneNumber(instanceName: string): Promise<string | null> {
 }
 ```
 
-### Fluxo de Debug
-
-1. Deploy da nova versão com logging detalhado
-2. Acessar a página de configurações do WhatsApp
-3. Verificar os logs para ver a estrutura real da resposta
-4. Ajustar o código conforme necessário
-
 ### Resultado Esperado
 
-Após a correção:
-- Logs mostrarão exatamente o que a Evolution API está retornando
-- O código tentará múltiplas estruturas de resposta
-- O número será capturado e exibido na interface
+O número `5516994213312` será formatado como:
+- **+55 (16) 99421-3312**
+
+E exibido na interface ao lado de "Conectado desde:"
 
 ### Arquivos Afetados
 
 | Arquivo | Mudança |
 |---------|---------|
-| `supabase/functions/whatsapp-connect/index.ts` | Atualizar `fetchPhoneNumber` com logging e fallbacks |
+| `supabase/functions/whatsapp-connect/index.ts` | Corrigir caminho para `data[0]?.ownerJid` |
 
