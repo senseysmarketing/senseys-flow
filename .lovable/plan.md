@@ -1,86 +1,61 @@
 
-## Plano: Adicionar Automação WhatsApp para Leads Criados Manualmente
+
+## Plano: Corrigir Permissões RLS para Fila de Mensagens WhatsApp
 
 ### Problema Identificado
 
-O lead "Teste Gabriel" foi criado **manualmente** pelo formulário de criação na página de Leads. A automação WhatsApp só funciona para:
-- ✅ Leads via **webhook** (webhook-leads/index.ts - linha 300-355)
-- ✅ Leads via **Meta/Facebook** (meta-webhook/index.ts - linha 177-231)
-- ❌ Leads via **criação manual** (Leads.tsx - não implementado!)
+O log do console mostra:
+```
+WhatsApp greeting scheduled for manual lead e92abd87-74ee-4920-bb0c-439bdc97120b
+```
 
-A regra de automação configurada tem `trigger_sources: {manual: true, meta: true, webhook: true}`, indicando que a fonte "manual" deveria disparar, mas o código não existe.
+**Mas a tabela `whatsapp_message_queue` está vazia!**
+
+O problema está nas políticas RLS:
+
+| Policy | Comando | Quem pode |
+|--------|---------|-----------|
+| `Service role can manage queue` | ALL | ❌ Apenas service_role |
+| `Users can view own account queue` | SELECT | ✅ Usuários podem ver |
+
+**O frontend usa `anon` key**, então o INSERT silenciosamente falha por falta de permissão.
 
 ### Solução
 
-Adicionar a lógica de automação WhatsApp no frontend quando leads são criados manualmente, similar ao que existe nos webhooks.
+Adicionar uma política RLS que permite usuários inserir mensagens na fila da própria conta.
 
 ### Mudanças Necessárias
 
-#### Arquivo: `src/pages/Leads.tsx`
+#### 1. Criar nova política RLS via SQL Migration
 
-##### Após a notificação (linha ~319), adicionar lógica de automação WhatsApp:
+```sql
+-- Permitir usuários inserir na fila da própria conta
+CREATE POLICY "Users can insert in own account queue" 
+ON public.whatsapp_message_queue 
+FOR INSERT 
+WITH CHECK (account_id = get_user_account_id());
+```
+
+#### 2. Atualizar código para capturar erro (opcional, recomendado)
+
+No arquivo `src/pages/Leads.tsx`, adicionar tratamento de erro após o insert:
 
 ```typescript
-// Check for WhatsApp automation rule (new_lead) for manual source
-try {
-  const { data: automationRule } = await supabase
-    .from('whatsapp_automation_rules')
-    .select('*')
-    .eq('account_id', profile.account_id)
-    .eq('trigger_type', 'new_lead')
-    .eq('is_active', true)
-    .single();
+const { error: queueError } = await supabase.from('whatsapp_message_queue').insert({
+  account_id: profile.account_id,
+  lead_id: insertedLead.id,
+  phone: newLead.phone,
+  message: message,
+  template_id: automationRule.template_id,
+  automation_rule_id: automationRule.id,
+  scheduled_for: scheduledFor.toISOString(),
+  status: 'pending'
+});
 
-  if (automationRule) {
-    const sources = automationRule.trigger_sources || { manual: true };
-    const manualEnabled = typeof sources === 'object' && sources !== null 
-      ? (sources as Record<string, boolean>).manual !== false 
-      : true;
-
-    if (automationRule.template_id && manualEnabled) {
-      // Check if WhatsApp is connected
-      const { data: session } = await supabase
-        .from('whatsapp_sessions')
-        .select('status')
-        .eq('account_id', profile.account_id)
-        .eq('status', 'connected')
-        .single();
-
-      if (session) {
-        const scheduledFor = new Date(Date.now() + ((automationRule.delay_seconds || 0) * 1000));
-        
-        // Get template to compose message
-        const { data: template } = await supabase
-          .from('whatsapp_templates')
-          .select('template')
-          .eq('id', automationRule.template_id)
-          .single();
-        
-        if (template) {
-          // Replace variables in template
-          let message = template.template
-            .replace(/{nome}/gi, newLead.name || '')
-            .replace(/{telefone}/gi, newLead.phone || '')
-            .replace(/{email}/gi, newLead.email || '');
-          
-          await supabase.from('whatsapp_message_queue').insert({
-            account_id: profile.account_id,
-            lead_id: insertedLead.id,
-            phone: newLead.phone,
-            message: message,
-            template_id: automationRule.template_id,
-            automation_rule_id: automationRule.id,
-            scheduled_for: scheduledFor.toISOString(),
-            status: 'pending'
-          });
-          
-          console.log(`WhatsApp greeting scheduled for manual lead ${insertedLead.id}`);
-        }
-      }
-    }
-  }
-} catch (e) {
-  console.log('WhatsApp automation check error:', e);
+if (queueError) {
+  console.error('WhatsApp queue insert error:', queueError);
+} else {
+  console.log(`WhatsApp greeting scheduled for manual lead ${insertedLead.id}`);
 }
 ```
 
@@ -91,31 +66,27 @@ Usuário cria lead manual
         ↓
 Insert no banco de dados
         ↓
-Notificação enviada (notify-new-lead)
-        ↓
 Verifica regra de automação WhatsApp
         ↓
-source "manual" habilitado? → Sim
+INSERT em whatsapp_message_queue
         ↓
-WhatsApp conectado? → Sim
+✅ RLS permite (account_id = própria conta)
         ↓
-Enfileira mensagem em whatsapp_message_queue
+Mensagem enfileirada
         ↓
-Cron job processa e envia via Evolution API
+Cron job processa e envia
 ```
 
-### Detalhes Técnicos
+### Arquivos Afetados
 
-| Item | Valor |
-|------|-------|
-| Arquivo modificado | `src/pages/Leads.tsx` |
-| Local da mudança | Dentro de `handleCreateLead`, após linha 319 |
-| Dependências | Nenhuma nova dependência |
-| Tabelas acessadas | `whatsapp_automation_rules`, `whatsapp_sessions`, `whatsapp_templates`, `whatsapp_message_queue` |
+| Tipo | Arquivo/Ação | Descrição |
+|------|--------------|-----------|
+| SQL Migration | Nova migration | Adicionar política RLS de INSERT |
+| Frontend | `src/pages/Leads.tsx` | Adicionar tratamento de erro |
 
 ### Resultado Esperado
 
-Após a correção:
-- Leads criados manualmente terão mensagens WhatsApp enfileiradas automaticamente
-- O comportamento será idêntico aos leads via webhook e Meta
-- A configuração de "manual: true" na regra de automação será respeitada
+- ✅ Leads manuais terão mensagens enfileiradas corretamente
+- ✅ Erro será logado se o insert falhar
+- ✅ Segurança mantida (usuários só inserem na própria conta)
+
