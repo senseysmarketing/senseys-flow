@@ -555,6 +555,9 @@ serve(async (req) => {
               })
               
               console.log(`WhatsApp greeting scheduled for webhook lead ${lead.id} at ${scheduledFor.toISOString()}`)
+              
+              // Trigger queue processing immediately
+              supabase.functions.invoke('process-whatsapp-queue').catch(() => {})
             }
           }
         }

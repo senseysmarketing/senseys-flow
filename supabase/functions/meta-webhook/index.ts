@@ -224,6 +224,8 @@ const handler = async (req: Request): Promise<Response> => {
                       status: "pending"
                     });
                     console.log(`WhatsApp scheduled for Meta lead ${newLead.id}`);
+                    // Trigger queue processing immediately
+                    supabase.functions.invoke("process-whatsapp-queue").catch(() => {});
                   }
                 }
               }

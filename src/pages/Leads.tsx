@@ -375,6 +375,10 @@ const Leads = () => {
                   console.error('WhatsApp queue insert error:', queueError);
                 } else {
                   console.log(`WhatsApp greeting scheduled for manual lead ${insertedLead.id}`);
+                  // Trigger queue processing immediately
+                  supabase.functions.invoke('process-whatsapp-queue').catch(e => 
+                    console.log('Queue processing trigger:', e)
+                  );
                 }
               }
             }
