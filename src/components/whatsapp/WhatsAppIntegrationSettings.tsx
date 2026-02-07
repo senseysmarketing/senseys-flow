@@ -66,6 +66,19 @@ export function WhatsAppIntegrationSettings() {
 
     if (!error && data) {
       setSession(data);
+      
+      // Se conectado mas sem número, buscar da API
+      if (data.status === 'connected' && !data.phone_number) {
+        try {
+          const response = await supabase.functions.invoke('whatsapp-connect?action=status');
+          if (response.data?.phoneNumber) {
+            // Atualizar estado local com o número
+            setSession(prev => prev ? { ...prev, phone_number: response.data.phoneNumber } : null);
+          }
+        } catch (e) {
+          console.log('Error fetching phone number:', e);
+        }
+      }
     } else {
       setSession(null);
     }
