@@ -1,61 +1,105 @@
 
+## Plano: Sistema de Motivo de Desqualificacao de Leads
 
-## Plano: Mensagem Padrao no Botao WhatsApp
+### Visao Geral
 
-### O que muda
+Ao mover um lead para o status "Perdido" (posicao 7, ultimo status do sistema), um modal de confirmacao aparecera solicitando o motivo da desqualificacao. O usuario devera selecionar pelo menos um motivo e opcionalmente adicionar observacoes. Funciona no Kanban (drag-and-drop), na tabela (dropdown), e em acoes em massa (bulk actions).
 
-O botao de WhatsApp nos cards de lead voltara a enviar uma mensagem pre-definida amigavel, usando o nome do lead e o imovel de interesse (quando disponivel). Sem modal, sem template -- apenas uma mensagem padrao embutida no codigo.
+### 1. Migracao SQL
 
-### Mensagem Sugerida
+Criar a tabela `lead_disqualification_reasons` com RLS baseada em `account_id`:
 
-**Com imovel:**
-> Ola {nome}! Tudo bem? Vi que voce demonstrou interesse no imovel {imovel}. Estou a disposicao para te ajudar com mais informacoes. Como posso te atender? 😊
+```sql
+CREATE TABLE lead_disqualification_reasons (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  lead_id uuid NOT NULL,
+  account_id uuid NOT NULL,
+  reasons jsonb NOT NULL DEFAULT '[]',
+  notes text,
+  created_by uuid,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
 
-**Sem imovel:**
-> Ola {nome}! Tudo bem? Vi que voce demonstrou interesse em nossos imoveis. Estou a disposicao para te ajudar. Como posso te atender? 😊
+ALTER TABLE lead_disqualification_reasons ENABLE ROW LEVEL SECURITY;
 
-### Arquivo a Modificar
+CREATE POLICY "Users can insert reasons for their account"
+  ON lead_disqualification_reasons FOR INSERT
+  WITH CHECK (account_id = get_user_account_id());
 
-**`src/components/WhatsAppButton.tsx`**
-
-1. Usar as props `leadName` e `propertyName` (que ja existem mas estao sendo ignoradas)
-2. Montar a mensagem padrao com `encodeURIComponent`
-3. Adicionar `?text=` na URL do `wa.me`
-
-```typescript
-const WhatsAppButton = ({ 
-  phone, 
-  className,
-  variant = 'default',
-  size = 'sm',
-  leadName,
-  propertyName,
-}: WhatsAppButtonProps) => {
-  
-  const openWhatsApp = () => {
-    const cleanPhone = phone.replace(/\D/g, '');
-    const fullPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
-    
-    let message = '';
-    if (leadName) {
-      const firstName = leadName.split(' ')[0];
-      if (propertyName) {
-        message = `Olá ${firstName}! Tudo bem? Vi que você demonstrou interesse no imóvel *${propertyName}*. Estou à disposição para te ajudar com mais informações. Como posso te atender? 😊`;
-      } else {
-        message = `Olá ${firstName}! Tudo bem? Vi que você demonstrou interesse em nossos imóveis. Estou à disposição para te ajudar. Como posso te atender? 😊`;
-      }
-    }
-    
-    const textParam = message ? `?text=${encodeURIComponent(message)}` : '';
-    window.open(`https://wa.me/${fullPhone}${textParam}`, '_blank');
-  };
+CREATE POLICY "Users can view reasons from their account"
+  ON lead_disqualification_reasons FOR SELECT
+  USING (account_id = get_user_account_id());
 ```
 
-Nenhum outro arquivo precisa ser alterado pois `leadName` e `propertyName` ja sao passados como props em todos os locais que usam o componente (`LeadMobileCard`, `LeadsTable`, `LeadKanbanCard`).
+O campo `reasons` armazena um array JSON como:
+```json
+["sem_interesse", "nao_responde"]
+```
+
+### 2. Novo Componente: `DisqualifyLeadModal.tsx`
+
+Modal com:
+- Titulo: "Por que este lead foi desqualificado?"
+- Lista de checkboxes com motivos pre-definidos:
+  - Sem interesse real
+  - Sem capacidade financeira
+  - Fora do perfil de imoveis
+  - Nao responde / Sem retorno
+  - Dados invalidos (telefone/email)
+  - Lead duplicado
+  - Comprou com concorrente
+  - Desistiu da compra/aluguel
+- Campo de texto "Observacoes adicionais (opcional)"
+- Botao "Confirmar" habilitado apenas com pelo menos 1 motivo selecionado
+- Botao "Cancelar" que cancela a mudanca de status
+
+Ao confirmar:
+1. Salva o registro em `lead_disqualification_reasons`
+2. Executa a mudanca de status do lead
+3. Registra atividade na timeline (`disqualified`)
+
+### 3. Modificacao em `Leads.tsx`
+
+**`handleStatusChange`** (linha 565):
+- Antes de executar a mudanca, verificar se o status destino e o "Perdido" (posicao 7 ou nome "Perdido")
+- Se sim, abrir o `DisqualifyLeadModal` passando `leadId` e `statusId`
+- O modal executa a mudanca apos confirmacao
+- Se nao, manter comportamento atual
+
+**`onDragEnd`** (linha 633):
+- Mesmo tratamento: verificar se destino e "Perdido" antes de chamar `handleStatusChange`
+- Armazenar `leadId` e `statusId` pendentes em estado para o modal usar
+
+**Bulk actions** (`handleBulkStatusChange`):
+- Quando o status destino for "Perdido", abrir o modal para cada lead ou usar o mesmo motivo para todos
+
+### 4. Modificacao no `LeadDetailModal.tsx`
+
+Quando o lead tiver status "Perdido":
+- Buscar registro de `lead_disqualification_reasons` para o `lead_id`
+- Exibir secao "Motivo da Desqualificacao" com badges dos motivos e observacoes
+
+### 5. Modificacao no `LeadActivityTimeline.tsx`
+
+Adicionar tipo `disqualified` no `activityConfig`:
+```typescript
+disqualified: { icon: XCircle, color: "text-red-500", label: "Lead desqualificado" }
+```
+
+### Arquivos
+
+| Acao | Arquivo |
+|------|---------|
+| Criar | `src/components/leads/DisqualifyLeadModal.tsx` |
+| Modificar | `src/pages/Leads.tsx` |
+| Modificar | `src/components/LeadDetailModal.tsx` |
+| Modificar | `src/components/LeadActivityTimeline.tsx` |
+| Migracao | Nova tabela `lead_disqualification_reasons` |
 
 ### Resultado
 
-- Ao clicar no botao WhatsApp, o app abre o wa.me com a mensagem ja preenchida
-- O corretor pode editar antes de enviar (comportamento padrao do wa.me)
-- Usa apenas o primeiro nome para ser mais pessoal
-- Destaca o imovel em negrito com asteriscos do WhatsApp
+- Modal obrigatorio ao desqualificar leads (Kanban, tabela, bulk)
+- Historico de motivos registrado no banco
+- Motivos visiveis no detalhe do lead
+- Timeline registra a desqualificacao com os motivos
+- Dados disponiveis para futura analise gerencial
