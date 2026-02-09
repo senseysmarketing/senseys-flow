@@ -1,13 +1,13 @@
 
-## Ajustar Modal de Detalhes do Evento no Mobile
+## Centralizar Modal de Detalhes do Evento no Mobile
 
 ### Problema
 
-O modal de detalhes do evento usa o `DialogContent` padrao, que no mobile abre em tela cheia (comportamento definido em `dialog.tsx`). Para um modal com tao pouco conteudo (titulo, horario, local, lead), tela cheia desperdi&ccedil;a muito espaco e fica visualmente ruim, como mostra o screenshot.
+O modal esta fixo na parte inferior da tela porque as classes `bottom-4` e `top-auto` o ancoram la embaixo. Ele precisa ficar centralizado na tela, como um card compacto.
 
 ### Solucao
 
-Adicionar uma classe customizada ao `DialogContent` do Event Detail Dialog para que, no mobile, ele apareca como um card compacto centralizado ou sheet parcial, em vez de tela cheia.
+Trocar as classes do `DialogContent` do Event Detail Dialog para centralizar o modal no mobile tambem, sobrescrevendo o comportamento fullscreen padrao do `dialog.tsx`.
 
 ### Arquivo a Modificar
 
@@ -15,10 +15,10 @@ Adicionar uma classe customizada ao `DialogContent` do Event Detail Dialog para 
 
 ### Mudanca
 
-No `DialogContent` do Event Detail Dialog, sobrescrever os estilos mobile para que o modal fique compacto:
+Substituir as classes atuais por:
 
 ```
-<DialogContent className="sm:max-w-[400px] inset-auto bottom-4 left-4 right-4 top-auto rounded-xl translate-x-0 translate-y-0 max-h-[70vh] sm:left-[50%] sm:top-[50%] sm:bottom-auto sm:right-auto sm:translate-x-[-50%] sm:translate-y-[-50%]">
+<DialogContent className="sm:max-w-[400px] !inset-auto !top-[50%] !left-[50%] !translate-x-[-50%] !translate-y-[-50%] !rounded-xl !w-[calc(100%-2rem)] !max-h-[70vh] !p-6 !pt-8">
 ```
 
-Isso fara o modal aparecer como um card na parte inferior da tela no mobile, sem ocupar a tela toda, mantendo o comportamento desktop inalterado.
+Isso usa `!important` via Tailwind para sobrescrever os estilos base do `dialog.tsx` que forcam fullscreen no mobile, garantindo que o modal fique centralizado e compacto em qualquer tamanho de tela.
