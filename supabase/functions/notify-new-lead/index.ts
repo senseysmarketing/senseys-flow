@@ -258,7 +258,7 @@ const handler = async (req: Request): Promise<Response> => {
         title: pushTitle,
         body: pushBody,
         url: "/leads",
-        data: { lead_id, assigned: isDirectedNotification }
+        data: { lead_id, assigned: String(isDirectedNotification) }
       };
 
       // If directed notification, send only to the broker
