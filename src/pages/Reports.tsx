@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from "recharts";
-import { TrendingUp, Users, Calendar, Target, DollarSign, Flame, Trophy, Building2, Megaphone, Thermometer, Snowflake, RefreshCw, LayoutDashboard } from "lucide-react";
+import { TrendingUp, Users, Calendar, Target, DollarSign, Flame, Trophy, Building2, Megaphone, Thermometer, Snowflake, RefreshCw, LayoutDashboard, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
@@ -19,6 +19,7 @@ import AdInsightsTab, { AdStats } from "@/components/reports/AdInsightsTab";
 import PropertyInsightsTab, { PropertyStats } from "@/components/reports/PropertyInsightsTab";
 import { ReportsOverviewTab } from "@/components/reports/ReportsOverviewTab";
 import { ReportsSettingsSheet } from "@/components/reports/ReportsSettingsSheet";
+import { DISQUALIFICATION_REASONS } from "@/components/leads/DisqualifyLeadModal";
 
 interface LeadStats {
   total: number;
@@ -105,6 +106,7 @@ const ReportsPage = () => {
     config: null
   });
   const [propertyStats, setPropertyStats] = useState<PropertyStats[]>([]);
+  const [disqualificationStats, setDisqualificationStats] = useState<{ reason: string; label: string; count: number }[]>([]);
   const [period, setPeriod] = useState("30");
   const [customDateFrom, setCustomDateFrom] = useState("");
   const [customDateTo, setCustomDateTo] = useState("");
@@ -239,7 +241,8 @@ const ReportsPage = () => {
         fetchLeadStats(),
         fetchEventStats(),
         fetchAdStats(),
-        fetchPropertyStats()
+        fetchPropertyStats(),
+        fetchDisqualificationStats()
       ]);
     } catch (error) {
       console.error("Erro ao buscar estatísticas:", error);
@@ -673,6 +676,42 @@ const ReportsPage = () => {
     setPropertyStats(stats);
   };
 
+  const fetchDisqualificationStats = async () => {
+    const { from: dateFrom, to: dateTo } = getDateRange();
+    const startDate = parseISO(dateFrom);
+    const endDate = parseISO(dateTo);
+
+    const { data, error } = await supabase
+      .from("lead_disqualification_reasons")
+      .select("reasons")
+      .gte("created_at", startDate.toISOString())
+      .lte("created_at", endDate.toISOString());
+
+    if (error || !data) {
+      console.error("Erro ao buscar motivos de desqualificação:", error);
+      setDisqualificationStats([]);
+      return;
+    }
+
+    const counts: Record<string, number> = {};
+    data.forEach(row => {
+      const reasons = row.reasons as string[];
+      if (Array.isArray(reasons)) {
+        reasons.forEach(r => { counts[r] = (counts[r] || 0) + 1; });
+      }
+    });
+
+    const stats = Object.entries(counts)
+      .map(([key, count]) => ({
+        reason: key,
+        label: DISQUALIFICATION_REASONS.find(r => r.key === key)?.label || key,
+        count,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    setDisqualificationStats(stats);
+  };
+
   const growthRate = leadStats.lastMonth > 0 
     ? ((leadStats.thisMonth - leadStats.lastMonth) / leadStats.lastMonth * 100)
     : leadStats.thisMonth > 0 ? 100 : 0;
@@ -1075,6 +1114,47 @@ const ReportsPage = () => {
                   />
                 </LineChart>
               </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Motivos de Desqualificação */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <XCircle className="h-5 w-5 text-destructive" />
+                Motivos de Desqualificação
+              </CardTitle>
+              <CardDescription>Principais motivos de perda de leads no período</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {disqualificationStats.length > 0 ? (
+                <ResponsiveContainer width="100%" height={Math.max(200, disqualificationStats.length * 45)}>
+                  <BarChart data={disqualificationStats} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis type="number" className="text-xs" />
+                    <YAxis
+                      dataKey="label"
+                      type="category"
+                      width={160}
+                      className="text-xs"
+                      tick={{ fontSize: 11 }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--card))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }}
+                    />
+                    <Bar dataKey="count" fill="hsl(var(--destructive))" radius={[0, 4, 4, 0]} name="Ocorrências" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                  <XCircle className="h-10 w-10 mb-3 opacity-30" />
+                  <p className="text-sm">Nenhuma desqualificação registrada no período</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
