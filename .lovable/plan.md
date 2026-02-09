@@ -1,40 +1,60 @@
 
 
-## Corrigir Push Notification - Erro de Tipo no Payload FCM
+## Corrigir Drag and Drop do Kanban de Leads
 
-### Problema Encontrado
+### Problemas
 
-O lead **Jaime Santos** chegou e o push foi disparado para os 2 dispositivos do usuario "Thiago e Belisa", porem **ambos falharam** com o erro:
+1. **Card deslocado do mouse**: O wrapper `div` do `Draggable` nao aplica nenhum estilo inline. O `provided.draggableProps` inclui um `style` com `position`, `top`, `left`, etc., que precisa ser propagado. Porem, o problema principal e que containers com `overflow: hidden/auto` e `transform` podem causar calculo errado da posicao do card arrastado pelo `@hello-pangea/dnd`.
 
-```
-Invalid value at 'message.data[1].value' (TYPE_STRING), true
-```
-
-A API FCM v1 exige que **todos os valores** dentro do objeto `data` sejam **strings**. No arquivo `notify-new-lead/index.ts`, linha 261, o campo `assigned` e enviado como `boolean`:
-
-```typescript
-data: { lead_id, assigned: isDirectedNotification }
-//                         ^^^^^^^^^^^^^^^^^^^^^^ boolean (true/false)
-```
+2. **Card atras das colunas**: Durante o arrasto, o card fica com o mesmo `z-index` das colunas, ficando escondido atras delas.
 
 ### Solucao
 
-Converter o valor para string antes de enviar.
+Modificar o `Draggable` render no arquivo `src/pages/Leads.tsx` para:
+
+1. Aplicar `style` customizado com `zIndex: 9999` durante o arrasto
+2. Usar `position: fixed` via portal para evitar problemas de offset causados por containers com `overflow` e `transform`
 
 ### Arquivo a Modificar
 
-**`supabase/functions/notify-new-lead/index.ts`** (linha 261)
+**`src/pages/Leads.tsx`** (linhas 1211-1228)
 
-### Mudanca
+### Mudancas
 
-Substituir:
-```typescript
-data: { lead_id, assigned: isDirectedNotification }
+Alterar o wrapper do `Draggable` para aplicar `z-index` alto e `position` adequado durante o drag:
+
+```tsx
+<Draggable key={lead.id} draggableId={lead.id} index={index}>
+  {(provided, snapshot) => {
+    const draggableStyle = {
+      ...provided.draggableProps.style,
+      ...(snapshot.isDragging ? { zIndex: 9999, position: 'fixed' as const } : {}),
+    };
+    return (
+      <div
+        ref={provided.innerRef}
+        {...provided.draggableProps}
+        {...provided.dragHandleProps}
+        style={draggableStyle}
+      >
+        <LeadKanbanCard
+          lead={lead}
+          onViewDetails={handleViewDetails}
+          onEdit={handleEditLead}
+          onDelete={(id) => {
+            const l = leads.find(x => x.id === id);
+            if (l) requestDeleteLead(l);
+          }}
+          isDragging={snapshot.isDragging}
+        />
+      </div>
+    );
+  }}
+</Draggable>
 ```
 
-Por:
-```typescript
-data: { lead_id, assigned: String(isDirectedNotification) }
-```
+A chave da correcao e:
+- **`zIndex: 9999`** durante o drag: garante que o card fique acima das colunas glassmorphism
+- **Manter `provided.draggableProps.style`**: o `@hello-pangea/dnd` calcula posicao via esse style, e ele ja estava sendo aplicado implicitamente via spread, mas o `z-index` alto resolve a camada visual
+- Se o offset persistir, a alternativa e usar `ReactDOM.createPortal` para renderizar o card arrastado diretamente no `document.body`, eliminando qualquer interferencia de containers pai com `overflow` ou `transform`
 
-Isso garante que o valor enviado seja `"true"` ou `"false"` (string), atendendo a exigencia da API FCM v1. Os 2 dispositivos do usuario passarao a receber as notificacoes corretamente.
