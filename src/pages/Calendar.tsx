@@ -747,7 +747,7 @@ const CalendarPage = () => {
 
       {/* Event Detail Dialog */}
       <Dialog open={isEventDetailOpen} onOpenChange={setIsEventDetailOpen}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent className="sm:max-w-[400px] inset-auto bottom-4 left-4 right-4 top-auto rounded-xl translate-x-0 translate-y-0 max-h-[70vh] sm:left-[50%] sm:top-[50%] sm:bottom-auto sm:right-auto sm:translate-x-[-50%] sm:translate-y-[-50%]">
           {selectedEvent && (
             <>
               <DialogHeader>
