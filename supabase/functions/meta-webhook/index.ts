@@ -27,8 +27,37 @@ async function hashData(data: string): Promise<string> {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-const BASIC_FIELDS = new Set(["full_name", "full name", "nome", "name", "phone_number", "telefone", "phone", "email", "e-mail"]);
+const BASIC_FIELDS = new Set([
+  "full_name", "full name", "fullname", "nome", "name",
+  "nome_completo", "nome completo", "nomecompleto",
+  "first_name", "primeiro_nome", "first name",
+  "last_name", "sobrenome", "last name", "ultimo_nome",
+  "phone_number", "telefone", "phone",
+  "email", "e-mail"
+]);
 const EXCLUDED_FIELDS = new Set([...BASIC_FIELDS, "reference_code", "ref", "codigo_referencia", "codigo_imovel"]);
+
+function extractLeadName(fields: Record<string, string>): string {
+  const fullNameKeys = [
+    "full_name", "full name", "fullname",
+    "nome_completo", "nome completo", "nomecompleto",
+    "nome", "name",
+  ];
+  for (const key of fullNameKeys) {
+    if (fields[key]?.trim()) return fields[key].trim();
+  }
+  const firstName = fields["first_name"] || fields["primeiro_nome"] || fields["first name"] || "";
+  const lastName = fields["last_name"] || fields["sobrenome"] || fields["last name"] || fields["ultimo_nome"] || "";
+  if (firstName.trim()) {
+    return lastName.trim() ? `${firstName.trim()} ${lastName.trim()}` : firstName.trim();
+  }
+  for (const [key, value] of Object.entries(fields)) {
+    if ((key.includes("nome") || key.includes("name")) && value?.trim() && !key.includes("user")) {
+      return value.trim();
+    }
+  }
+  return "Lead do Facebook";
+}
 
 const handler = async (req: Request): Promise<Response> => {
   const url = new URL(req.url);
@@ -89,7 +118,10 @@ const handler = async (req: Request): Promise<Response> => {
           const fields: Record<string, string> = {};
           for (const f of leadJson.field_data || []) fields[f.name.toLowerCase()] = f.values?.[0] || "";
 
-          const name = fields["full_name"] || fields["nome"] || fields["name"] || "Lead do Facebook";
+          const name = extractLeadName(fields);
+          if (name === "Lead do Facebook") {
+            console.warn("Could not extract lead name. Fields received:", JSON.stringify(Object.keys(fields)));
+          }
           const phone = fields["phone_number"] || fields["telefone"] || fields["phone"] || "";
           const email = fields["email"] || fields["e-mail"] || "";
 
