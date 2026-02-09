@@ -186,8 +186,8 @@ const CalendarPage = () => {
         title: formData.title,
         description: formData.description || null,
         location: formData.location || null,
-        start_time: formData.start_time,
-        end_time: formData.end_time,
+        start_time: formData.start_time + ":00-03:00",
+        end_time: formData.end_time + ":00-03:00",
         lead_id: formData.lead_id || null,
         account_id: accountData,
       };
