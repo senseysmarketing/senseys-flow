@@ -1,24 +1,41 @@
 
-## Centralizar Modal de Detalhes do Evento no Mobile
+
+## Corrigir Horarios da Agenda para Fuso de Sao Paulo
 
 ### Problema
 
-O modal esta fixo na parte inferior da tela porque as classes `bottom-4` e `top-auto` o ancoram la embaixo. Ele precisa ficar centralizado na tela, como um card compacto.
+Quando o usuario seleciona um horario no input `datetime-local` (ex: `09:00`), o valor `"2026-02-09T09:00"` e salvo diretamente no Supabase. Como a coluna `start_time`/`end_time` e `timestamp with time zone`, o Supabase interpreta esse valor sem timezone como UTC. Para um usuario em Sao Paulo (UTC-3), o horario salvo fica 3 horas adiantado.
 
 ### Solucao
 
-Trocar as classes do `DialogContent` do Event Detail Dialog para centralizar o modal no mobile tambem, sobrescrevendo o comportamento fullscreen padrao do `dialog.tsx`.
+Ao salvar, anexar o offset de Sao Paulo (`-03:00`) ao valor do `datetime-local`. Ao carregar para edicao, converter de volta para o formato local.
 
 ### Arquivo a Modificar
 
-**`src/pages/Calendar.tsx`** (linha 750)
+**`src/pages/Calendar.tsx`**
 
-### Mudanca
+### Mudancas
 
-Substituir as classes atuais por:
+1. **No `handleSubmit`** (linha ~189-190): Antes de salvar, adicionar o sufixo `-03:00` aos valores de `start_time` e `end_time`:
 
+```typescript
+const eventData = {
+  title: formData.title,
+  description: formData.description || null,
+  location: formData.location || null,
+  start_time: formData.start_time + ":00-03:00",
+  end_time: formData.end_time + ":00-03:00",
+  lead_id: formData.lead_id || null,
+  account_id: accountData,
+};
 ```
-<DialogContent className="sm:max-w-[400px] !inset-auto !top-[50%] !left-[50%] !translate-x-[-50%] !translate-y-[-50%] !rounded-xl !w-[calc(100%-2rem)] !max-h-[70vh] !p-6 !pt-8">
-```
 
-Isso usa `!important` via Tailwind para sobrescrever os estilos base do `dialog.tsx` que forcam fullscreen no mobile, garantindo que o modal fique centralizado e compacto em qualquer tamanho de tela.
+Isso garante que `"2026-02-09T09:00"` seja salvo como `"2026-02-09T09:00:00-03:00"`, e o Supabase armazena corretamente como `12:00 UTC` internamente, exibindo `09:00` para Sao Paulo.
+
+2. **Na funcao `handleEdit`** (linha ~224-225): Ao carregar o evento para edicao, usar `date-fns-tz` ou formatacao manual para garantir que o horario exibido no input corresponda ao horario de Sao Paulo. Como `date-fns` `format()` ja usa o fuso local do navegador, e os usuarios estao em Sao Paulo, o `format(new Date(event.start_time), "yyyy-MM-dd'T'HH:mm")` ja deve funcionar corretamente neste ponto -- pois o `new Date()` converte o UTC armazenado para o fuso local do navegador.
+
+3. **Na exibicao de horarios** (linhas ~345, 594, 788-789): O `format(new Date(event.start_time), "HH:mm")` ja converte para o fuso local do navegador, entao a exibicao ficara correta automaticamente apos a correcao do salvamento.
+
+### Resumo
+
+A unica mudanca efetiva e no `handleSubmit`: concatenar `:00-03:00` ao final dos valores de `start_time` e `end_time` antes de enviar ao Supabase. Tudo mais (exibicao e edicao) ja funciona corretamente pois usa `new Date()` que respeita o fuso do navegador.
