@@ -18,15 +18,27 @@ const WhatsAppButton = ({
   phone, 
   className,
   variant = 'default',
-  size = 'sm'
+  size = 'sm',
+  leadName,
+  propertyName,
 }: WhatsAppButtonProps) => {
   
   const openWhatsApp = () => {
     const cleanPhone = phone.replace(/\D/g, '');
-    // Adiciona 55 apenas se não começar com 55
     const fullPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
-    const whatsappUrl = `https://wa.me/${fullPhone}`;
-    window.open(whatsappUrl, '_blank');
+    
+    let message = '';
+    if (leadName) {
+      const firstName = leadName.split(' ')[0];
+      if (propertyName) {
+        message = `Olá ${firstName}! Tudo bem? Vi que você demonstrou interesse no imóvel *${propertyName}*. Estou à disposição para te ajudar com mais informações. Como posso te atender? 😊`;
+      } else {
+        message = `Olá ${firstName}! Tudo bem? Vi que você demonstrou interesse em nossos imóveis. Estou à disposição para te ajudar. Como posso te atender? 😊`;
+      }
+    }
+    
+    const textParam = message ? `?text=${encodeURIComponent(message)}` : '';
+    window.open(`https://wa.me/${fullPhone}${textParam}`, '_blank');
   };
 
   if (variant === 'icon') {
