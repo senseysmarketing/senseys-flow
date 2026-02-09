@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Edit2, Trash2, Move, User, Bell, MessageCircle, Users, Webhook, Copy, Check, Building2, Shield } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -57,7 +58,6 @@ interface Property {
 }
 
 type TabValue = 'profile' | 'team' | 'notifications' | 'statuses' | 'whatsapp' | 'followup' | 'distribution' | 'webhook' | 'whatsapp-integration' | 'qualification' | 'metacapi' | 'permissions' | 'whitelabel' | 'import';
-type CategoryValue = 'geral' | 'integracoes' | 'avancado';
 
 interface NavItem {
   value: TabValue;
@@ -66,18 +66,11 @@ interface NavItem {
   permission?: string;
 }
 
-interface NavGroup {
-  title: string;
-  category: CategoryValue;
-  items: NavItem[];
-}
-
 const SettingsPage = () => {
   const { user } = useAuth();
   const { hasPermission } = usePermissions();
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState<TabValue>('profile');
-  const [activeCategory, setActiveCategory] = useState<CategoryValue>('geral');
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [leadStatuses, setLeadStatuses] = useState<LeadStatus[]>([]);
@@ -105,50 +98,18 @@ const SettingsPage = () => {
   const [copiedPropertyId, setCopiedPropertyId] = useState<string | null>(null);
   const [testingWebhook, setTestingWebhook] = useState(false);
 
-  // Navigation structure with categories - Simplified (leads moved to Leads page, Meta events to Reports)
-  const navGroups: NavGroup[] = [
-    {
-      title: "Geral",
-      category: 'geral',
-      items: [
-        { value: 'profile', label: 'Perfil', icon: <User className="h-4 w-4" /> },
-        { value: 'team', label: 'Equipe', icon: <Users className="h-4 w-4" /> },
-        { value: 'notifications', label: 'Notificações', icon: <Bell className="h-4 w-4" /> },
-      ]
-    },
-    {
-      title: "Integrações",
-      category: 'integracoes',
-      items: [
-        { value: 'webhook', label: 'Webhook', icon: <Webhook className="h-4 w-4" /> },
-        { value: 'whatsapp-integration', label: 'WhatsApp', icon: <MessageCircle className="h-4 w-4" /> },
-      ]
-    },
-    {
-      title: "Avançado",
-      category: 'avancado',
-      items: [
-        { value: 'permissions', label: 'Permissões', icon: <Shield className="h-4 w-4" />, permission: 'settings.manage' },
-        { value: 'whitelabel', label: 'White Label', icon: <Building2 className="h-4 w-4" /> },
-      ]
-    }
+  // Flat navigation tabs
+  const navItems: NavItem[] = [
+    { value: 'profile', label: 'Perfil', icon: <User className="h-4 w-4" /> },
+    { value: 'team', label: 'Equipe', icon: <Users className="h-4 w-4" /> },
+    { value: 'notifications', label: 'Notificações', icon: <Bell className="h-4 w-4" /> },
+    { value: 'webhook', label: 'Webhook', icon: <Webhook className="h-4 w-4" /> },
+    { value: 'whatsapp-integration', label: 'WhatsApp', icon: <MessageCircle className="h-4 w-4" /> },
+    { value: 'permissions', label: 'Permissões', icon: <Shield className="h-4 w-4" />, permission: 'settings.manage' },
+    { value: 'whitelabel', label: 'White Label', icon: <Building2 className="h-4 w-4" /> },
   ];
 
-  // Get current category group
-  const currentCategoryGroup = navGroups.find(g => g.category === activeCategory);
-  const currentCategoryItems = currentCategoryGroup?.items.filter(item => 
-    !item.permission || hasPermission(item.permission)
-  ) || [];
-
-  // Handle category change
-  const handleCategoryChange = (category: CategoryValue) => {
-    setActiveCategory(category);
-    const group = navGroups.find(g => g.category === category);
-    const visibleItems = group?.items.filter(item => !item.permission || hasPermission(item.permission)) || [];
-    if (visibleItems.length > 0) {
-      setActiveTab(visibleItems[0].value);
-    }
-  };
+  const visibleNavItems = navItems.filter(item => !item.permission || hasPermission(item.permission));
 
   useEffect(() => {
     if (user) {
@@ -495,93 +456,28 @@ const SettingsPage = () => {
       </div>;
   }
 
-  // Categories for the main tabs
-  const categories: { value: CategoryValue; label: string }[] = [
-    { value: 'geral', label: 'Geral' },
-    { value: 'integracoes', label: 'Integrações' },
-    { value: 'avancado', label: 'Avançado' },
-  ];
-
-  // Render desktop two-level tabs using Tabs component (same pattern as Reports)
-  const renderDesktopTabs = () => (
-    <div className="space-y-4">
-      {/* Category Tabs (Level 1) - Using Tabs component */}
-      <Tabs value={activeCategory} onValueChange={(v) => handleCategoryChange(v as CategoryValue)} className="w-full">
-        <TabsList className="flex-wrap">
-          {categories.map((cat) => {
-            const group = navGroups.find(g => g.category === cat.value);
-            const hasVisibleItems = group?.items.some(item => 
-              !item.permission || hasPermission(item.permission)
-            );
-            if (!hasVisibleItems) return null;
-            
-            return (
-              <TabsTrigger key={cat.value} value={cat.value}>
-                {cat.label}
-              </TabsTrigger>
-            );
-          })}
-        </TabsList>
-      </Tabs>
-
-      {/* Sub-tabs (Level 2) - Using Tabs component */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)} className="w-full">
-        <TabsList className="flex-wrap">
-          {currentCategoryItems.map((item) => (
-            <TabsTrigger key={item.value} value={item.value} className="gap-2">
-              {item.icon}
-              {item.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-    </div>
-  );
-
-  // Render mobile tabs with two-level structure
-  const renderMobileTabs = () => (
-    <div className="space-y-3">
-      {/* Categorias (Nível 1) - Grid compacto */}
-      <Tabs value={activeCategory} onValueChange={(v) => handleCategoryChange(v as CategoryValue)} className="w-full">
-        <TabsList className="w-full grid grid-cols-4 h-auto p-1">
-          {categories.map((cat) => {
-            const group = navGroups.find(g => g.category === cat.value);
-            const hasVisibleItems = group?.items.some(item => 
-              !item.permission || hasPermission(item.permission)
-            );
-            if (!hasVisibleItems) return null;
-            
-            return (
-              <TabsTrigger 
-                key={cat.value} 
-                value={cat.value}
-                className="text-xs px-1.5 py-1.5"
-              >
-                {cat.label === "Gestão de Leads" ? "Leads" : 
-                 cat.label === "Integrações" ? "Integr." : 
-                 cat.label === "Avançado" ? "Avanç." : cat.label}
-              </TabsTrigger>
-            );
-          })}
-        </TabsList>
-      </Tabs>
-
-      {/* Sub-tabs (Nível 2) - Flex wrap */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)} className="w-full">
-        <TabsList className="w-full flex flex-wrap h-auto p-1 gap-1">
-          {currentCategoryItems.map((item) => (
-            <TabsTrigger 
-              key={item.value} 
-              value={item.value} 
-              className="flex-1 min-w-[45%] text-xs gap-1.5 py-1.5"
-            >
-              {item.icon}
-              <span className="truncate">{item.label}</span>
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-    </div>
+  // Render tabs (single level, works for both mobile and desktop)
+  const renderTabs = () => (
+    <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)} className="w-full">
+      <TabsList className={cn(
+        "flex flex-wrap h-auto gap-1 bg-muted p-1",
+        isMobile && "w-full"
+      )}>
+        {visibleNavItems.map((item) => (
+          <TabsTrigger 
+            key={item.value} 
+            value={item.value} 
+            className={cn(
+              "gap-2",
+              isMobile && "text-xs px-2 py-1.5"
+            )}
+          >
+            {item.icon}
+            <span className={isMobile ? "truncate" : ""}>{item.label}</span>
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
   );
 
   // Render content based on active tab
@@ -1107,11 +1003,7 @@ const SettingsPage = () => {
         <p className="text-muted-foreground">Gerencie suas preferências do sistema</p>
       </div>
 
-      {/* Mobile: horizontal scrolling tabs */}
-      {isMobile && renderMobileTabs()}
-
-      {/* Desktop: two-level tabs + content */}
-      {!isMobile && renderDesktopTabs()}
+      {renderTabs()}
 
       {/* Content area */}
       <div className="max-w-4xl">
