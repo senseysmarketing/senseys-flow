@@ -40,6 +40,7 @@ import { LeadKanbanCard } from "@/components/LeadKanbanCard";
 import LeadMobileCard from "@/components/leads/LeadMobileCard";
 import { LeadsSettingsSheet } from "@/components/leads/LeadsSettingsSheet";
 import { LeadsHeroStats } from "@/components/leads/LeadsHeroStats";
+import DisqualifyLeadModal from "@/components/leads/DisqualifyLeadModal";
 
 interface Lead {
   id: string;
@@ -164,6 +165,10 @@ const Leads = () => {
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [leadToDelete, setLeadToDelete] = useState<Pick<Lead, "id" | "name"> | null>(null);
+
+  // Disqualification modal state
+  const [isDisqualifyModalOpen, setIsDisqualifyModalOpen] = useState(false);
+  const [disqualifyPending, setDisqualifyPending] = useState<{ leadId: string; leadName: string; statusId: string } | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -562,7 +567,24 @@ const Leads = () => {
     setIsDetailDialogOpen(true);
   };
 
+  const isPerdidoStatus = (statusId: string) => {
+    const status = statuses.find(s => s.id === statusId);
+    return status?.name === "Perdido";
+  };
+
   const handleStatusChange = async (leadId: string, newStatusId: string) => {
+    // Intercept "Perdido" status to show disqualification modal
+    if (isPerdidoStatus(newStatusId)) {
+      const lead = leads.find(l => l.id === leadId);
+      setDisqualifyPending({ leadId, leadName: lead?.name || "Lead", statusId: newStatusId });
+      setIsDisqualifyModalOpen(true);
+      return;
+    }
+
+    await executeStatusChange(leadId, newStatusId);
+  };
+
+  const executeStatusChange = async (leadId: string, newStatusId: string) => {
     setLoading(true);
 
     try {
@@ -613,7 +635,6 @@ const Leads = () => {
           }
         } catch (capiError) {
           console.error('Error sending Meta CAPI event:', capiError);
-          // Don't fail the status change if CAPI fails
         }
       }
 
@@ -1451,6 +1472,26 @@ const Leads = () => {
         onOpenChange={setIsDetailDialogOpen}
         onEdit={handleEditLead}
       />
+
+      {/* Disqualify Lead Modal */}
+      {disqualifyPending && (
+        <DisqualifyLeadModal
+          open={isDisqualifyModalOpen}
+          onOpenChange={setIsDisqualifyModalOpen}
+          leadId={disqualifyPending.leadId}
+          leadName={disqualifyPending.leadName}
+          statusId={disqualifyPending.statusId}
+          onConfirm={() => {
+            setIsDisqualifyModalOpen(false);
+            setDisqualifyPending(null);
+            fetchData();
+          }}
+          onCancel={() => {
+            setIsDisqualifyModalOpen(false);
+            setDisqualifyPending(null);
+          }}
+        />
+      )}
     </div>
   );
 };
