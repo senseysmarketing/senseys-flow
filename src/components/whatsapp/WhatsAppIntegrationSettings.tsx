@@ -579,11 +579,6 @@ export function WhatsAppIntegrationSettings() {
             </Button>
           )}
 
-          {templates.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-2">
-              Crie mensagens WhatsApp em "Geral" para usar nas automações
-            </p>
-          )}
         </CardContent>
       </Card>
 
