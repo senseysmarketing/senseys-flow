@@ -1,41 +1,40 @@
 
 
-## Corrigir Horarios da Agenda para Fuso de Sao Paulo
+## Corrigir Push Notification - Erro de Tipo no Payload FCM
 
-### Problema
+### Problema Encontrado
 
-Quando o usuario seleciona um horario no input `datetime-local` (ex: `09:00`), o valor `"2026-02-09T09:00"` e salvo diretamente no Supabase. Como a coluna `start_time`/`end_time` e `timestamp with time zone`, o Supabase interpreta esse valor sem timezone como UTC. Para um usuario em Sao Paulo (UTC-3), o horario salvo fica 3 horas adiantado.
+O lead **Jaime Santos** chegou e o push foi disparado para os 2 dispositivos do usuario "Thiago e Belisa", porem **ambos falharam** com o erro:
+
+```
+Invalid value at 'message.data[1].value' (TYPE_STRING), true
+```
+
+A API FCM v1 exige que **todos os valores** dentro do objeto `data` sejam **strings**. No arquivo `notify-new-lead/index.ts`, linha 261, o campo `assigned` e enviado como `boolean`:
+
+```typescript
+data: { lead_id, assigned: isDirectedNotification }
+//                         ^^^^^^^^^^^^^^^^^^^^^^ boolean (true/false)
+```
 
 ### Solucao
 
-Ao salvar, anexar o offset de Sao Paulo (`-03:00`) ao valor do `datetime-local`. Ao carregar para edicao, converter de volta para o formato local.
+Converter o valor para string antes de enviar.
 
 ### Arquivo a Modificar
 
-**`src/pages/Calendar.tsx`**
+**`supabase/functions/notify-new-lead/index.ts`** (linha 261)
 
-### Mudancas
+### Mudanca
 
-1. **No `handleSubmit`** (linha ~189-190): Antes de salvar, adicionar o sufixo `-03:00` aos valores de `start_time` e `end_time`:
-
+Substituir:
 ```typescript
-const eventData = {
-  title: formData.title,
-  description: formData.description || null,
-  location: formData.location || null,
-  start_time: formData.start_time + ":00-03:00",
-  end_time: formData.end_time + ":00-03:00",
-  lead_id: formData.lead_id || null,
-  account_id: accountData,
-};
+data: { lead_id, assigned: isDirectedNotification }
 ```
 
-Isso garante que `"2026-02-09T09:00"` seja salvo como `"2026-02-09T09:00:00-03:00"`, e o Supabase armazena corretamente como `12:00 UTC` internamente, exibindo `09:00` para Sao Paulo.
+Por:
+```typescript
+data: { lead_id, assigned: String(isDirectedNotification) }
+```
 
-2. **Na funcao `handleEdit`** (linha ~224-225): Ao carregar o evento para edicao, usar `date-fns-tz` ou formatacao manual para garantir que o horario exibido no input corresponda ao horario de Sao Paulo. Como `date-fns` `format()` ja usa o fuso local do navegador, e os usuarios estao em Sao Paulo, o `format(new Date(event.start_time), "yyyy-MM-dd'T'HH:mm")` ja deve funcionar corretamente neste ponto -- pois o `new Date()` converte o UTC armazenado para o fuso local do navegador.
-
-3. **Na exibicao de horarios** (linhas ~345, 594, 788-789): O `format(new Date(event.start_time), "HH:mm")` ja converte para o fuso local do navegador, entao a exibicao ficara correta automaticamente apos a correcao do salvamento.
-
-### Resumo
-
-A unica mudanca efetiva e no `handleSubmit`: concatenar `:00-03:00` ao final dos valores de `start_time` e `end_time` antes de enviar ao Supabase. Tudo mais (exibicao e edicao) ja funciona corretamente pois usa `new Date()` que respeita o fuso do navegador.
+Isso garante que o valor enviado seja `"true"` ou `"false"` (string), atendendo a exigencia da API FCM v1. Os 2 dispositivos do usuario passarao a receber as notificacoes corretamente.
