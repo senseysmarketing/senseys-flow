@@ -2,7 +2,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useAccount } from "@/hooks/use-account";
 import { useSupportMode } from "@/hooks/use-support-mode";
 import { useLeadNotifications } from "@/hooks/use-lead-notifications";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import WhatsAppFloat from "@/components/WhatsAppFloat";
@@ -24,6 +24,7 @@ const Layout = ({ children, fullHeight = false }: LayoutProps) => {
   const { isSupportMode, supportAccountName, exitSupportMode } = useSupportMode();
   const location = useLocation();
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
   const [isDark, setIsDark] = useState(true);
   const [isExiting, setIsExiting] = useState(false);
 
@@ -145,6 +146,7 @@ const Layout = ({ children, fullHeight = false }: LayoutProps) => {
                   variant="ghost"
                   size="icon"
                   className="h-10 w-10 sm:h-9 sm:w-9 relative"
+                  onClick={() => navigate('/settings?tab=notifications')}
                 >
                   <Bell className="h-5 w-5 sm:h-4 sm:w-4" />
                   <span className="absolute top-2 right-2 sm:top-1.5 sm:right-1.5 h-2 w-2 rounded-full bg-primary animate-pulse" />

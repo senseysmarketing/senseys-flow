@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,7 +71,13 @@ const SettingsPage = () => {
   const { user } = useAuth();
   const { hasPermission } = usePermissions();
   const isMobile = useIsMobile();
-  const [activeTab, setActiveTab] = useState<TabValue>('profile');
+  const [searchParams] = useSearchParams();
+  const initialTab = useMemo(() => {
+    const param = searchParams.get('tab');
+    const validTabs: TabValue[] = ['profile','team','notifications','statuses','whatsapp','followup','distribution','webhook','whatsapp-integration','qualification','metacapi','permissions','whitelabel','import'];
+    return validTabs.includes(param as TabValue) ? (param as TabValue) : 'profile';
+  }, []);
+  const [activeTab, setActiveTab] = useState<TabValue>(initialTab);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [leadStatuses, setLeadStatuses] = useState<LeadStatus[]>([]);
