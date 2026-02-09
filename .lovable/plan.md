@@ -1,96 +1,63 @@
 
 
-## Plano: Grafico de Motivos de Desqualificacao na Aba Leads
+## Plano: Configuracoes de Leads com Modais Inline
 
-### Visao Geral
+### Problema Atual
 
-Adicionar uma secao na aba "Leads" da pagina de Relatorios com um grafico de barras horizontais mostrando os motivos de desqualificacao mais frequentes no periodo selecionado. Isso permite identificar padroes de perda e qualidade das campanhas.
+Ao clicar em uma opcao no menu de configuracoes de leads (engrenagem), o sistema redireciona para `/settings?tab=X` usando `window.location.href`, tirando o usuario da pagina de Leads. A pagina de Settings nem reconhece mais essas tabs (foram removidas na simplificacao), entao o redirecionamento nao leva a lugar algum.
+
+### Solucao
+
+Transformar o `LeadsSettingsSheet` para que cada opcao abra um **Dialog (modal)** com o componente de configuracao correspondente, mantendo o usuario na pagina de Leads.
+
+### Fluxo
+
+1. Usuario clica na engrenagem -> abre o Sheet com lista de opcoes
+2. Usuario clica em uma opcao (ex: "Qualificacao Automatica") -> fecha o Sheet e abre um Dialog com o conteudo correspondente
+3. Usuario configura e fecha o Dialog -> volta para a pagina de Leads normalmente
 
 ### Arquivo a Modificar
 
-**`src/pages/Reports.tsx`**
+**`src/components/leads/LeadsSettingsSheet.tsx`**
 
 ### Mudancas
 
-#### 1. Novo estado para dados de desqualificacao
+1. **Adicionar estado para modal ativo**: `activeModal` com o tipo `SettingsTab | null`
+2. **Remover o `window.location.href`**: substituir por `setActiveModal(tab)` que fecha o Sheet e abre o Dialog
+3. **Renderizar Dialogs condicionais** com os componentes existentes:
+   - `status` -> Conteudo de gerenciamento de status (reaproveitando a logica de drag-and-drop de status do Settings.tsx, simplificado como um componente dedicado ou inline)
+   - `distribution` -> `<DistributionRulesManager />`
+   - `qualification` -> `<MetaFormScoringManager />`
+   - `followup` -> `<FollowUpSettings />`
+   - `import` -> `<DataImporter />`
+4. **Cada Dialog** tera titulo e descricao adequados, com `max-w-3xl` para componentes que precisam de mais espaco
 
-Adicionar estado `disqualificationStats` com array `{ reason: string; label: string; count: number }[]`.
+### Mapeamento de Modais
 
-#### 2. Nova funcao `fetchDisqualificationStats`
-
-- Consultar `lead_disqualification_reasons` filtrado pelo periodo selecionado (`created_at` entre `dateFrom` e `dateTo`)
-- Extrair o campo `reasons` (jsonb array) de cada registro
-- Contar a frequencia de cada motivo
-- Mapear as keys para labels legíveis usando a constante `DISQUALIFICATION_REASONS` exportada do `DisqualifyLeadModal`
-
-```typescript
-import { DISQUALIFICATION_REASONS } from "@/components/leads/DisqualifyLeadModal";
-
-const fetchDisqualificationStats = async () => {
-  const { from: dateFrom, to: dateTo } = getDateRange();
-  const { data, error } = await supabase
-    .from("lead_disqualification_reasons")
-    .select("reasons")
-    .gte("created_at", parseISO(dateFrom).toISOString())
-    .lte("created_at", parseISO(dateTo).toISOString());
-
-  if (error || !data) return;
-
-  const counts: Record<string, number> = {};
-  data.forEach(row => {
-    const reasons = row.reasons as string[];
-    reasons.forEach(r => { counts[r] = (counts[r] || 0) + 1; });
-  });
-
-  const stats = Object.entries(counts)
-    .map(([key, count]) => ({
-      reason: key,
-      label: DISQUALIFICATION_REASONS.find(r => r.key === key)?.label || key,
-      count,
-    }))
-    .sort((a, b) => b.count - a.count);
-
-  setDisqualificationStats(stats);
-};
-```
-
-#### 3. Chamar no `fetchStats`
-
-Adicionar `fetchDisqualificationStats()` ao `Promise.all` existente junto com as outras funcoes de fetch.
-
-#### 4. Novo Card na aba Leads
-
-Adicionar um `Card` apos o grafico de "Evolucao de Leads" (antes do fechamento da `TabsContent`), com:
-- Titulo: "Motivos de Desqualificacao"
-- Descricao: "Principais motivos de perda de leads no periodo"
-- Grafico de barras horizontais (`BarChart` com `layout="vertical"`)
-- Cor vermelha/destrutiva para as barras
-- Mensagem vazia quando nao ha dados
-
-```text
-+-------------------------------------------+
-| Motivos de Desqualificacao                |
-| Principais motivos de perda no periodo    |
-|                                           |
-|  Nao responde          ████████████  12   |
-|  Sem interesse         ████████     8     |
-|  Dados invalidos       ██████       6     |
-|  Comprou concorrente   ████         4     |
-|  Desistiu              ██           2     |
-+-------------------------------------------+
-```
+| Opcao | Componente | Largura |
+|-------|-----------|---------|
+| Status dos Leads | Conteudo de status inline (drag-and-drop, cores) | max-w-2xl |
+| Regras de Distribuicao | `DistributionRulesManager` | max-w-3xl |
+| Qualificacao Automatica | `MetaFormScoringManager` | max-w-4xl |
+| Follow-up Automatico | `FollowUpSettings` | max-w-2xl |
+| Importar Leads | `DataImporter` | max-w-4xl |
 
 ### Detalhes Tecnicos
 
-- Reutiliza a constante `DISQUALIFICATION_REASONS` ja exportada de `DisqualifyLeadModal.tsx`
-- Respeita o periodo global selecionado (7, 30, 90 dias ou custom)
-- Usa o mesmo padrao de `BarChart` horizontal ja presente na aba (ex: "Leads por Origem")
-- Importa `XCircle` de lucide-react para o icone do titulo do card
+- Para o modal de **Status**, sera necessario extrair a logica de gerenciamento de status do `Settings.tsx` para um componente separado (`LeadStatusManager.tsx`) ou renderizar inline com fetch proprio
+- Os demais componentes (`DistributionRulesManager`, `MetaFormScoringManager`, `FollowUpSettings`, `DataImporter`) ja sao independentes e podem ser usados diretamente dentro do Dialog
+- O Dialog usara `!max-w-3xl` ou `!max-w-4xl` conforme necessidade, com `max-h-[85vh] overflow-y-auto` para scroll interno
+
+### Arquivos
+
+| Acao | Arquivo |
+|------|---------|
+| Modificar | `src/components/leads/LeadsSettingsSheet.tsx` |
+| Criar | `src/components/leads/LeadStatusManager.tsx` (extraido do Settings.tsx) |
 
 ### Resultado
 
-- Visao clara dos motivos mais frequentes de perda de leads
-- Dados filtrados pelo periodo selecionado
-- Permite identificar problemas recorrentes (ex: muitos "dados invalidos" indica problema na campanha)
-- Informacao acionavel para melhorar a qualidade dos leads e das campanhas
+- Configuracoes de leads abrem em modais sem sair da pagina
+- Cada modal mostra o componente de configuracao correspondente
+- Experiencia fluida e contextual conforme a arquitetura do sistema
 
