@@ -19,6 +19,7 @@ import {
   Thermometer,
   Snowflake,
   ExternalLink,
+  XCircle,
   Copy,
   History,
   Building2,
@@ -30,6 +31,7 @@ import OriginBadge from "@/components/OriginBadge";
 import LeadActivityTimeline from "@/components/LeadActivityTimeline";
 import LeadCustomFields from "@/components/LeadCustomFields";
 import LeadFormFields from "@/components/LeadFormFields";
+import { DISQUALIFICATION_REASONS } from "@/components/leads/DisqualifyLeadModal";
 import { toast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -67,6 +69,7 @@ interface LeadDetailModalProps {
 const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalProps) => {
   const [brokerName, setBrokerName] = useState<string | null>(null);
   const [propertyInfo, setPropertyInfo] = useState<{ title: string; city?: string } | null>(null);
+  const [disqualificationData, setDisqualificationData] = useState<{ reasons: string[]; notes: string | null } | null>(null);
 
   useEffect(() => {
     if (lead?.assigned_broker_id) {
@@ -90,7 +93,21 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
     } else {
       setPropertyInfo(null);
     }
-  }, [lead?.assigned_broker_id, lead?.property_id]);
+
+    // Fetch disqualification reasons if status is "Perdido"
+    if (lead?.lead_status?.name === "Perdido") {
+      supabase
+        .from('lead_disqualification_reasons')
+        .select('reasons, notes')
+        .eq('lead_id', lead.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+        .then(({ data }) => setDisqualificationData(data ? { reasons: data.reasons as string[], notes: data.notes } : null));
+    } else {
+      setDisqualificationData(null);
+    }
+  }, [lead?.assigned_broker_id, lead?.property_id, lead?.id, lead?.lead_status?.name]);
 
   if (!lead) return null;
 
@@ -322,6 +339,34 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
                     <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
                     <p className="text-sm leading-relaxed">{lead.observacoes}</p>
                   </div>
+                </div>
+              </div>
+              <Separator />
+            </>
+          )}
+
+          {/* Motivo da Desqualificação */}
+          {disqualificationData && (
+            <>
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-destructive uppercase tracking-wider flex items-center gap-2">
+                  <XCircle className="h-4 w-4" />
+                  Motivo da Desqualificação
+                </h3>
+                <div className="p-4 rounded-lg bg-destructive/5 border border-destructive/20">
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {disqualificationData.reasons.map((reasonKey) => {
+                      const reason = DISQUALIFICATION_REASONS.find(r => r.key === reasonKey);
+                      return (
+                        <Badge key={reasonKey} variant="outline" className="text-destructive border-destructive/30">
+                          {reason?.label || reasonKey}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                  {disqualificationData.notes && (
+                    <p className="text-sm text-muted-foreground mt-2">{disqualificationData.notes}</p>
+                  )}
                 </div>
               </div>
               <Separator />

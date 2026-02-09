@@ -40,6 +40,7 @@ const activityConfig: Record<string, { icon: typeof Clock; color: string; label:
   deal_won: { icon: CheckCircle, color: "text-green-600", label: "Negócio fechado" },
   deal_lost: { icon: XCircle, color: "text-red-500", label: "Negócio perdido" },
   temperature_changed: { icon: Thermometer, color: "text-amber-500", label: "Temperatura alterada" },
+  disqualified: { icon: XCircle, color: "text-red-500", label: "Lead desqualificado" },
 };
 
 const LeadActivityTimeline = ({ leadId }: LeadActivityTimelineProps) => {
