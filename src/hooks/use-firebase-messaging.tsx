@@ -111,39 +111,31 @@ export function FirebaseMessagingProvider({ children }: { children: ReactNode })
     setDiagnosticInfo(prev => ({ ...prev, ...updates, lastUpdated: new Date() }));
   }, []);
 
-  // Save FCM token to database - UPSERT to avoid duplicates
+  // Save FCM token to database - supports multiple devices per user
   const saveTokenToDatabase = useCallback(async (token: string, userId: string, accountId: string) => {
     try {
-      addDiagnosticLog('Desativando tokens antigos...');
+      addDiagnosticLog('Verificando token existente...');
       
-      // First, deactivate ALL old tokens for this user (ensures only 1 active)
-      await supabase
-        .from('push_subscriptions')
-        .update({ is_active: false })
-        .eq('user_id', userId);
-      
-      addDiagnosticLog('Salvando novo token...');
-      
-      // Check if this exact token already exists
+      // Check if this exact token already exists for this user
       const { data: existing } = await supabase
         .from('push_subscriptions')
-        .select('id')
+        .select('id, is_active')
         .eq('endpoint', token)
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
       if (existing) {
-        // Reactivate existing token
-        await supabase
-          .from('push_subscriptions')
-          .update({ 
-            is_active: true, 
-            device_name: navigator.userAgent.substring(0, 50),
-            account_id: accountId
-          })
-          .eq('id', existing.id);
+        // Token already exists - reactivate if inactive
+        if (!existing.is_active) {
+          await supabase.from('push_subscriptions')
+            .update({ is_active: true, device_name: navigator.userAgent.substring(0, 50), account_id: accountId })
+            .eq('id', existing.id);
+          addDiagnosticLog('Token reativado com sucesso');
+        } else {
+          addDiagnosticLog('Token já ativo, nenhuma ação necessária');
+        }
       } else {
-        // Insert new token
+        // New token (new device) - insert WITHOUT deactivating others
         await supabase.from('push_subscriptions').insert({
           user_id: userId,
           account_id: accountId,
@@ -153,8 +145,8 @@ export function FirebaseMessagingProvider({ children }: { children: ReactNode })
           is_active: true,
           device_name: navigator.userAgent.substring(0, 50)
         });
+        addDiagnosticLog('Novo token salvo (multi-dispositivo ativo)');
       }
-      addDiagnosticLog('Token salvo com sucesso (único ativo)');
       return true;
     } catch (error: any) {
       addDiagnosticLog(`ERRO ao salvar: ${error.message}`);
@@ -190,8 +182,9 @@ export function FirebaseMessagingProvider({ children }: { children: ReactNode })
             .select('endpoint, is_active')
             .eq('user_id', user.id)
             .eq('is_active', true)
-            .not('endpoint', 'like', 'https://%') // Exclude old Web Push tokens
-            .single();
+            .not('endpoint', 'like', 'https://%')
+            .limit(1)
+            .maybeSingle();
           
           if (existing && existing.endpoint) {
             addDiagnosticLog('Token FCM válido encontrado, reconectando...');
