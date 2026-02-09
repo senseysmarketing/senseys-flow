@@ -1,57 +1,24 @@
 
-## Editar/Excluir Eventos + Otimizacao Mobile da Agenda
+## Ajustar Modal de Detalhes do Evento no Mobile
 
-### 1. Editar e Excluir Eventos
+### Problema
 
-**No modal de detalhes do evento** (Event Detail Dialog), adicionar dois botoes: "Editar" e "Excluir".
+O modal de detalhes do evento usa o `DialogContent` padrao, que no mobile abre em tela cheia (comportamento definido em `dialog.tsx`). Para um modal com tao pouco conteudo (titulo, horario, local, lead), tela cheia desperdi&ccedil;a muito espaco e fica visualmente ruim, como mostra o screenshot.
 
-- **Editar**: Abre o mesmo dialog de criacao, porem pre-preenchido com os dados do evento selecionado. O `handleSubmit` sera refatorado para detectar se esta editando (tem `editingEventId`) ou criando, e usar `update` ou `insert` conforme o caso.
-- **Excluir**: Exibe um `AlertDialog` de confirmacao antes de deletar. Ao confirmar, executa `supabase.from('events').delete().eq('id', eventId)` e atualiza a lista.
+### Solucao
 
-**Novos states**:
-- `editingEventId: string | null` para controlar modo edicao
-- `isDeleteConfirmOpen: boolean` para o dialog de confirmacao
-
-**Mudancas no handleSubmit**:
-- Se `editingEventId` existe, faz `.update({...}).eq('id', editingEventId)` em vez de `.insert()`
-- O titulo do dialog muda para "Editar Evento" quando em modo edicao
-
-### 2. Otimizacao Mobile
-
-O problema visivel no screenshot: sidebar e grid principal tentam renderizar lado a lado em telas pequenas, causando overflow e conteudo cortado.
-
-**Mudancas de layout**:
-
-- **Container principal**: trocar `h-[calc(100vh-120px)]` por layout responsivo. No mobile, permitir scroll natural com `pb-24` (para nao ser coberto pelo BottomNav).
-- **Sidebar + Grid**: No mobile (`isMobile`), esconder a sidebar completamente e mostrar apenas o mini-calendario inline no topo + lista de eventos do dia selecionado abaixo.
-- **Grid do calendario**: No mobile, esconder o grid mensal grande e mostrar apenas a lista de eventos do dia selecionado, pois o mini-calendario ja faz a navegacao.
-- **Header**: Compactar no mobile -- texto menor, botoes menores, `gap-2` em vez de `gap-4`.
-
-**Estrutura mobile**:
-```
-[Header compacto: Hoje | < > | Mes Ano | + Criar]
-[Mini calendario (largura total)]
-[Lista de eventos do dia selecionado]
-```
-
-**Estrutura desktop** (sem mudancas):
-```
-[Header]
-[Sidebar (mini cal + eventos) | Grid mensal grande]
-```
+Adicionar uma classe customizada ao `DialogContent` do Event Detail Dialog para que, no mobile, ele apareca como um card compacto centralizado ou sheet parcial, em vez de tela cheia.
 
 ### Arquivo a Modificar
 
-**`src/pages/Calendar.tsx`**
+**`src/pages/Calendar.tsx`** (linha 750)
 
-### Resumo das Mudancas
+### Mudanca
 
-1. Importar `useIsMobile`, `AlertDialog` components, `Pencil` e `Trash2` icons
-2. Adicionar states `editingEventId` e `isDeleteConfirmOpen`
-3. Criar funcao `handleEdit(event)` que preenche o form e abre o dialog em modo edicao
-4. Criar funcao `handleDelete(eventId)` que deleta o evento no Supabase
-5. Refatorar `handleSubmit` para suportar update alem de insert
-6. Adicionar botoes Editar/Excluir no modal de detalhes do evento
-7. Adicionar `AlertDialog` de confirmacao de exclusao
-8. Condicionar layout com `isMobile`: mobile mostra mini-cal + lista; desktop mostra sidebar + grid
-9. Aplicar `pb-24` no mobile para o BottomNav
+No `DialogContent` do Event Detail Dialog, sobrescrever os estilos mobile para que o modal fique compacto:
+
+```
+<DialogContent className="sm:max-w-[400px] inset-auto bottom-4 left-4 right-4 top-auto rounded-xl translate-x-0 translate-y-0 max-h-[70vh] sm:left-[50%] sm:top-[50%] sm:bottom-auto sm:right-auto sm:translate-x-[-50%] sm:translate-y-[-50%]">
+```
+
+Isso fara o modal aparecer como um card na parte inferior da tela no mobile, sem ocupar a tela toda, mantendo o comportamento desktop inalterado.
