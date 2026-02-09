@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import ReactDOM from "react-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1209,24 +1210,37 @@ const Leads = () => {
                                 )}
                                 {statusLeads.map((lead, index) => (
                                   <Draggable key={lead.id} draggableId={lead.id} index={index}>
-                                    {(provided, snapshot) => (
-                                      <div
-                                        ref={provided.innerRef}
-                                        {...provided.draggableProps}
-                                        {...provided.dragHandleProps}
-                                      >
-                                        <LeadKanbanCard
-                                          lead={lead}
-                                          onViewDetails={handleViewDetails}
-                                          onEdit={handleEditLead}
-                                          onDelete={(id) => {
-                                            const l = leads.find(x => x.id === id);
-                                            if (l) requestDeleteLead(l);
-                                          }}
-                                          isDragging={snapshot.isDragging}
-                                        />
-                                      </div>
-                                    )}
+                                    {(provided, snapshot) => {
+                                      const draggableStyle = {
+                                        ...provided.draggableProps.style,
+                                        ...(snapshot.isDragging ? { zIndex: 9999 } : {}),
+                                      };
+                                      const cardContent = (
+                                        <div
+                                          ref={provided.innerRef}
+                                          {...provided.draggableProps}
+                                          {...provided.dragHandleProps}
+                                          style={draggableStyle}
+                                        >
+                                          <LeadKanbanCard
+                                            lead={lead}
+                                            onViewDetails={handleViewDetails}
+                                            onEdit={handleEditLead}
+                                            onDelete={(id) => {
+                                              const l = leads.find(x => x.id === id);
+                                              if (l) requestDeleteLead(l);
+                                            }}
+                                            isDragging={snapshot.isDragging}
+                                          />
+                                        </div>
+                                      );
+                                      // Portal the card to document.body during drag to escape
+                                      // backdrop-filter containers that break position calculations
+                                      if (snapshot.isDragging) {
+                                        return ReactDOM.createPortal(cardContent, document.body);
+                                      }
+                                      return cardContent;
+                                    }}
                                   </Draggable>
                                 ))}
                                 {provided.placeholder}
