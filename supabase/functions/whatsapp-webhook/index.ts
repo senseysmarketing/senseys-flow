@@ -142,8 +142,6 @@ Deno.serve(async (req) => {
       case 'messages.upsert': {
         console.log('[whatsapp-webhook] Message event:', data)
         
-        // Handle incoming messages if needed
-        // For now, we just log them
         const messages = data?.messages || []
         for (const msg of messages) {
           if (msg.key?.fromMe) {
@@ -157,6 +155,94 @@ Deno.serve(async (req) => {
                                    msg.status === 3 ? 'read' : 'sent'
                 })
                 .eq('message_id', messageId)
+            }
+          } else {
+            // Incoming message from lead - check if we should move to "Em Contato"
+            const remoteJid = msg.key?.remoteJid
+            if (!remoteJid || remoteJid.endsWith('@g.us')) {
+              // Skip group messages
+              continue
+            }
+
+            const senderPhone = remoteJid.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '')
+            if (!senderPhone || senderPhone.length < 8) continue
+
+            // Use last 8-9 digits for flexible matching
+            const phoneSuffix = senderPhone.slice(-9)
+            console.log(`[whatsapp-webhook] Incoming message from ${senderPhone}, suffix: ${phoneSuffix}`)
+
+            // Find lead by phone in this account
+            const { data: matchedLeads } = await supabase
+              .from('leads')
+              .select('id, status_id, name')
+              .eq('account_id', session.account_id)
+              .ilike('phone', `%${phoneSuffix}%`)
+              .order('created_at', { ascending: false })
+              .limit(5)
+
+            if (!matchedLeads || matchedLeads.length === 0) {
+              console.log(`[whatsapp-webhook] No lead found for phone suffix ${phoneSuffix}`)
+              continue
+            }
+
+            // Get "Novo Lead" status for this account
+            const { data: novoLeadStatus } = await supabase
+              .from('lead_status')
+              .select('id')
+              .eq('account_id', session.account_id)
+              .eq('name', 'Novo Lead')
+              .maybeSingle()
+
+            if (!novoLeadStatus) {
+              console.log('[whatsapp-webhook] "Novo Lead" status not found for account')
+              continue
+            }
+
+            // Get "Em Contato" status for this account
+            const { data: emContatoStatus } = await supabase
+              .from('lead_status')
+              .select('id')
+              .eq('account_id', session.account_id)
+              .eq('name', 'Em Contato')
+              .maybeSingle()
+
+            if (!emContatoStatus) {
+              console.log('[whatsapp-webhook] "Em Contato" status not found for account')
+              continue
+            }
+
+            // Only move leads that are currently "Novo Lead"
+            const leadsToMove = matchedLeads.filter(l => l.status_id === novoLeadStatus.id)
+
+            if (leadsToMove.length === 0) {
+              console.log(`[whatsapp-webhook] Lead(s) found but none in "Novo Lead" status - ignoring`)
+              continue
+            }
+
+            for (const lead of leadsToMove) {
+              const { error: updateError } = await supabase
+                .from('leads')
+                .update({ status_id: emContatoStatus.id })
+                .eq('id', lead.id)
+
+              if (updateError) {
+                console.error(`[whatsapp-webhook] Error updating lead ${lead.id}:`, updateError)
+                continue
+              }
+
+              // Log activity
+              await supabase
+                .from('lead_activities')
+                .insert({
+                  lead_id: lead.id,
+                  account_id: session.account_id,
+                  activity_type: 'status_changed',
+                  description: 'Lead respondeu via WhatsApp - movido automaticamente para Em Contato',
+                  old_value: 'Novo Lead',
+                  new_value: 'Em Contato',
+                })
+
+              console.log(`[whatsapp-webhook] Lead "${lead.name}" (${lead.id}) moved from "Novo Lead" to "Em Contato"`)
             }
           }
         }
