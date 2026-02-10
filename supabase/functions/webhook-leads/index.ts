@@ -312,6 +312,34 @@ serve(async (req) => {
       }
     }
 
+    // Duplicate detection: check for existing lead with same phone or email
+    let isDuplicate = false;
+    let duplicateOfLeadId: string | null = null;
+
+    const phoneSuffix = body.phone.replace(/\D/g, '').slice(-9);
+    if (phoneSuffix.length >= 9) {
+      const { data: existingLeads } = await supabase
+        .from('leads')
+        .select('id, phone, email, created_at')
+        .eq('account_id', accountId)
+        .order('created_at', { ascending: false })
+        .limit(500);
+
+      if (existingLeads && existingLeads.length > 0) {
+        const match = existingLeads.find((l: any) => {
+          const existingSuffix = l.phone.replace(/\D/g, '').slice(-9);
+          if (existingSuffix.length >= 9 && existingSuffix === phoneSuffix) return true;
+          if (body.email && l.email && body.email.toLowerCase() === l.email.toLowerCase()) return true;
+          return false;
+        });
+        if (match) {
+          isDuplicate = true;
+          duplicateOfLeadId = match.id;
+          console.log(`Duplicate detected: existing lead ${match.id}`);
+        }
+      }
+    }
+
     // Prepare lead data
     const leadData = {
       account_id: accountId,
@@ -327,7 +355,9 @@ serve(async (req) => {
       status_id: defaultStatus?.id || null,
       property_id: validPropertyId,
       temperature: calculatedTemperature,
-      meta_form_id: formId || null, // Store form_id for reference
+      meta_form_id: formId || null,
+      is_duplicate: isDuplicate,
+      duplicate_of_lead_id: duplicateOfLeadId,
     };
 
     console.log('Inserting lead:', leadData);

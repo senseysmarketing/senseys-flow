@@ -1,4 +1,4 @@
-import { Phone, Mail, MoreVertical, Eye, Edit, Trash, Building2 } from "lucide-react";
+import { Phone, Mail, MoreVertical, Eye, Edit, Trash, Building2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AvatarFallbackColored } from "@/components/ui/avatar-fallback-colored";
@@ -17,6 +17,7 @@ interface Lead {
   created_at: string;
   temperature?: string | null;
   property_id?: string | null;
+  is_duplicate?: boolean;
   properties?: {
     id: string;
     title: string;
@@ -157,6 +158,12 @@ export function LeadKanbanCard({
 
       {/* Tags Row - Simplified */}
       <div className="flex items-center gap-2 flex-wrap mb-3">
+        {lead.is_duplicate && (
+          <span className="inline-flex items-center gap-1 text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full border border-amber-500/20">
+            <AlertTriangle className="h-3 w-3" />
+            Recorrente
+          </span>
+        )}
         <OriginBadge origem={lead.origem} showLabel={false} size="sm" />
         {lead.properties && (
           <span className="inline-flex items-center gap-1 text-xs bg-muted/50 px-2 py-0.5 rounded-full text-muted-foreground truncate max-w-[140px]">

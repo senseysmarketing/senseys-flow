@@ -6,7 +6,6 @@ import { Separator } from "@/components/ui/separator";
 import { 
   Phone, 
   Mail, 
-  MessageCircle, 
   Edit, 
   Calendar,
   Clock,
@@ -23,7 +22,8 @@ import {
   Copy,
   History,
   Building2,
-  UserCheck
+  UserCheck,
+  AlertTriangle
 } from "lucide-react";
 import WhatsAppButton from "@/components/WhatsAppButton";
 import TemperatureBadge from "@/components/TemperatureBadge";
@@ -53,6 +53,8 @@ interface Lead {
   temperature?: string | null;
   assigned_broker_id?: string | null;
   property_id?: string | null;
+  is_duplicate?: boolean;
+  duplicate_of_lead_id?: string | null;
   lead_status?: {
     name: string;
     color: string;
@@ -66,10 +68,25 @@ interface LeadDetailModalProps {
   onEdit: (lead: Lead) => void;
 }
 
+interface DuplicateLeadInfo {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string | null;
+  status_name?: string;
+  status_color?: string;
+  temperature?: string | null;
+  created_at: string;
+  updated_at: string;
+  broker_name?: string | null;
+  observacoes?: string | null;
+}
+
 const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalProps) => {
   const [brokerName, setBrokerName] = useState<string | null>(null);
   const [propertyInfo, setPropertyInfo] = useState<{ title: string; city?: string } | null>(null);
   const [disqualificationData, setDisqualificationData] = useState<{ reasons: string[]; notes: string | null } | null>(null);
+  const [duplicateLeadInfo, setDuplicateLeadInfo] = useState<DuplicateLeadInfo | null>(null);
 
   useEffect(() => {
     if (lead?.assigned_broker_id) {
@@ -107,7 +124,44 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
     } else {
       setDisqualificationData(null);
     }
-  }, [lead?.assigned_broker_id, lead?.property_id, lead?.id, lead?.lead_status?.name]);
+
+    // Fetch duplicate lead info
+    if (lead?.is_duplicate && lead?.duplicate_of_lead_id) {
+      (async () => {
+        const { data: dupLead } = await supabase
+          .from('leads')
+          .select('id, name, phone, email, temperature, created_at, updated_at, observacoes, assigned_broker_id, lead_status(name, color)')
+          .eq('id', lead.duplicate_of_lead_id!)
+          .single();
+        
+        if (dupLead) {
+          let dupBrokerName: string | null = null;
+          if (dupLead.assigned_broker_id) {
+            const { data: bp } = await supabase.from('profiles').select('full_name').eq('user_id', dupLead.assigned_broker_id).single();
+            dupBrokerName = bp?.full_name || null;
+          }
+          const ls = dupLead.lead_status as any;
+          setDuplicateLeadInfo({
+            id: dupLead.id,
+            name: dupLead.name,
+            phone: dupLead.phone,
+            email: dupLead.email,
+            status_name: ls?.name,
+            status_color: ls?.color,
+            temperature: dupLead.temperature,
+            created_at: dupLead.created_at,
+            updated_at: dupLead.updated_at,
+            broker_name: dupBrokerName,
+            observacoes: dupLead.observacoes,
+          });
+        } else {
+          setDuplicateLeadInfo(null);
+        }
+      })();
+    } else {
+      setDuplicateLeadInfo(null);
+    }
+  }, [lead?.assigned_broker_id, lead?.property_id, lead?.id, lead?.lead_status?.name, lead?.is_duplicate, lead?.duplicate_of_lead_id]);
 
   if (!lead) return null;
 
@@ -195,6 +249,63 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
 
         {/* Conteúdo principal */}
         <div className="p-6 space-y-6 overflow-y-auto flex-1">
+          {/* Alerta de Lead Recorrente */}
+          {lead.is_duplicate && duplicateLeadInfo && (
+            <>
+              <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                <div className="flex items-center gap-2 mb-3">
+                  <AlertTriangle className="h-5 w-5 text-amber-500" />
+                  <h3 className="font-semibold text-amber-600 dark:text-amber-400">Lead Recorrente</h3>
+                </div>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Este lead já entrou anteriormente no sistema. Veja os dados do registro anterior:
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-2.5 rounded-md bg-background/60">
+                    <p className="text-xs text-muted-foreground">Nome</p>
+                    <p className="text-sm font-medium">{duplicateLeadInfo.name}</p>
+                  </div>
+                  <div className="p-2.5 rounded-md bg-background/60">
+                    <p className="text-xs text-muted-foreground">Status anterior</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      {duplicateLeadInfo.status_color && (
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: duplicateLeadInfo.status_color }} />
+                      )}
+                      <p className="text-sm font-medium">{duplicateLeadInfo.status_name || '-'}</p>
+                    </div>
+                  </div>
+                  <div className="p-2.5 rounded-md bg-background/60">
+                    <p className="text-xs text-muted-foreground">Temperatura</p>
+                    <TemperatureBadge temperature={duplicateLeadInfo.temperature} size="sm" />
+                  </div>
+                  <div className="p-2.5 rounded-md bg-background/60">
+                    <p className="text-xs text-muted-foreground">Corretor</p>
+                    <p className="text-sm font-medium">{duplicateLeadInfo.broker_name || 'Não atribuído'}</p>
+                  </div>
+                  <div className="p-2.5 rounded-md bg-background/60">
+                    <p className="text-xs text-muted-foreground">Entrada anterior</p>
+                    <p className="text-sm font-medium">
+                      {new Date(duplicateLeadInfo.created_at).toLocaleDateString('pt-BR')}
+                    </p>
+                  </div>
+                  <div className="p-2.5 rounded-md bg-background/60">
+                    <p className="text-xs text-muted-foreground">Última atualização</p>
+                    <p className="text-sm font-medium">
+                      {new Date(duplicateLeadInfo.updated_at).toLocaleDateString('pt-BR')}
+                    </p>
+                  </div>
+                </div>
+                {duplicateLeadInfo.observacoes && (
+                  <div className="mt-3 p-2.5 rounded-md bg-background/60">
+                    <p className="text-xs text-muted-foreground mb-1">Observações anteriores</p>
+                    <p className="text-sm">{duplicateLeadInfo.observacoes}</p>
+                  </div>
+                )}
+              </div>
+              <Separator />
+            </>
+          )}
+
           {/* Informações de Contato */}
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">

@@ -294,12 +294,40 @@ const Leads = () => {
       // Use the first status if no status selected
       const statusId = newLead.status_id || (statuses.length > 0 ? statuses[0].id : null);
 
+      // Duplicate detection: check for existing lead with same phone or email
+      let isDuplicate = false;
+      let duplicateOfLeadId: string | null = null;
+
+      const phoneSuffix = newLead.phone.replace(/\D/g, '').slice(-9);
+      if (phoneSuffix.length >= 9) {
+        const { data: existingLeads } = await supabase
+          .from('leads')
+          .select('id, phone, email, created_at')
+          .eq('account_id', profile.account_id)
+          .order('created_at', { ascending: false });
+
+        if (existingLeads && existingLeads.length > 0) {
+          const match = existingLeads.find(l => {
+            const existingSuffix = l.phone.replace(/\D/g, '').slice(-9);
+            if (existingSuffix.length >= 9 && existingSuffix === phoneSuffix) return true;
+            if (newLead.email && l.email && newLead.email.toLowerCase() === l.email.toLowerCase()) return true;
+            return false;
+          });
+          if (match) {
+            isDuplicate = true;
+            duplicateOfLeadId = match.id;
+          }
+        }
+      }
+
       const { data: insertedLead, error } = await supabase
         .from('leads')
         .insert([{
           ...newLead,
           status_id: statusId,
-          account_id: profile.account_id
+          account_id: profile.account_id,
+          is_duplicate: isDuplicate,
+          duplicate_of_lead_id: duplicateOfLeadId,
         }])
         .select('id')
         .single();
