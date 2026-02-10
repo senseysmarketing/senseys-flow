@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { MessageCircle, Wifi, WifiOff, QrCode, RefreshCw, Loader2, Clock, Zap, AlertCircle, Settings2 } from 'lucide-react';
+import { MessageCircle, Wifi, WifiOff, QrCode, RefreshCw, Loader2, Clock, Zap, AlertCircle, Settings2, Plus, Trash2, RotateCcw } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
@@ -45,6 +45,26 @@ interface AutomationRule {
   trigger_sources?: TriggerSources | null;
 }
 
+interface FollowUpStep {
+  id: string;
+  account_id: string;
+  name: string;
+  template_id: string;
+  delay_minutes: number;
+  position: number;
+  is_active: boolean;
+}
+
+const DELAY_OPTIONS = [
+  { value: 60, label: '1 hora' },
+  { value: 120, label: '2 horas' },
+  { value: 360, label: '6 horas' },
+  { value: 720, label: '12 horas' },
+  { value: 1440, label: '24 horas' },
+  { value: 2880, label: '48 horas' },
+  { value: 4320, label: '72 horas' },
+];
+
 export function WhatsAppIntegrationSettings() {
   const { user } = useAuth();
   const [session, setSession] = useState<WhatsAppSession | null>(null);
@@ -58,6 +78,7 @@ export function WhatsAppIntegrationSettings() {
   const [pollingActive, setPollingActive] = useState(false);
   const [showTemplatesModal, setShowTemplatesModal] = useState(false);
   const [pendingAutoCreate, setPendingAutoCreate] = useState(false);
+  const [followUpSteps, setFollowUpSteps] = useState<FollowUpStep[]>([]);
 
   const fetchSession = useCallback(async () => {
     if (!user) return;
@@ -112,24 +133,32 @@ export function WhatsAppIntegrationSettings() {
       .select('*')
       .order('created_at');
     
-    // Cast data to our interface
     setAutomationRules((data || []).map(rule => ({
       ...rule,
       trigger_sources: rule.trigger_sources as TriggerSources | null
     })));
   }, []);
 
+  const fetchFollowUpSteps = useCallback(async () => {
+    const { data } = await supabase
+      .from('whatsapp_followup_steps' as any)
+      .select('*')
+      .order('position');
+    
+    setFollowUpSteps((data || []) as unknown as FollowUpStep[]);
+  }, []);
+
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      await Promise.all([fetchSession(), fetchTemplates(), fetchAutomationRules()]);
+      await Promise.all([fetchSession(), fetchTemplates(), fetchAutomationRules(), fetchFollowUpSteps()]);
       setLoading(false);
     };
 
     if (user) {
       loadData();
     }
-  }, [user, fetchSession, fetchTemplates, fetchAutomationRules]);
+  }, [user, fetchSession, fetchTemplates, fetchAutomationRules, fetchFollowUpSteps]);
 
   // Poll for status updates when connecting
   useEffect(() => {
@@ -575,6 +604,126 @@ export function WhatsAppIntegrationSettings() {
               <Zap className="h-4 w-4 mr-2" />
               Configurar Saudação Automática
             </Button>
+          )}
+
+          {/* Follow-up Section - only show when greeting rule exists */}
+          {newLeadRule && newLeadRule.is_active && (
+            <div className="p-4 border rounded-lg space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <RotateCcw className="h-5 w-5 text-primary" />
+                  <div>
+                    <Label className="font-medium">Follow-up Automático</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Enviar mensagens de acompanhamento para leads que não responderam
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {followUpSteps.map((step) => (
+                  <div key={step.id} className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                    <Switch
+                      checked={step.is_active}
+                      onCheckedChange={async (checked) => {
+                        await supabase
+                          .from('whatsapp_followup_steps' as any)
+                          .update({ is_active: checked } as any)
+                          .eq('id', step.id);
+                        fetchFollowUpSteps();
+                      }}
+                      disabled={!isConnected}
+                    />
+                    <div className="flex-1 grid gap-2 sm:grid-cols-2">
+                      <Select
+                        value={String(step.delay_minutes)}
+                        onValueChange={async (value) => {
+                          await supabase
+                            .from('whatsapp_followup_steps' as any)
+                            .update({ delay_minutes: parseInt(value) } as any)
+                            .eq('id', step.id);
+                          fetchFollowUpSteps();
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DELAY_OPTIONS.map(opt => (
+                            <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select
+                        value={step.template_id}
+                        onValueChange={async (value) => {
+                          await supabase
+                            .from('whatsapp_followup_steps' as any)
+                            .update({ template_id: value } as any)
+                            .eq('id', step.id);
+                          fetchFollowUpSteps();
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Template" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {templates.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive hover:text-destructive"
+                      onClick={async () => {
+                        await supabase
+                          .from('whatsapp_followup_steps' as any)
+                          .delete()
+                          .eq('id', step.id);
+                        fetchFollowUpSteps();
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  disabled={templates.length === 0}
+                  onClick={async () => {
+                    if (templates.length === 0) {
+                      setShowTemplatesModal(true);
+                      return;
+                    }
+                    const { data: accountData } = await supabase.rpc('get_user_account_id');
+                    await supabase.from('whatsapp_followup_steps' as any).insert({
+                      account_id: accountData,
+                      name: `Follow-up ${followUpSteps.length + 1}`,
+                      template_id: templates[0].id,
+                      delay_minutes: followUpSteps.length === 0 ? 60 : followUpSteps.length === 1 ? 1440 : 4320,
+                      position: followUpSteps.length,
+                      is_active: true,
+                    } as any);
+                    fetchFollowUpSteps();
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar Etapa de Follow-up
+                </Button>
+
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  Follow-ups são cancelados automaticamente quando o lead responde
+                </p>
+              </div>
+            </div>
           )}
 
         </CardContent>

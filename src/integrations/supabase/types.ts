@@ -1528,6 +1528,54 @@ export type Database = {
           },
         ]
       }
+      whatsapp_followup_steps: {
+        Row: {
+          account_id: string
+          created_at: string
+          delay_minutes: number
+          id: string
+          is_active: boolean
+          name: string
+          position: number
+          template_id: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          delay_minutes?: number
+          id?: string
+          is_active?: boolean
+          name: string
+          position?: number
+          template_id: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          delay_minutes?: number
+          id?: string
+          is_active?: boolean
+          name?: string
+          position?: number
+          template_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_followup_steps_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_followup_steps_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_message_log: {
         Row: {
           account_id: string | null
@@ -1595,6 +1643,7 @@ export type Database = {
           automation_rule_id: string | null
           created_at: string | null
           error_message: string | null
+          followup_step_id: string | null
           id: string
           lead_id: string
           message: string
@@ -1610,6 +1659,7 @@ export type Database = {
           automation_rule_id?: string | null
           created_at?: string | null
           error_message?: string | null
+          followup_step_id?: string | null
           id?: string
           lead_id: string
           message: string
@@ -1625,6 +1675,7 @@ export type Database = {
           automation_rule_id?: string | null
           created_at?: string | null
           error_message?: string | null
+          followup_step_id?: string | null
           id?: string
           lead_id?: string
           message?: string
@@ -1648,6 +1699,13 @@ export type Database = {
             columns: ["automation_rule_id"]
             isOneToOne: false
             referencedRelation: "whatsapp_automation_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_message_queue_followup_step_id_fkey"
+            columns: ["followup_step_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_followup_steps"
             referencedColumns: ["id"]
           },
           {
