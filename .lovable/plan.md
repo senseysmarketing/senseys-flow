@@ -1,33 +1,121 @@
 
 
-## Corrigir Botao "Configurar Saudacao Automatica" Desabilitado
+## Automacao de Follow-up para Leads sem Resposta
 
-### Causa Raiz
+### Conceito
 
-O usuario Francivaldo Lima tem **0 templates de WhatsApp** criados. O botao "Configurar Saudacao Automatica" fica desabilitado quando `templates.length === 0` (linha 574 do componente). O botao aparece cinza/inativo sem nenhuma explicacao visual do motivo.
+Adicionar uma cadeia de follow-ups automaticos abaixo da saudacao existente. O sistema detecta leads que receberam a saudacao mas **nao responderam** dentro de um periodo configuravel, e envia mensagens de acompanhamento em etapas progressivas.
 
-### Solucao
+### Como Vai Funcionar
 
-Modificar o comportamento para que, ao clicar no botao sem templates, o sistema abra automaticamente o modal de templates para o usuario criar sua primeira mensagem. Apos criar o template, a saudacao automatica sera configurada.
+1. O usuario configura **etapas de follow-up** (ex: 1h, 24h, 72h apos a saudacao)
+2. Cada etapa tem sua propria **mensagem/template** e **delay**
+3. Quando a saudacao e enviada, o sistema agenda os follow-ups na fila (`whatsapp_message_queue`)
+4. Se o lead **responder** (detectado pelo webhook), todos os follow-ups pendentes sao **cancelados automaticamente**
+5. Se o lead **mudar de status** (ex: saiu de "Novo Lead"), os follow-ups tambem sao cancelados
 
-### Mudancas
+### Mudancas no Banco de Dados
 
-**Arquivo: `src/components/whatsapp/WhatsAppIntegrationSettings.tsx`**
+**Nova tabela: `whatsapp_followup_steps`**
 
-1. **Remover o `disabled`** do botao "Configurar Saudacao Automatica" -- ele nunca deve ficar desabilitado
-2. **Alterar a funcao `createNewLeadRule`**: quando nao houver templates, abrir o modal de templates (`setShowTemplatesModal(true)`) ao inves de apenas mostrar um toast de erro
-3. **Adicionar texto explicativo** abaixo do botao quando nao houver templates, indicando que e necessario criar uma mensagem primeiro
-4. **Apos fechar o modal de templates**, recarregar a lista de templates automaticamente (ja ocorre no `onClose` do modal)
+| Coluna | Tipo | Descricao |
+|--------|------|-----------|
+| id | uuid | PK |
+| account_id | uuid | FK para accounts |
+| name | text | Nome da etapa (ex: "Follow-up 1h") |
+| template_id | uuid | FK para whatsapp_templates |
+| delay_minutes | integer | Tempo apos a saudacao (em minutos) |
+| position | integer | Ordem da etapa (1, 2, 3...) |
+| is_active | boolean | Ativar/desativar etapa individual |
+| created_at | timestamptz | Default now() |
 
-### Comportamento Esperado
+**Coluna nova na `whatsapp_message_queue`:**
 
-- Usuario clica em "Configurar Saudacao Automatica"
-- Se nao tem templates: abre o modal para criar uma mensagem
-- Apos criar o template e fechar o modal: o sistema cria a regra de automacao automaticamente
-- Se ja tem templates: cria a regra normalmente (comportamento atual)
+| Coluna | Tipo | Descricao |
+|--------|------|-----------|
+| followup_step_id | uuid (nullable) | FK para whatsapp_followup_steps -- identifica que esta mensagem e um follow-up |
+
+Isso permite diferenciar mensagens de saudacao de follow-ups e cancelar follow-ups pendentes quando o lead responde.
+
+### Logica de Cancelamento (Chave do Sistema)
+
+No **webhook de mensagens recebidas** (`whatsapp-webhook/index.ts`), quando uma resposta e detectada:
+
+```text
+Lead respondeu
+    |
+    v
+Buscar mensagens pendentes na fila com:
+  - lead_id = lead que respondeu
+  - status = 'pending'
+  - followup_step_id IS NOT NULL (so follow-ups)
+    |
+    v
+Atualizar status para 'cancelled'
+```
+
+### Agendamento dos Follow-ups
+
+No momento em que a **saudacao e enviada com sucesso** (no `process-whatsapp-queue`), o sistema:
+
+1. Verifica se a mensagem enviada e uma saudacao (automation_rule com trigger_type = 'new_lead')
+2. Busca as etapas de follow-up ativas da conta
+3. Para cada etapa, insere uma mensagem na fila com `scheduled_for = agora + delay_minutes` e `followup_step_id` preenchido
+
+### Interface (no WhatsAppIntegrationSettings)
+
+Logo abaixo da secao de "Saudacao Automatica", uma nova secao:
+
+**"Follow-up Automatico"**
+- Switch para ativar/desativar o sistema de follow-ups
+- Lista de etapas configuradas, cada uma com:
+  - Tempo de espera (select: 1h, 2h, 6h, 12h, 24h, 48h, 72h)
+  - Template da mensagem (select dos templates existentes)
+  - Switch individual de ativar/desativar
+  - Botao de remover etapa
+- Botao "Adicionar Etapa" para criar novas etapas
+- Texto informativo: "Follow-ups sao cancelados automaticamente quando o lead responde"
+
+### Arquivos a Modificar
+
+1. **Nova migracao SQL** - criar tabela `whatsapp_followup_steps` + adicionar coluna `followup_step_id` na `whatsapp_message_queue`
+2. **`src/components/whatsapp/WhatsAppIntegrationSettings.tsx`** - nova secao de UI para configurar etapas de follow-up
+3. **`supabase/functions/process-whatsapp-queue/index.ts`** - apos enviar saudacao com sucesso, agendar follow-ups
+4. **`supabase/functions/whatsapp-webhook/index.ts`** - ao receber resposta, cancelar follow-ups pendentes
+5. **`src/integrations/supabase/types.ts`** - adicionar tipos da nova tabela
+
+### Fluxo Completo
+
+```text
+Lead entra -> Saudacao enviada
+    |
+    v
+Agendar Follow-ups: [1h, 24h, 72h]
+    |
+    v
+Lead respondeu? ----Sim----> Cancelar follow-ups pendentes
+    |                          + Mover para "Em Contato"
+    Nao
+    |
+    v
+1h: Enviar Follow-up 1
+    |
+    v
+Lead respondeu? ----Sim----> Cancelar restantes
+    |
+    Nao
+    |
+    v
+24h: Enviar Follow-up 2
+    |
+    v
+72h: Enviar Follow-up 3 (ultimo)
+```
 
 ### Detalhes Tecnicos
 
-- Remover `disabled={templates.length === 0}` da linha 574
-- Na funcao `createNewLeadRule` (linha 266), substituir o toast de erro por `setShowTemplatesModal(true)` e adicionar um estado `pendingAutoCreate` para saber que ao fechar o modal com templates disponiveis, deve-se criar a regra automaticamente
-- Adicionar um `useEffect` ou callback no `onClose` do modal de templates para verificar se `pendingAutoCreate` esta ativo e se templates foram criados
+- Os follow-ups usam a mesma infraestrutura de fila (`whatsapp_message_queue`) e processador (`process-whatsapp-queue`) que ja existe
+- A diferenciacao e feita pela coluna `followup_step_id` -- se preenchida, e follow-up; se null, e saudacao ou envio manual
+- O cancelamento no webhook e uma unica query UPDATE que marca como 'cancelled' todas as mensagens pendentes com followup_step_id para aquele lead
+- Nao e necessario criar um novo cron job -- o processador existente ja lida com mensagens agendadas para o futuro
+
