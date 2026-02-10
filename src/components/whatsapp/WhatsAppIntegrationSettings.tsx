@@ -159,7 +159,7 @@ export function WhatsAppIntegrationSettings() {
     if (user) {
       loadData();
     }
-  }, [user, fetchSession, fetchTemplates, fetchAutomationRules]);
+  }, [user, fetchSession, fetchTemplates, fetchAutomationRules, fetchFollowUpSteps]);
 
   // Poll for status updates when connecting
   useEffect(() => {
