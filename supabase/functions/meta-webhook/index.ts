@@ -169,11 +169,29 @@ const handler = async (req: Request): Promise<Response> => {
             statusId = def?.id;
           }
 
+          // Duplicate detection
+          let isDuplicate = false;
+          let duplicateOfLeadId: string | null = null;
+          const phoneSuffix = phone.replace(/\D/g, "").slice(-9);
+          if (phoneSuffix.length >= 9) {
+            const { data: existingLeads } = await supabase.from("leads").select("id, phone, email, created_at").eq("account_id", cfg.account_id).order("created_at", { ascending: false }).limit(500);
+            if (existingLeads && existingLeads.length > 0) {
+              const match = existingLeads.find((l: any) => {
+                const es = l.phone.replace(/\D/g, "").slice(-9);
+                if (es.length >= 9 && es === phoneSuffix) return true;
+                if (email && l.email && email.toLowerCase() === l.email.toLowerCase()) return true;
+                return false;
+              });
+              if (match) { isDuplicate = true; duplicateOfLeadId = match.id; console.log(`Duplicate detected: ${match.id}`); }
+            }
+          }
+
           const { data: newLead, error: insertErr } = await supabase.from("leads").insert({
             account_id: cfg.account_id, name, phone, email: email || null, origem: isIg ? "Instagram" : "Facebook",
             campanha: campName || null, conjunto: adsetName || null, anuncio: adName || null, status_id: statusId,
             property_id: propId, meta_lead_id: leadgen_id, meta_form_id: form_id, meta_ad_id: ad_id,
             meta_campaign_id: campId, meta_ad_name: adName, meta_campaign_name: campName, temperature: temp,
+            is_duplicate: isDuplicate, duplicate_of_lead_id: duplicateOfLeadId,
           }).select("id").single();
 
           if (insertErr || !newLead) continue;

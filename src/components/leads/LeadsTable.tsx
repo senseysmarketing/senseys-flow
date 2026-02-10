@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Table,
   TableBody,
@@ -24,6 +23,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  AlertTriangle,
 } from "lucide-react";
 import TemperatureBadge from "@/components/TemperatureBadge";
 import OriginBadge from "@/components/OriginBadge";
@@ -49,6 +49,7 @@ interface Lead {
   temperature?: string | null;
   assigned_broker_id?: string | null;
   property_id?: string | null;
+  is_duplicate?: boolean;
   lead_status?: {
     name: string;
     color: string;
@@ -263,7 +264,14 @@ const LeadsTable = ({
                   />
                 </TableCell>
                 {getColumnVisible("name") && (
-                  <TableCell className="font-medium">{lead.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-1.5">
+                      {lead.name}
+                      {lead.is_duplicate && (
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+                      )}
+                    </div>
+                  </TableCell>
                 )}
                 {getColumnVisible("phone") && (
                   <TableCell className="font-mono text-sm">{formatPhone(lead.phone)}</TableCell>

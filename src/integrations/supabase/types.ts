@@ -531,9 +531,11 @@ export type Database = {
           campanha: string | null
           conjunto: string | null
           created_at: string
+          duplicate_of_lead_id: string | null
           email: string | null
           id: string
           interesse: string | null
+          is_duplicate: boolean
           meta_ad_id: string | null
           meta_ad_name: string | null
           meta_campaign_id: string | null
@@ -556,9 +558,11 @@ export type Database = {
           campanha?: string | null
           conjunto?: string | null
           created_at?: string
+          duplicate_of_lead_id?: string | null
           email?: string | null
           id?: string
           interesse?: string | null
+          is_duplicate?: boolean
           meta_ad_id?: string | null
           meta_ad_name?: string | null
           meta_campaign_id?: string | null
@@ -581,9 +585,11 @@ export type Database = {
           campanha?: string | null
           conjunto?: string | null
           created_at?: string
+          duplicate_of_lead_id?: string | null
           email?: string | null
           id?: string
           interesse?: string | null
+          is_duplicate?: boolean
           meta_ad_id?: string | null
           meta_ad_name?: string | null
           meta_campaign_id?: string | null
@@ -613,6 +619,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "leads_duplicate_of_lead_id_fkey"
+            columns: ["duplicate_of_lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "leads_property_id_fkey"
