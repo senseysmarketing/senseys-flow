@@ -219,6 +219,21 @@ Deno.serve(async (req) => {
               continue
             }
 
+            // Cancel pending follow-ups for ALL matched leads (regardless of status)
+            for (const lead of matchedLeads) {
+              const { data: cancelledMsgs, error: cancelError } = await supabase
+                .from('whatsapp_message_queue')
+                .update({ status: 'cancelled' })
+                .eq('lead_id', lead.id)
+                .eq('status', 'pending')
+                .not('followup_step_id', 'is', null)
+                .select('id')
+
+              if (!cancelError && cancelledMsgs && cancelledMsgs.length > 0) {
+                console.log(`[whatsapp-webhook] Cancelled ${cancelledMsgs.length} follow-up(s) for lead ${lead.id}`)
+              }
+            }
+
             for (const lead of leadsToMove) {
               const { error: updateError } = await supabase
                 .from('leads')

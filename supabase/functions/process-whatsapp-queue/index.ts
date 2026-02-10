@@ -195,6 +195,55 @@ Deno.serve(async (req) => {
         processedCount++
         console.log(`[process-whatsapp-queue] Message ${msg.id} sent successfully`)
 
+        // After successfully sending a greeting, schedule follow-up messages
+        if (msg.automation_rule_id && !msg.followup_step_id) {
+          try {
+            // Check if the automation rule is a new_lead greeting
+            const { data: rule } = await supabase
+              .from('whatsapp_automation_rules')
+              .select('trigger_type')
+              .eq('id', msg.automation_rule_id)
+              .single()
+
+            if (rule?.trigger_type === 'new_lead') {
+              // Get active follow-up steps for this account
+              const { data: followUpSteps } = await supabase
+                .from('whatsapp_followup_steps')
+                .select('*')
+                .eq('account_id', msg.account_id)
+                .eq('is_active', true)
+                .order('position')
+
+              if (followUpSteps && followUpSteps.length > 0) {
+                const now = Date.now()
+                const followUpInserts = followUpSteps.map((step: any) => ({
+                  account_id: msg.account_id,
+                  lead_id: msg.lead_id,
+                  phone: msg.phone,
+                  message: '', // Will be resolved by template at send time
+                  template_id: step.template_id,
+                  followup_step_id: step.id,
+                  automation_rule_id: msg.automation_rule_id,
+                  scheduled_for: new Date(now + step.delay_minutes * 60 * 1000).toISOString(),
+                  status: 'pending',
+                }))
+
+                const { error: insertError } = await supabase
+                  .from('whatsapp_message_queue')
+                  .insert(followUpInserts)
+
+                if (insertError) {
+                  console.error(`[process-whatsapp-queue] Error scheduling follow-ups for lead ${msg.lead_id}:`, insertError)
+                } else {
+                  console.log(`[process-whatsapp-queue] Scheduled ${followUpSteps.length} follow-ups for lead ${msg.lead_id}`)
+                }
+              }
+            }
+          } catch (fuError) {
+            console.error(`[process-whatsapp-queue] Error checking follow-up scheduling:`, fuError)
+          }
+        }
+
       } catch (msgError: unknown) {
         const errorMessage = msgError instanceof Error ? msgError.message : 'Unknown error'
         console.error(`[process-whatsapp-queue] Error processing message ${msg.id}:`, msgError)
