@@ -3,18 +3,18 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { AvatarFallbackColored } from "@/components/ui/avatar-fallback-colored";
 import TemperatureBadge from "@/components/TemperatureBadge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { 
-  Building2, MapPin, Bed, Bath, Car, Ruler, Calendar, DollarSign, 
-  Users, Eye, TrendingUp, Clock, User, Phone, Mail, ChevronRight,
-  Home, CalendarDays, Activity, Edit2, Trash2, CheckCircle, XCircle,
-  BookmarkCheck, Key
+  Building2, MapPin, Bed, Bath, Car, Ruler, DollarSign, 
+  Users, TrendingUp, Clock, Phone, ChevronRight,
+  Home, CalendarDays, Edit2, Trash2, CheckCircle, XCircle,
+  BookmarkCheck, Key, Flame, Snowflake, ThermometerSun, Target,
+  BarChart3, HandCoins
 } from "lucide-react";
-import { format, differenceInDays } from "date-fns";
+import { format, differenceInDays, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { DialogTitle } from "@/components/ui/dialog";
@@ -84,6 +84,13 @@ interface PropertyEvent {
   lead?: { name: string } | null;
 }
 
+interface FunnelStage {
+  name: string;
+  count: number;
+  color: string;
+  conversionFromPrev?: number;
+}
+
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   disponivel: { label: "Disponível", color: "bg-green-500" },
   reservado: { label: "Reservado", color: "bg-yellow-500" },
@@ -104,7 +111,10 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
   const [leads, setLeads] = useState<LeadWithStatus[]>([]);
   const [brokerStats, setBrokerStats] = useState<BrokerStats[]>([]);
   const [events, setEvents] = useState<PropertyEvent[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [_loading, setLoading] = useState(false);
+  const [adInvestment, setAdInvestment] = useState(0);
+  const [formCount, setFormCount] = useState(0);
+  const [funnelStages, setFunnelStages] = useState<FunnelStage[]>([]);
 
   useEffect(() => {
     if (property && isOpen) {
@@ -146,6 +156,37 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
     onClose();
   };
 
+  const fetchAdInvestment = async (referenceCode: string) => {
+    try {
+      const dateFrom = format(subDays(new Date(), 30), "yyyy-MM-dd");
+      const dateTo = format(new Date(), "yyyy-MM-dd");
+
+      const { data: formMappings } = await supabase
+        .from("meta_form_property_mapping")
+        .select("form_id")
+        .eq("reference_code", referenceCode);
+
+      if (formMappings && formMappings.length > 0) {
+        setFormCount(formMappings.length);
+        const formIds = formMappings.map(m => m.form_id);
+        const { data: adInsights } = await supabase
+          .from("meta_ad_insights_by_ad")
+          .select("spend")
+          .gte("date", dateFrom)
+          .lte("date", dateTo)
+          .in("form_id", formIds);
+
+        const totalSpend = adInsights?.reduce((acc, i) => acc + Number(i.spend || 0), 0) || 0;
+        setAdInvestment(totalSpend);
+      } else {
+        setFormCount(0);
+        setAdInvestment(0);
+      }
+    } catch (error) {
+      console.error("Error fetching ad investment:", error);
+    }
+  };
+
   const fetchPropertyData = async () => {
     if (!property) return;
     setLoading(true);
@@ -162,6 +203,35 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
         .order("created_at", { ascending: false });
 
       setLeads((leadsData as LeadWithStatus[]) || []);
+
+      // Fetch lead statuses for funnel
+      const { data: allStatuses } = await supabase
+        .from("lead_status")
+        .select("id, name, color, position")
+        .order("position");
+
+      // Build funnel stages from leads
+      if (allStatuses && leadsData) {
+        const countByStatus: Record<string, number> = {};
+        for (const lead of leadsData) {
+          const statusName = (lead as LeadWithStatus).lead_status?.name;
+          if (statusName) {
+            countByStatus[statusName] = (countByStatus[statusName] || 0) + 1;
+          }
+        }
+
+        const stages: FunnelStage[] = allStatuses.map((status, index) => {
+          const count = countByStatus[status.name] || 0;
+          const prevCount = index > 0 ? (countByStatus[allStatuses[index - 1].name] || 0) : leadsData.length;
+          return {
+            name: status.name,
+            count,
+            color: status.color,
+            conversionFromPrev: prevCount > 0 ? Math.round((count / prevCount) * 100) : 0,
+          };
+        });
+        setFunnelStages(stages);
+      }
 
       // Calculate broker stats from leads
       const brokerMap = new Map<string, BrokerStats>();
@@ -204,6 +274,14 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
 
       setEvents((eventsData as PropertyEvent[]) || []);
 
+      // Fetch ad investment if property has reference_code
+      if (property.reference_code) {
+        await fetchAdInvestment(property.reference_code);
+      } else {
+        setAdInvestment(0);
+        setFormCount(0);
+      }
+
     } catch (error) {
       console.error("Error fetching property data:", error);
     } finally {
@@ -223,17 +301,28 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
 
   const totalLeads = leads.length;
   const hotLeads = leads.filter(l => l.temperature === 'hot').length;
+  const warmLeads = leads.filter(l => l.temperature === 'warm').length;
+  const coldLeads = leads.filter(l => l.temperature === 'cold').length;
   const closedLeads = leads.filter(l => l.lead_status?.name === 'Fechado').length;
+  
   const conversionRate = totalLeads > 0 ? ((closedLeads / totalLeads) * 100).toFixed(1) : "0";
-  const cpl = property.campaign_cost && totalLeads > 0 
-    ? (property.campaign_cost / totalLeads) 
-    : null;
+  const cpl = adInvestment > 0 && totalLeads > 0 ? adInvestment / totalLeads : null;
+  const costPerSale = adInvestment > 0 && closedLeads > 0 ? adInvestment / closedLeads : null;
 
   const formatPrice = (value: number | null) => {
     if (!value) return "-";
     return new Intl.NumberFormat("pt-BR", {
       style: "currency",
       currency: "BRL",
+    }).format(value);
+  };
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     }).format(value);
   };
 
@@ -266,42 +355,22 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem 
-                  onClick={() => handleStatusChange("disponivel")}
-                  className="text-green-600"
-                >
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Disponível
+                <DropdownMenuItem onClick={() => handleStatusChange("disponivel")} className="text-green-600">
+                  <CheckCircle className="h-4 w-4 mr-2" /> Disponível
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  onClick={() => handleStatusChange("reservado")}
-                  className="text-yellow-600"
-                >
-                  <BookmarkCheck className="h-4 w-4 mr-2" />
-                  Reservado
+                <DropdownMenuItem onClick={() => handleStatusChange("reservado")} className="text-yellow-600">
+                  <BookmarkCheck className="h-4 w-4 mr-2" /> Reservado
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem 
-                  onClick={() => handleStatusChange("vendido")}
-                  className="text-blue-600"
-                >
-                  <DollarSign className="h-4 w-4 mr-2" />
-                  Vendido
+                <DropdownMenuItem onClick={() => handleStatusChange("vendido")} className="text-blue-600">
+                  <DollarSign className="h-4 w-4 mr-2" /> Vendido
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  onClick={() => handleStatusChange("alugado")}
-                  className="text-purple-600"
-                >
-                  <Key className="h-4 w-4 mr-2" />
-                  Alugado
+                <DropdownMenuItem onClick={() => handleStatusChange("alugado")} className="text-purple-600">
+                  <Key className="h-4 w-4 mr-2" /> Alugado
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem 
-                  onClick={() => handleStatusChange("inativo")}
-                  className="text-gray-600"
-                >
-                  <XCircle className="h-4 w-4 mr-2" />
-                  Inativo
+                <DropdownMenuItem onClick={() => handleStatusChange("inativo")} className="text-gray-600">
+                  <XCircle className="h-4 w-4 mr-2" /> Inativo
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -321,9 +390,7 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDelete}>
-                    Remover
-                  </AlertDialogAction>
+                  <AlertDialogAction onClick={handleDelete}>Remover</AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
@@ -353,62 +420,33 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
 
             {/* Desktop action buttons */}
             <div className="hidden md:flex items-center gap-2 flex-shrink-0">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  onEdit?.(property);
-                  onClose();
-                }}
-              >
-                <Edit2 className="h-4 w-4 mr-1" />
-                Editar
+              <Button variant="outline" size="sm" onClick={() => { onEdit?.(property); onClose(); }}>
+                <Edit2 className="h-4 w-4 mr-1" /> Editar
               </Button>
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm">
-                    <CheckCircle className="h-4 w-4 mr-1" />
-                    Status
+                    <CheckCircle className="h-4 w-4 mr-1" /> Status
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem 
-                    onClick={() => handleStatusChange("disponivel")}
-                    className="text-green-600"
-                  >
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Disponível
+                  <DropdownMenuItem onClick={() => handleStatusChange("disponivel")} className="text-green-600">
+                    <CheckCircle className="h-4 w-4 mr-2" /> Disponível
                   </DropdownMenuItem>
-                  <DropdownMenuItem 
-                    onClick={() => handleStatusChange("reservado")}
-                    className="text-yellow-600"
-                  >
-                    <BookmarkCheck className="h-4 w-4 mr-2" />
-                    Reservado
+                  <DropdownMenuItem onClick={() => handleStatusChange("reservado")} className="text-yellow-600">
+                    <BookmarkCheck className="h-4 w-4 mr-2" /> Reservado
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem 
-                    onClick={() => handleStatusChange("vendido")}
-                    className="text-blue-600"
-                  >
-                    <DollarSign className="h-4 w-4 mr-2" />
-                    Vendido
+                  <DropdownMenuItem onClick={() => handleStatusChange("vendido")} className="text-blue-600">
+                    <DollarSign className="h-4 w-4 mr-2" /> Vendido
                   </DropdownMenuItem>
-                  <DropdownMenuItem 
-                    onClick={() => handleStatusChange("alugado")}
-                    className="text-purple-600"
-                  >
-                    <Key className="h-4 w-4 mr-2" />
-                    Alugado
+                  <DropdownMenuItem onClick={() => handleStatusChange("alugado")} className="text-purple-600">
+                    <Key className="h-4 w-4 mr-2" /> Alugado
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem 
-                    onClick={() => handleStatusChange("inativo")}
-                    className="text-gray-600"
-                  >
-                    <XCircle className="h-4 w-4 mr-2" />
-                    Inativo
+                  <DropdownMenuItem onClick={() => handleStatusChange("inativo")} className="text-gray-600">
+                    <XCircle className="h-4 w-4 mr-2" /> Inativo
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -428,16 +466,14 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDelete}>
-                      Remover
-                    </AlertDialogAction>
+                    <AlertDialogAction onClick={handleDelete}>Remover</AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
             </div>
           </div>
 
-          {/* Property specs - horizontal scroll on mobile */}
+          {/* Property specs */}
           <div className="flex items-center gap-3 md:gap-4 mt-3 md:mt-4 text-xs md:text-sm text-muted-foreground overflow-x-auto pb-1">
             {property.area_m2 && (
               <span className="flex items-center gap-1 whitespace-nowrap">
@@ -480,54 +516,121 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
 
         <ScrollArea className="flex-1 max-h-[calc(90vh-320px)] md:max-h-[calc(90vh-280px)] overflow-x-hidden">
           <div className="p-4 md:p-6 space-y-4 md:space-y-6">
-            {/* KPIs */}
-            <div className="grid grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
+            {/* KPIs Grid */}
+            <div className="grid grid-cols-3 md:grid-cols-4 gap-2 md:gap-3">
               <div className="bg-card rounded-lg border p-2 md:p-3 text-center">
-                <Users className="h-4 w-4 md:h-5 md:w-5 mx-auto text-primary mb-1" />
+                <Users className="h-4 w-4 mx-auto text-primary mb-1" />
                 <p className="text-lg md:text-2xl font-bold">{totalLeads}</p>
                 <p className="text-[10px] md:text-xs text-muted-foreground">Total Leads</p>
               </div>
               <div className="bg-card rounded-lg border p-2 md:p-3 text-center">
-                <Activity className="h-4 w-4 md:h-5 md:w-5 mx-auto text-orange-500 mb-1" />
+                <Flame className="h-4 w-4 mx-auto text-orange-500 mb-1" />
                 <p className="text-lg md:text-2xl font-bold">{hotLeads}</p>
                 <p className="text-[10px] md:text-xs text-muted-foreground">Quentes</p>
               </div>
               <div className="bg-card rounded-lg border p-2 md:p-3 text-center">
-                <CalendarDays className="h-4 w-4 md:h-5 md:w-5 mx-auto text-blue-500 mb-1" />
+                <ThermometerSun className="h-4 w-4 mx-auto text-yellow-500 mb-1" />
+                <p className="text-lg md:text-2xl font-bold">{warmLeads}</p>
+                <p className="text-[10px] md:text-xs text-muted-foreground">Mornos</p>
+              </div>
+              <div className="bg-card rounded-lg border p-2 md:p-3 text-center">
+                <Snowflake className="h-4 w-4 mx-auto text-blue-400 mb-1" />
+                <p className="text-lg md:text-2xl font-bold">{coldLeads}</p>
+                <p className="text-[10px] md:text-xs text-muted-foreground">Frios</p>
+              </div>
+              <div className="bg-card rounded-lg border p-2 md:p-3 text-center">
+                <CalendarDays className="h-4 w-4 mx-auto text-blue-500 mb-1" />
                 <p className="text-lg md:text-2xl font-bold">{events.length}</p>
                 <p className="text-[10px] md:text-xs text-muted-foreground">Visitas</p>
               </div>
               <div className="bg-card rounded-lg border p-2 md:p-3 text-center">
-                <Clock className="h-4 w-4 md:h-5 md:w-5 mx-auto text-yellow-500 mb-1" />
+                <Clock className="h-4 w-4 mx-auto text-muted-foreground mb-1" />
                 <p className="text-lg md:text-2xl font-bold">{daysOnMarket}</p>
                 <p className="text-[10px] md:text-xs text-muted-foreground">Dias</p>
               </div>
               <div className="bg-card rounded-lg border p-2 md:p-3 text-center">
-                <DollarSign className="h-4 w-4 md:h-5 md:w-5 mx-auto text-green-500 mb-1" />
-                <p className="text-lg md:text-2xl font-bold truncate">{cpl ? formatPrice(cpl) : "-"}</p>
-                <p className="text-[10px] md:text-xs text-muted-foreground">CPL</p>
-              </div>
-              <div className="bg-card rounded-lg border p-2 md:p-3 text-center">
-                <TrendingUp className="h-4 w-4 md:h-5 md:w-5 mx-auto text-purple-500 mb-1" />
+                <TrendingUp className="h-4 w-4 mx-auto text-purple-500 mb-1" />
                 <p className="text-lg md:text-2xl font-bold">{conversionRate}%</p>
                 <p className="text-[10px] md:text-xs text-muted-foreground">Conversão</p>
               </div>
+              <div className="bg-card rounded-lg border p-2 md:p-3 text-center">
+                <Target className="h-4 w-4 mx-auto text-green-500 mb-1" />
+                <p className="text-lg md:text-2xl font-bold">{closedLeads}</p>
+                <p className="text-[10px] md:text-xs text-muted-foreground">Fechados</p>
+              </div>
             </div>
 
-            {/* Campaign info */}
-            {(property.campaign_name || property.campaign_cost) && (
+            {/* Investment Section */}
+            <div className="bg-card rounded-lg border p-4">
+              <h3 className="font-semibold mb-3 flex items-center gap-2">
+                <HandCoins className="h-4 w-4 text-primary" />
+                Investimento em Anúncios
+                <span className="text-xs font-normal text-muted-foreground">(últimos 30 dias)</span>
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                  <p className="text-xs text-muted-foreground mb-1">Investimento</p>
+                  <p className="text-lg font-bold text-foreground">
+                    {adInvestment > 0 ? formatCurrency(adInvestment) : "-"}
+                  </p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                  <p className="text-xs text-muted-foreground mb-1">CPL</p>
+                  <p className="text-lg font-bold text-foreground">
+                    {cpl ? formatCurrency(cpl) : "-"}
+                  </p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                  <p className="text-xs text-muted-foreground mb-1">Custo/Venda</p>
+                  <p className="text-lg font-bold text-foreground">
+                    {costPerSale ? formatCurrency(costPerSale) : "-"}
+                  </p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                  <p className="text-xs text-muted-foreground mb-1">Formulários</p>
+                  <p className="text-lg font-bold text-foreground">{formCount}</p>
+                </div>
+              </div>
+              {!property.reference_code && (
+                <p className="text-xs text-muted-foreground mt-2 italic">
+                  Defina um código de referência no imóvel para vincular dados de investimento do Meta Ads.
+                </p>
+              )}
+            </div>
+
+            {/* Commercial Funnel */}
+            {funnelStages.length > 0 && totalLeads > 0 && (
               <div className="bg-card rounded-lg border p-4">
-                <h3 className="font-semibold mb-2 flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-primary" />
-                  Campanha
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4 text-primary" />
+                  Funil Comercial
                 </h3>
-                <div className="flex items-center gap-4 text-sm">
-                  {property.campaign_name && (
-                    <span>Nome: <strong>{property.campaign_name}</strong></span>
-                  )}
-                  {property.campaign_cost && (
-                    <span>Investimento: <strong>{formatPrice(property.campaign_cost)}</strong></span>
-                  )}
+                <div className="space-y-2">
+                  {funnelStages.map((stage, index) => {
+                    const barWidth = totalLeads > 0 ? Math.max(8, (stage.count / totalLeads) * 100) : 0;
+                    return (
+                      <div key={stage.name} className="relative">
+                        <div
+                          className="h-9 rounded-lg transition-all flex items-center justify-between px-3"
+                          style={{
+                            backgroundColor: stage.color + "20",
+                            width: `${barWidth}%`,
+                            minWidth: "100%",
+                          }}
+                        >
+                          <span className="text-xs font-medium truncate">{stage.name}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold">{stage.count}</span>
+                            {index > 0 && stage.conversionFromPrev !== undefined && stage.conversionFromPrev > 0 && (
+                              <span className="text-[10px] text-muted-foreground">
+                                ({stage.conversionFromPrev}%)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
