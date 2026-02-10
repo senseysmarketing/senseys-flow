@@ -45,6 +45,26 @@ interface AutomationRule {
   trigger_sources?: TriggerSources | null;
 }
 
+interface FollowUpStep {
+  id: string;
+  account_id: string;
+  name: string;
+  template_id: string;
+  delay_minutes: number;
+  position: number;
+  is_active: boolean;
+}
+
+const DELAY_OPTIONS = [
+  { value: 60, label: '1 hora' },
+  { value: 120, label: '2 horas' },
+  { value: 360, label: '6 horas' },
+  { value: 720, label: '12 horas' },
+  { value: 1440, label: '24 horas' },
+  { value: 2880, label: '48 horas' },
+  { value: 4320, label: '72 horas' },
+];
+
 export function WhatsAppIntegrationSettings() {
   const { user } = useAuth();
   const [session, setSession] = useState<WhatsAppSession | null>(null);
