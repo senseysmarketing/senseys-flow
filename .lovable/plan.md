@@ -1,66 +1,94 @@
 
-## Adicionar Metricas de Investimento e Funil Comercial ao Modal de Detalhes do Imovel
 
-### Problema Atual
+## Deteccao de Leads Duplicados e Historico
 
-O modal de detalhes do imovel calcula o CPL usando apenas o campo manual `property.campaign_cost`, que esta vazio/desatualizado. O investimento real vem do Meta Ads (tabela `meta_ad_insights_by_ad`) vinculado via `meta_form_property_mapping` pelo `reference_code` do imovel -- essa logica ja funciona corretamente no card `PropertyMetricsCard.tsx` mas nao foi replicada no modal.
+### Objetivo
 
-### Solucao
+Detectar automaticamente quando um lead com o mesmo telefone (ou email) ja existe na base, sem bloquear a entrada. O lead novo e criado normalmente, mas recebe um aviso visual e um link para o historico do lead anterior.
 
-Modificar `PropertyDetailModal.tsx` para:
+### Como Vai Funcionar
 
-1. **Buscar investimento real do Meta Ads** usando a mesma logica do `PropertyMetricsCard` (via `reference_code` -> `meta_form_property_mapping` -> `meta_ad_insights_by_ad`)
-2. **Calcular CPL real** baseado nesse investimento
-3. **Adicionar novas metricas de funil comercial** para maior previsibilidade
+1. **Na criacao do lead** (manual, webhook, Meta): o sistema verifica se ja existe um lead com o mesmo telefone ou email na mesma conta
+2. **Se encontrar duplicata**: marca o novo lead com uma flag e armazena referencia ao lead anterior
+3. **No Kanban e na tabela**: exibe um badge de alerta "Lead Recorrente" no card/linha
+4. **No modal de detalhes**: exibe um alerta com o historico do lead anterior (status, data de entrada, corretor atribuido, temperatura, observacoes)
 
-### Novas Metricas no Modal
+### Pontos de Deteccao
 
-A grade de KPIs sera expandida para incluir:
+A verificacao acontecera em 3 pontos de entrada de leads:
 
-| Metrica | Descricao |
-|---------|-----------|
-| Total Leads | Ja existe |
-| Quentes | Ja existe |
-| Mornos | Novo - leads com temperatura "warm" |
-| Frios | Novo - leads com temperatura "cold" |
-| Visitas | Ja existe |
-| Dias no Mercado | Ja existe |
-| Investimento | **Novo** - valor total gasto em anuncios (Meta Ads) |
-| CPL | **Corrigido** - calculado com investimento real |
-| Conversao | Ja existe |
-| Leads Fechados | Novo - quantidade absoluta |
-| Custo por Venda | Novo - investimento / leads fechados |
-| Em Contato | Novo - leads no status "Em Contato" |
+- **Manual** (`src/pages/Leads.tsx` - `handleCreateLead`): antes de inserir, busca duplicata e adiciona metadados
+- **Webhook** (`supabase/functions/webhook-leads/index.ts`): antes de inserir, busca duplicata
+- **Meta** (`supabase/functions/meta-webhook/index.ts`): antes de inserir, busca duplicata
 
-### Secao de Funil Comercial (Nova)
+### Mudancas no Banco de Dados
 
-Abaixo dos KPIs, uma nova secao visual mostrara o funil:
+Adicionar 2 colunas na tabela `leads`:
+
+| Coluna | Tipo | Descricao |
+|--------|------|-----------|
+| `is_duplicate` | boolean | Default false. True quando detectado como recorrente |
+| `duplicate_of_lead_id` | uuid (nullable) | Referencia ao lead anterior encontrado |
+
+### Logica de Deteccao
 
 ```text
-Novo Lead (X) -> Em Contato (X) -> Qualificado (X) -> Visita (X) -> Proposta (X) -> Fechado (X)
+1. Normalizar telefone do novo lead (remover formatacao, manter so digitos)
+2. Buscar na tabela leads (mesmo account_id) por:
+   - Telefone com sufixo igual (ultimos 9 digitos) -> match por telefone
+   - OU email identico (se ambos tiverem email) -> match por email
+3. Se encontrar, pegar o lead mais recente como referencia
+4. Marcar: is_duplicate = true, duplicate_of_lead_id = id_do_lead_encontrado
 ```
 
-Cada etapa mostrara a quantidade de leads e a taxa de conversao entre etapas.
+A busca usa os ultimos 9 digitos do telefone para cobrir variacoes de formatacao (com/sem DDD, com/sem +55, etc.).
 
-### Secao de Investimento (Atualizada)
+### Mudancas Visuais
 
-A secao "Campanha" sera substituida por uma secao "Investimento em Anuncios" que mostra:
-- Investimento total (ultimos 30 dias)
-- CPL (custo por lead)
-- Custo por venda (investimento / fechados)
-- Formularios vinculados (quantidade)
+**Card do Kanban** (`LeadKanbanCard.tsx`):
+- Badge discreto "Recorrente" com icone de alerta quando `is_duplicate = true`
 
-### Arquivo a Modificar
+**Tabela de Leads** (`LeadsTable.tsx`):
+- Icone de alerta ao lado do nome quando duplicado
 
-**`src/components/PropertyDetailModal.tsx`**
+**Modal de Detalhes** (`LeadDetailModal.tsx`):
+- Alerta no topo: "Este lead ja entrou anteriormente"
+- Secao "Historico Anterior" mostrando dados do lead referenciado:
+  - Nome, telefone, email
+  - Status e temperatura que tinha
+  - Data de entrada e ultima atualizacao
+  - Corretor atribuido
+  - Observacoes
+  - Botao para abrir os detalhes do lead anterior
 
-### Mudancas Tecnicas
+### Arquivos a Modificar
 
-1. **Novo state** para `adInvestment` (number) e `formCount` (number)
-2. **Nova funcao** `fetchAdInvestment()` chamada dentro de `fetchPropertyData()`:
-   - Busca `meta_form_property_mapping` pelo `reference_code` do imovel
-   - Agrega `spend` de `meta_ad_insights_by_ad` dos ultimos 30 dias
-3. **Calculo do CPL** passa a usar `adInvestment` ao inves de `campaign_cost`
-4. **Contagem de leads por status** para montar o funil comercial
-5. **Novas metricas derivadas**: custo por venda, leads mornos/frios, taxa entre etapas do funil
-6. **UI atualizada**: grid de KPIs reorganizado + secao de funil + secao de investimento melhorada
+1. **Nova migracao SQL** - adicionar colunas `is_duplicate` e `duplicate_of_lead_id`
+2. **`src/pages/Leads.tsx`** - deteccao na criacao manual
+3. **`supabase/functions/webhook-leads/index.ts`** - deteccao no webhook
+4. **`supabase/functions/meta-webhook/index.ts`** - deteccao no Meta
+5. **`src/components/LeadKanbanCard.tsx`** - badge visual de recorrente
+6. **`src/components/leads/LeadsTable.tsx`** - indicador visual na tabela
+7. **`src/components/LeadDetailModal.tsx`** - alerta + secao de historico anterior
+8. **`src/integrations/supabase/types.ts`** - atualizar tipos com novas colunas
+
+### Fluxo Completo
+
+```text
+Lead entra (qualquer canal)
+    |
+    v
+Normaliza telefone -> busca por sufixo (9 digitos)
+    |
+    v
+Encontrou lead anterior?
+    |-- Sim --> Cria lead com is_duplicate=true + duplicate_of_lead_id
+    |-- Nao --> Cria lead normalmente (is_duplicate=false)
+    |
+    v
+Kanban/Tabela: mostra badge "Recorrente" se is_duplicate
+    |
+    v
+Modal de detalhes: mostra alerta + dados do lead anterior
+```
+
