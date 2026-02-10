@@ -57,6 +57,7 @@ export function WhatsAppIntegrationSettings() {
   const [qrLoading, setQrLoading] = useState(false);
   const [pollingActive, setPollingActive] = useState(false);
   const [showTemplatesModal, setShowTemplatesModal] = useState(false);
+  const [pendingAutoCreate, setPendingAutoCreate] = useState(false);
 
   const fetchSession = useCallback(async () => {
     if (!user) return;
@@ -263,13 +264,11 @@ export function WhatsAppIntegrationSettings() {
     }
   };
 
-  const createNewLeadRule = async () => {
-    if (!templates.length) {
-      toast({
-        variant: 'destructive',
-        title: 'Sem Templates',
-        description: 'Crie uma mensagem WhatsApp primeiro em "Geral > Mensagens".',
-      });
+  const createNewLeadRule = async (overrideTemplates?: WhatsAppTemplate[]) => {
+    const availableTemplates = overrideTemplates || templates;
+    if (!availableTemplates.length) {
+      setPendingAutoCreate(true);
+      setShowTemplatesModal(true);
       return;
     }
 
@@ -280,7 +279,7 @@ export function WhatsAppIntegrationSettings() {
         account_id: accountData,
         name: 'Saudação para Novos Leads',
         trigger_type: 'new_lead',
-        template_id: templates[0].id,
+        template_id: availableTemplates[0].id,
         is_active: true,
         delay_seconds: 0,
       });
@@ -570,8 +569,7 @@ export function WhatsAppIntegrationSettings() {
           ) : (
             <Button 
               variant="outline" 
-              onClick={createNewLeadRule}
-              disabled={templates.length === 0}
+              onClick={() => createNewLeadRule()}
               className="w-full"
             >
               <Zap className="h-4 w-4 mr-2" />
@@ -674,7 +672,24 @@ export function WhatsAppIntegrationSettings() {
       {/* Templates Management Modal */}
       <WhatsAppTemplatesModal
         open={showTemplatesModal}
-        onOpenChange={setShowTemplatesModal}
+        onOpenChange={(open) => {
+          setShowTemplatesModal(open);
+          if (!open && pendingAutoCreate) {
+            setPendingAutoCreate(false);
+            // Recarregar templates e criar regra automaticamente
+            (async () => {
+              const { data } = await supabase
+                .from('whatsapp_templates')
+                .select('id, name, template')
+                .eq('is_active', true)
+                .order('position')
+                .limit(1);
+              if (data && data.length > 0) {
+                createNewLeadRule(data);
+              }
+            })();
+          }
+        }}
         onTemplatesChange={fetchTemplates}
       />
     </div>
