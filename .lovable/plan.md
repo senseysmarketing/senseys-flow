@@ -1,94 +1,33 @@
 
 
-## Deteccao de Leads Duplicados e Historico
+## Corrigir Botao "Configurar Saudacao Automatica" Desabilitado
 
-### Objetivo
+### Causa Raiz
 
-Detectar automaticamente quando um lead com o mesmo telefone (ou email) ja existe na base, sem bloquear a entrada. O lead novo e criado normalmente, mas recebe um aviso visual e um link para o historico do lead anterior.
+O usuario Francivaldo Lima tem **0 templates de WhatsApp** criados. O botao "Configurar Saudacao Automatica" fica desabilitado quando `templates.length === 0` (linha 574 do componente). O botao aparece cinza/inativo sem nenhuma explicacao visual do motivo.
 
-### Como Vai Funcionar
+### Solucao
 
-1. **Na criacao do lead** (manual, webhook, Meta): o sistema verifica se ja existe um lead com o mesmo telefone ou email na mesma conta
-2. **Se encontrar duplicata**: marca o novo lead com uma flag e armazena referencia ao lead anterior
-3. **No Kanban e na tabela**: exibe um badge de alerta "Lead Recorrente" no card/linha
-4. **No modal de detalhes**: exibe um alerta com o historico do lead anterior (status, data de entrada, corretor atribuido, temperatura, observacoes)
+Modificar o comportamento para que, ao clicar no botao sem templates, o sistema abra automaticamente o modal de templates para o usuario criar sua primeira mensagem. Apos criar o template, a saudacao automatica sera configurada.
 
-### Pontos de Deteccao
+### Mudancas
 
-A verificacao acontecera em 3 pontos de entrada de leads:
+**Arquivo: `src/components/whatsapp/WhatsAppIntegrationSettings.tsx`**
 
-- **Manual** (`src/pages/Leads.tsx` - `handleCreateLead`): antes de inserir, busca duplicata e adiciona metadados
-- **Webhook** (`supabase/functions/webhook-leads/index.ts`): antes de inserir, busca duplicata
-- **Meta** (`supabase/functions/meta-webhook/index.ts`): antes de inserir, busca duplicata
+1. **Remover o `disabled`** do botao "Configurar Saudacao Automatica" -- ele nunca deve ficar desabilitado
+2. **Alterar a funcao `createNewLeadRule`**: quando nao houver templates, abrir o modal de templates (`setShowTemplatesModal(true)`) ao inves de apenas mostrar um toast de erro
+3. **Adicionar texto explicativo** abaixo do botao quando nao houver templates, indicando que e necessario criar uma mensagem primeiro
+4. **Apos fechar o modal de templates**, recarregar a lista de templates automaticamente (ja ocorre no `onClose` do modal)
 
-### Mudancas no Banco de Dados
+### Comportamento Esperado
 
-Adicionar 2 colunas na tabela `leads`:
+- Usuario clica em "Configurar Saudacao Automatica"
+- Se nao tem templates: abre o modal para criar uma mensagem
+- Apos criar o template e fechar o modal: o sistema cria a regra de automacao automaticamente
+- Se ja tem templates: cria a regra normalmente (comportamento atual)
 
-| Coluna | Tipo | Descricao |
-|--------|------|-----------|
-| `is_duplicate` | boolean | Default false. True quando detectado como recorrente |
-| `duplicate_of_lead_id` | uuid (nullable) | Referencia ao lead anterior encontrado |
+### Detalhes Tecnicos
 
-### Logica de Deteccao
-
-```text
-1. Normalizar telefone do novo lead (remover formatacao, manter so digitos)
-2. Buscar na tabela leads (mesmo account_id) por:
-   - Telefone com sufixo igual (ultimos 9 digitos) -> match por telefone
-   - OU email identico (se ambos tiverem email) -> match por email
-3. Se encontrar, pegar o lead mais recente como referencia
-4. Marcar: is_duplicate = true, duplicate_of_lead_id = id_do_lead_encontrado
-```
-
-A busca usa os ultimos 9 digitos do telefone para cobrir variacoes de formatacao (com/sem DDD, com/sem +55, etc.).
-
-### Mudancas Visuais
-
-**Card do Kanban** (`LeadKanbanCard.tsx`):
-- Badge discreto "Recorrente" com icone de alerta quando `is_duplicate = true`
-
-**Tabela de Leads** (`LeadsTable.tsx`):
-- Icone de alerta ao lado do nome quando duplicado
-
-**Modal de Detalhes** (`LeadDetailModal.tsx`):
-- Alerta no topo: "Este lead ja entrou anteriormente"
-- Secao "Historico Anterior" mostrando dados do lead referenciado:
-  - Nome, telefone, email
-  - Status e temperatura que tinha
-  - Data de entrada e ultima atualizacao
-  - Corretor atribuido
-  - Observacoes
-  - Botao para abrir os detalhes do lead anterior
-
-### Arquivos a Modificar
-
-1. **Nova migracao SQL** - adicionar colunas `is_duplicate` e `duplicate_of_lead_id`
-2. **`src/pages/Leads.tsx`** - deteccao na criacao manual
-3. **`supabase/functions/webhook-leads/index.ts`** - deteccao no webhook
-4. **`supabase/functions/meta-webhook/index.ts`** - deteccao no Meta
-5. **`src/components/LeadKanbanCard.tsx`** - badge visual de recorrente
-6. **`src/components/leads/LeadsTable.tsx`** - indicador visual na tabela
-7. **`src/components/LeadDetailModal.tsx`** - alerta + secao de historico anterior
-8. **`src/integrations/supabase/types.ts`** - atualizar tipos com novas colunas
-
-### Fluxo Completo
-
-```text
-Lead entra (qualquer canal)
-    |
-    v
-Normaliza telefone -> busca por sufixo (9 digitos)
-    |
-    v
-Encontrou lead anterior?
-    |-- Sim --> Cria lead com is_duplicate=true + duplicate_of_lead_id
-    |-- Nao --> Cria lead normalmente (is_duplicate=false)
-    |
-    v
-Kanban/Tabela: mostra badge "Recorrente" se is_duplicate
-    |
-    v
-Modal de detalhes: mostra alerta + dados do lead anterior
-```
-
+- Remover `disabled={templates.length === 0}` da linha 574
+- Na funcao `createNewLeadRule` (linha 266), substituir o toast de erro por `setShowTemplatesModal(true)` e adicionar um estado `pendingAutoCreate` para saber que ao fechar o modal com templates disponiveis, deve-se criar a regra automaticamente
+- Adicionar um `useEffect` ou callback no `onClose` do modal de templates para verificar se `pendingAutoCreate` esta ativo e se templates foram criados
