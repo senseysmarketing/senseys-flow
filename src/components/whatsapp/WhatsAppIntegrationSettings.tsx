@@ -79,7 +79,6 @@ export function WhatsAppIntegrationSettings() {
   const [showTemplatesModal, setShowTemplatesModal] = useState(false);
   const [pendingAutoCreate, setPendingAutoCreate] = useState(false);
   const [followUpSteps, setFollowUpSteps] = useState<FollowUpStep[]>([]);
-  const [followUpLoading, setFollowUpLoading] = useState(false);
 
   const fetchSession = useCallback(async () => {
     if (!user) return;
