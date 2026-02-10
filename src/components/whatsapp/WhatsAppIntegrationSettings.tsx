@@ -134,17 +134,25 @@ export function WhatsAppIntegrationSettings() {
       .select('*')
       .order('created_at');
     
-    // Cast data to our interface
     setAutomationRules((data || []).map(rule => ({
       ...rule,
       trigger_sources: rule.trigger_sources as TriggerSources | null
     })));
   }, []);
 
+  const fetchFollowUpSteps = useCallback(async () => {
+    const { data } = await supabase
+      .from('whatsapp_followup_steps' as any)
+      .select('*')
+      .order('position');
+    
+    setFollowUpSteps((data || []) as unknown as FollowUpStep[]);
+  }, []);
+
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      await Promise.all([fetchSession(), fetchTemplates(), fetchAutomationRules()]);
+      await Promise.all([fetchSession(), fetchTemplates(), fetchAutomationRules(), fetchFollowUpSteps()]);
       setLoading(false);
     };
 
