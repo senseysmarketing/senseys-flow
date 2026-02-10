@@ -623,72 +623,85 @@ export function WhatsAppIntegrationSettings() {
 
               <div className="space-y-3">
                 {followUpSteps.map((step) => (
-                  <div key={step.id} className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                    <Switch
-                      checked={step.is_active}
-                      onCheckedChange={async (checked) => {
-                        await supabase
-                          .from('whatsapp_followup_steps' as any)
-                          .update({ is_active: checked } as any)
-                          .eq('id', step.id);
-                        fetchFollowUpSteps();
-                      }}
-                      disabled={!isConnected}
-                    />
-                    <div className="flex-1 grid gap-2 sm:grid-cols-2">
-                      <Select
-                        value={String(step.delay_minutes)}
-                        onValueChange={async (value) => {
+                  <div key={step.id} className="p-3 bg-muted/50 rounded-lg space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          checked={step.is_active}
+                          onCheckedChange={async (checked) => {
+                            await supabase
+                              .from('whatsapp_followup_steps' as any)
+                              .update({ is_active: checked } as any)
+                              .eq('id', step.id);
+                            fetchFollowUpSteps();
+                          }}
+                          disabled={!isConnected}
+                        />
+                        <Label className="font-medium">Etapa {step.position + 1}</Label>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        onClick={async () => {
                           await supabase
                             .from('whatsapp_followup_steps' as any)
-                            .update({ delay_minutes: parseInt(value) } as any)
+                            .delete()
                             .eq('id', step.id);
                           fetchFollowUpSteps();
                         }}
                       >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {DELAY_OPTIONS.map(opt => (
-                            <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Select
-                        value={step.template_id}
-                        onValueChange={async (value) => {
-                          await supabase
-                            .from('whatsapp_followup_steps' as any)
-                            .update({ template_id: value } as any)
-                            .eq('id', step.id);
-                          fetchFollowUpSteps();
-                        }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Template" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {templates.map((t) => (
-                            <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive hover:text-destructive"
-                      onClick={async () => {
-                        await supabase
-                          .from('whatsapp_followup_steps' as any)
-                          .delete()
-                          .eq('id', step.id);
-                        fetchFollowUpSteps();
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {step.is_active && (
+                      <div className="grid gap-4 sm:grid-cols-2 pl-12">
+                        <div className="space-y-2">
+                          <Label>Template de Mensagem</Label>
+                          <Select
+                            value={step.template_id}
+                            onValueChange={async (value) => {
+                              await supabase
+                                .from('whatsapp_followup_steps' as any)
+                                .update({ template_id: value } as any)
+                                .eq('id', step.id);
+                              fetchFollowUpSteps();
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione um template" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {templates.map((t) => (
+                                <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Delay</Label>
+                          <Select
+                            value={String(step.delay_minutes)}
+                            onValueChange={async (value) => {
+                              await supabase
+                                .from('whatsapp_followup_steps' as any)
+                                .update({ delay_minutes: parseInt(value) } as any)
+                                .eq('id', step.id);
+                              fetchFollowUpSteps();
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {DELAY_OPTIONS.map(opt => (
+                                <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
 
