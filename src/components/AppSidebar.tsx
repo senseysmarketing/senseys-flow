@@ -7,7 +7,8 @@ import {
   LogOut, 
   Building2,
   Sparkles,
-  Shield
+  Shield,
+  MessageSquare
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { 
@@ -48,6 +49,11 @@ const menuItems = [
     title: "Agenda",
     url: "/calendar",
     icon: Calendar,
+  },
+  {
+    title: "Conversas",
+    url: "/conversations",
+    icon: MessageSquare,
   },
   {
     title: "Relatórios",
