@@ -183,6 +183,49 @@ Deno.serve(async (req) => {
       delivery_status: 'sent',
     })
 
+    // Also store in whatsapp_messages for conversation view
+    const remoteJid = `${formattedPhone}@s.whatsapp.net`
+    await supabase.from('whatsapp_messages').insert({
+      account_id: accountId,
+      remote_jid: remoteJid,
+      phone: formattedPhone,
+      message_id: sendData.key?.id,
+      content: message,
+      media_type: 'text',
+      is_from_me: true,
+      status: 'sent',
+      timestamp: new Date().toISOString(),
+      lead_id: lead_id || null,
+    })
+
+    // Update conversation
+    const { data: existingConv } = await supabase
+      .from('whatsapp_conversations')
+      .select('id')
+      .eq('account_id', accountId)
+      .eq('remote_jid', remoteJid)
+      .maybeSingle()
+
+    if (existingConv) {
+      await supabase.from('whatsapp_conversations').update({
+        last_message: message.substring(0, 500),
+        last_message_at: new Date().toISOString(),
+        last_message_is_from_me: true,
+        updated_at: new Date().toISOString(),
+        lead_id: lead_id || undefined,
+      }).eq('id', existingConv.id)
+    } else {
+      await supabase.from('whatsapp_conversations').insert({
+        account_id: accountId,
+        remote_jid: remoteJid,
+        phone: formattedPhone,
+        last_message: message.substring(0, 500),
+        last_message_at: new Date().toISOString(),
+        last_message_is_from_me: true,
+        lead_id: lead_id || null,
+      })
+    }
+
     console.log('[whatsapp-send] Message sent successfully')
     return new Response(JSON.stringify({ 
       success: true,
