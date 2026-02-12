@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Conversation } from "@/hooks/use-conversations";
-import { cn } from "@/lib/utils";
+import { cn, formatPhoneForDisplay, isLidJid } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AvatarFallbackColored } from "@/components/ui/avatar-fallback-colored";
@@ -29,12 +29,8 @@ export function ConversationList({
   const getDisplayName = (conv: Conversation) => {
     if (conv.lead?.name) return conv.lead.name;
     if (conv.contact_name) return conv.contact_name;
-    // Format phone
-    const p = conv.phone;
-    if (p.length >= 12) {
-      return `+${p.slice(0, 2)} (${p.slice(2, 4)}) ${p.slice(4, 9)}-${p.slice(9)}`;
-    }
-    return p;
+    const formatted = formatPhoneForDisplay(conv.phone);
+    return formatted || conv.phone;
   };
 
   const getInitials = (name: string) => {
