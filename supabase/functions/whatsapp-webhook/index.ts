@@ -174,7 +174,23 @@ async function findLeadByPhone(supabase: any, accountId: string, phone: string):
 }
 
 async function handleMessagesUpsert(supabase: any, session: any, data: any) {
-  const messages = data?.messages || []
+  // Accept different formats from Evolution API
+  let messages: any[] = []
+  if (Array.isArray(data)) {
+    messages = data
+  } else if (data?.messages && Array.isArray(data.messages)) {
+    messages = data.messages
+  } else if (data?.message) {
+    messages = [data.message]
+  } else if (data?.key) {
+    messages = [data]
+  }
+
+  console.log(`[whatsapp-webhook] Processing ${messages.length} messages`)
+
+  if (messages.length === 0) {
+    console.log('[whatsapp-webhook] No messages to process, raw data keys:', Object.keys(data || {}))
+  }
   
   for (const msg of messages) {
     const remoteJid = msg.key?.remoteJid
@@ -303,7 +319,12 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any) {
 }
 
 async function handleMessagesUpdate(supabase: any, data: any) {
-  const updates = data || []
+  let updates: any[] = []
+  if (Array.isArray(data)) {
+    updates = data
+  } else if (data && typeof data === 'object') {
+    updates = [data]
+  }
   for (const update of updates) {
     const messageId = update.key?.id
     const status = update.update?.status
@@ -339,7 +360,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     const body = await req.json()
-    console.log('[whatsapp-webhook] Event:', body.event, 'instance:', body.instance)
+    console.log('[whatsapp-webhook] Event:', body.event, 'instance:', body.instance, 'data type:', typeof body.data, 'isArray:', Array.isArray(body.data))
 
     const { event, instance, data } = body
 
