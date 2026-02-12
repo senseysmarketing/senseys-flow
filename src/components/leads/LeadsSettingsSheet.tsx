@@ -25,6 +25,7 @@ import {
   Bell,
   Upload,
   ChevronRight,
+  Send,
 } from "lucide-react";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -33,8 +34,9 @@ import DistributionRulesManager from "@/components/DistributionRulesManager";
 import MetaFormScoringManager from "@/components/MetaFormScoringManager";
 import FollowUpSettings from "@/components/FollowUpSettings";
 import DataImporter from "@/components/DataImporter";
+import MetaEventMappingManager from "@/components/MetaEventMappingManager";
 
-type SettingsTab = "status" | "distribution" | "qualification" | "followup" | "import";
+type SettingsTab = "status" | "distribution" | "qualification" | "followup" | "import" | "meta-events";
 
 interface LeadsSettingsSheetProps {
   children?: React.ReactNode;
@@ -73,6 +75,12 @@ const settingsItems = [
     description: "Importe leads de planilhas ou outras fontes",
     permission: "leads.create",
   },
+  {
+    id: "meta-events" as SettingsTab,
+    icon: Send,
+    label: "Eventos Meta CAPI",
+    description: "Configure o disparo de eventos para otimização de campanhas",
+  },
 ];
 
 const modalConfig: Record<SettingsTab, { title: string; description: string; maxWidth: string }> = {
@@ -100,6 +108,11 @@ const modalConfig: Record<SettingsTab, { title: string; description: string; max
     title: "Importar Leads",
     description: "Importe leads de planilhas ou outras fontes",
     maxWidth: "!max-w-4xl",
+  },
+  "meta-events": {
+    title: "Eventos Meta CAPI",
+    description: "Configure eventos de conversão enviados ao Meta",
+    maxWidth: "!max-w-5xl",
   },
 };
 
@@ -131,6 +144,8 @@ export const LeadsSettingsSheet = ({ children, onOpenTab }: LeadsSettingsSheetPr
         return <FollowUpSettings />;
       case "import":
         return <DataImporter />;
+      case "meta-events":
+        return <MetaEventMappingManager />;
       default:
         return null;
     }
