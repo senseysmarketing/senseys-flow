@@ -92,6 +92,21 @@ function extractPhoneFromJid(jid: string): string {
   return jid.replace('@s.whatsapp.net', '').replace('@c.us', '').replace(/[^0-9]/g, '')
 }
 
+function normalizeBrazilianJid(jid: string): string {
+  const phone = extractPhoneFromJid(jid);
+  // Brazilian numbers: country code (55) + DDD (2 digits) + number (8 or 9 digits)
+  // If 12 digits (55 + DD + 8 digits), insert 9 after DDD to normalize
+  if (phone.length === 12 && phone.startsWith('55')) {
+    const ddd = phone.slice(2, 4);
+    const number = phone.slice(4);
+    const normalized = `55${ddd}9${number}`;
+    const suffix = jid.includes('@') ? '@' + jid.split('@')[1] : '@s.whatsapp.net';
+    console.log(`[whatsapp-webhook] Normalized Brazilian JID: ${jid} -> ${normalized}${suffix}`);
+    return normalized + suffix;
+  }
+  return jid;
+}
+
 function extractMessageContent(msg: any): { content: string | null, mediaType: string, mediaUrl: string | null } {
   // Recursively unwrap ephemeral and viewOnce messages
   if (msg.message?.ephemeralMessage?.message) {
@@ -211,9 +226,11 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any) {
   }
   
   for (const msg of messages) {
-    const remoteJid = msg.key?.remoteJid
-    if (!remoteJid || remoteJid.endsWith('@g.us') || remoteJid === 'status@broadcast') continue
+    const rawRemoteJid = msg.key?.remoteJid
+    if (!rawRemoteJid || rawRemoteJid.endsWith('@g.us') || rawRemoteJid === 'status@broadcast') continue
 
+    // Normalize Brazilian JIDs to always include the 9th digit
+    const remoteJid = normalizeBrazilianJid(rawRemoteJid)
     const phone = extractPhoneFromJid(remoteJid)
     if (!phone || phone.length < 8) continue
 
