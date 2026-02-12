@@ -1,30 +1,68 @@
 
+## Configurar Processamento Automatico da Fila de WhatsApp
 
-## Padronizar Visual das Etapas de Follow-up
+### Status Atual
 
-### Arquivo
+- A funcao `process-whatsapp-queue` foi invocada manualmente com sucesso
+- **2 mensagens enviadas** (incluindo a saudacao da Daniela)
+- **3 follow-ups agendados** automaticamente para a lead Daniela
+- Fila agora esta vazia (todas as pendentes foram processadas)
 
-**`src/components/whatsapp/WhatsAppIntegrationSettings.tsx`**
+### O que sera feito
 
-### Alteracoes
+**1. Habilitar extensoes pg_cron e pg_net (via migration)**
 
-1. **Remover fundo azul das etapas**: Trocar `bg-muted/50 rounded-lg` por nenhum fundo, usando apenas `border-t` como separador entre etapas (identico a secao de saudacao que usa `border-t` para separar blocos)
+Essas extensoes sao necessarias para agendar chamadas HTTP periodicas dentro do Supabase.
 
-2. **Adicionar botao "Personalizar Templates"**: Abaixo de cada select de "Template de Mensagem" nas etapas de follow-up, adicionar o mesmo botao link que existe na saudacao:
-   ```
-   <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setShowTemplatesModal(true)}>
-     <Settings2 className="h-3 w-3 mr-1" />
-     Personalizar Templates
-   </Button>
-   ```
+**2. Criar cron job para processar a fila a cada minuto (via SQL insert)**
 
-3. **Separar etapas com linha**: Cada etapa sera separada por `border-t pt-3` ao inves de ter fundo proprio, mantendo o visual limpo e consistente com a saudacao
+O cron job vai chamar a edge function `process-whatsapp-queue` a cada minuto. A funcao ja possui logica para:
+- Buscar apenas mensagens com `scheduled_for <= now()`
+- Respeitar os delays configurados em cada saudacao e follow-up
+- Pular se nao houver mensagens pendentes (execucao leve)
 
-### Resultado Visual
+### Como funciona o fluxo completo
 
-Cada etapa ficara:
-- Sem fundo colorido
-- Separada da anterior por uma linha horizontal sutil
-- Com o botao "Personalizar Templates" abaixo do select de template
-- Visualmente identica ao bloco da saudacao automatica
+```text
+Lead criada
+  |
+  v
+Saudacao agendada na fila (com delay configurado)
+  |
+  v
+pg_cron (a cada 1 min) -> process-whatsapp-queue
+  |
+  v
+Mensagem enviada via Evolution API
+  |
+  v
+Follow-ups agendados automaticamente (com delays individuais)
+  |
+  v
+pg_cron processa follow-ups quando scheduled_for <= now()
+```
 
+### Detalhes Tecnicos
+
+**Migration (schema change):**
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
+CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
+```
+
+**Cron job (data insert via SQL insert tool):**
+```sql
+SELECT cron.schedule(
+  'process-whatsapp-queue-every-minute',
+  '* * * * *',
+  $$
+  SELECT net.http_post(
+    url := 'https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/process-whatsapp-queue',
+    headers := '{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}'::jsonb,
+    body := '{"time": "cron"}'::jsonb
+  ) AS request_id;
+  $$
+);
+```
+
+Isso garante que todas as mensagens (saudacoes e follow-ups) sejam processadas no momento correto, respeitando os delays configurados por cada conta.
