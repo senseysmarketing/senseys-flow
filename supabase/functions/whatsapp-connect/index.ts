@@ -164,6 +164,7 @@ Deno.serve(async (req) => {
             qrcode: true,
             integration: 'WHATSAPP-BAILEYS',
             webhook: {
+              enabled: true,
               url: webhookUrl,
               webhook_by_events: false,
               events: [
@@ -205,14 +206,18 @@ Deno.serve(async (req) => {
                 'apikey': EVOLUTION_API_KEY,
               },
               body: JSON.stringify({
-                url: webhookUrl,
-                webhook_by_events: false,
-                events: [
-                  'CONNECTION_UPDATE',
-                  'QRCODE_UPDATED',
-                  'MESSAGES_UPSERT',
-                  'MESSAGES_UPDATE'
-                ]
+                webhook: {
+                  enabled: true,
+                  url: webhookUrl,
+                  webhook_by_events: false,
+                  events: [
+                    'CONNECTION_UPDATE',
+                    'QRCODE_UPDATED',
+                    'MESSAGES_UPSERT',
+                    'MESSAGES_UPDATE',
+                    'SEND_MESSAGE'
+                  ]
+                }
               }),
             })
             const webhookData = await webhookResponse.json()
@@ -362,15 +367,18 @@ Deno.serve(async (req) => {
                     'apikey': EVOLUTION_API_KEY,
                   },
                   body: JSON.stringify({
-                    url: webhookUrl,
-                    webhook_by_events: false,
-                    events: [
-                      'CONNECTION_UPDATE',
-                      'QRCODE_UPDATED',
-                      'MESSAGES_UPSERT',
-                      'MESSAGES_UPDATE',
-                      'SEND_MESSAGE'
-                    ]
+                    webhook: {
+                      enabled: true,
+                      url: webhookUrl,
+                      webhook_by_events: false,
+                      events: [
+                        'CONNECTION_UPDATE',
+                        'QRCODE_UPDATED',
+                        'MESSAGES_UPSERT',
+                        'MESSAGES_UPDATE',
+                        'SEND_MESSAGE'
+                      ]
+                    }
                   }),
                 })
                 const webhookSetData = await webhookSetResponse.json()
@@ -469,15 +477,18 @@ Deno.serve(async (req) => {
               'apikey': EVOLUTION_API_KEY,
             },
             body: JSON.stringify({
-              url: webhookUrl,
-              webhook_by_events: false,
-              events: [
-                'CONNECTION_UPDATE',
-                'QRCODE_UPDATED',
-                'MESSAGES_UPSERT',
-                'MESSAGES_UPDATE',
-                'SEND_MESSAGE'
-              ]
+              webhook: {
+                enabled: true,
+                url: webhookUrl,
+                webhook_by_events: false,
+                events: [
+                  'CONNECTION_UPDATE',
+                  'QRCODE_UPDATED',
+                  'MESSAGES_UPSERT',
+                  'MESSAGES_UPDATE',
+                  'SEND_MESSAGE'
+                ]
+              }
             }),
           })
           const webhookData = await webhookResponse.json()
