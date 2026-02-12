@@ -1,75 +1,81 @@
 
 
-## Corrigir event_id no Envio de Eventos Meta CAPI
+## Modal de Chat WhatsApp no Botao de Leads
 
-### Problema Identificado
+### O que sera feito
 
-O `event_id` enviado para a Meta CAPI esta sendo gerado como um ID interno do CRM (`lead_id_eventName_timestamp`), em vez de usar o `meta_lead_id` original do formulario do Facebook. Isso impede que a Meta conecte estruturalmente o evento de qualificacao ao lead original do formulario, reduzindo a eficacia da otimizacao de campanhas.
+Ao clicar no botao "WhatsApp" no card de lead (Kanban ou tabela), em vez de abrir diretamente o wa.me, o sistema abrira um modal com a conversa do WhatsApp integrada ao CRM. O modal tera deteccao inteligente do estado da conexao WhatsApp da conta.
 
-### Status Atual (Nivel Intermediario)
-
-```text
-Codigo atual (linha 122):
-  eventId = `${lead_id}_${event_name}_${timestamp}`
-  
-  -> Gera: "uuid-interno_Lead_1707480000"
-  -> Meta NAO consegue vincular ao lead original do formulario
-```
-
-### Correcao (Nivel Avancado)
+### Fluxo de Decisao
 
 ```text
-Codigo corrigido:
-  Se meta_lead_id existir:
-    eventId = meta_lead_id   (ID original do formulario Meta)
-  Senao:
-    eventId = `${lead_id}_${event_name}_${timestamp}`  (fallback para leads sem meta_lead_id)
+Clique no botao WhatsApp
+       |
+       v
+  WhatsApp conectado?
+     /        \
+   SIM        NAO
+    |           |
+    v           v
+  Modal com    Modal de aviso:
+  chat do      - Icone ilustrativo
+  lead em      - "Conecte seu WhatsApp para
+  tempo real     enviar e receber mensagens
+  (igual tela    diretamente pelo CRM"
+  Conversas)   - Botao "Conectar WhatsApp"
+               - Botao "Abrir WhatsApp Web"
+                 (link wa.me tradicional)
 ```
 
-### O que sera alterado
+### Detalhes da Implementacao
 
-**Arquivo: `supabase/functions/send-meta-event/index.ts`**
+**1. Novo componente: `src/components/leads/WhatsAppChatModal.tsx`**
 
-1. Alterar a logica de geracao do `event_id` (linha 120-122):
-   - Usar `lead.meta_lead_id` como `event_id` quando disponivel
-   - Manter o fallback atual para leads que nao vieram do Meta (webhook manual, importacao, etc.)
-   - Adicionar log indicando qual tipo de event_id esta sendo usado
+- Recebe props: `open`, `onClose`, `lead` (nome, telefone, id, propertyName)
+- Ao abrir, consulta `whatsapp_sessions` para verificar se a conta tem WhatsApp conectado
+- **Se conectado**: 
+  - Busca ou cria a conversa pelo telefone do lead na tabela `whatsapp_conversations`
+  - Renderiza o `ChatView` existente dentro do modal (reutiliza todo o componente de chat)
+  - Usa o hook `useMessages` para carregar e enviar mensagens em tempo real
+- **Se nao conectado**: 
+  - Exibe tela de aviso com icone `WifiOff` ou `MessageCircle`
+  - Texto explicativo sobre os beneficios da conexao (enviar/receber pelo CRM, automacoes, historico)
+  - Botao primario "Conectar WhatsApp" que redireciona para `/settings` (aba WhatsApp)
+  - Botao secundario "Abrir WhatsApp Web" que abre o link wa.me tradicional (comportamento atual)
 
-2. Manter `userData.lead_id = lead.meta_lead_id` como esta (matching de usuario continua funcionando)
+**2. Alterar `src/components/WhatsAppButton.tsx`**
 
-### Resultado Esperado
+- Adicionar estado para controlar abertura do modal
+- Em vez de chamar `window.open(wa.me...)` diretamente, abrir o `WhatsAppChatModal`
+- Passar `leadName`, `leadId`, `phone` e `propertyName` para o modal
 
-O payload enviado para a Meta ficara assim:
+**3. Alterar `src/components/LeadKanbanCard.tsx`**
 
-```text
-{
-  "event_name": "Contact",
-  "event_time": 1707480000,
-  "event_id": "META_LEAD_ID_ORIGINAL",    <-- agora usa o ID do formulario
-  "action_source": "system_generated",
-  "user_data": {
-    "lead_id": "META_LEAD_ID_ORIGINAL",   <-- matching de usuario (ja existia)
-    "em": ["hash_sha256_email"],
-    "ph": ["hash_sha256_phone"]
-  },
-  "custom_data": {
-    "lead_event_source": "Senseys CRM",
-    "content_name": "Apartamento Centro",
-    "content_category": "Facebook"
-  }
-}
-```
+- Nenhuma mudanca necessaria - ja passa todas as props para o `WhatsAppButton`
 
-### Checklist de Conformidade
+### Estrutura do Modal
 
-- [x] Hash SHA-256 de email e telefone
-- [x] Envio rapido apos mudanca de status
-- [Corrigir] event_id usando meta_lead_id do formulario
-- [x] Mesmo pixel da campanha (via account_meta_config)
-- [x] action_source: "system_generated"
-- [x] user_data.lead_id para matching
+**Estado: WhatsApp Conectado**
+- Header com nome do lead e telefone formatado
+- Area de mensagens com scroll (reutiliza ChatView)
+- Input de mensagem com templates rapidos
+- Tamanho do modal: largura media (~600px), altura 80vh
+
+**Estado: WhatsApp Nao Conectado**
+- Layout centralizado com icone grande
+- Titulo: "WhatsApp nao conectado"
+- Descricao: "Conecte seu WhatsApp para conversar com seus leads diretamente pelo CRM, enviar mensagens automaticas e manter todo o historico centralizado."
+- Lista de beneficios (icones + texto):
+  - Envie e receba mensagens pelo CRM
+  - Automacoes de saudacao e follow-up
+  - Historico completo de conversas
+- Botao verde: "Conectar WhatsApp" (vai para Settings)
+- Botao outline: "Abrir no WhatsApp Web" (abre wa.me como antes)
 
 ### Detalhes Tecnicos
 
-A alteracao e minima - apenas 5-6 linhas na edge function `send-meta-event/index.ts`. Nenhuma mudanca no banco de dados ou frontend e necessaria.
+- O hook `useMessages` ja suporta buscar mensagens por `remote_jid` - precisaremos converter o telefone do lead para o formato de JID (`55DDXXXXXXXXX@s.whatsapp.net`)
+- A verificacao de conexao usara uma query simples a `whatsapp_sessions` (mesma logica usada em `Leads.tsx` linha 373)
+- O modal usara o componente `Dialog` existente com classe `!max-w-2xl` e altura controlada
+- O `ChatView` sera reutilizado diretamente, passando `isMobile={false}`
 
