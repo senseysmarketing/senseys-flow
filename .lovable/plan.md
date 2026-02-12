@@ -1,109 +1,77 @@
 
 
-## Corrigir Configuracao do Webhook WhatsApp - Causa Raiz ENCONTRADA
+## Corrigir Recebimento de Mensagens WhatsApp - Diagnostico Final
 
-### Problema Real (Confirmado nos Logs)
+### Problema 1: Webhook URL possivelmente vazia na Evolution API
 
-O log da edge function `whatsapp-connect` revela o erro definitivo:
+Os logs confirmam que para sua instancia `senseys_05f41011_8143_4a71_a3ca_8f42f043ab8c`:
+- `send.message` chega (evento de envio)
+- `messages.update` chega (status de entrega)
+- `messages.upsert` NUNCA chega (mensagens recebidas)
 
-```
-Webhook reconfigured for senseys_05f41011_8143_4a71_a3ca_8f42f043ab8c :
-{"status":400,"error":"Bad Request","response":{"message":[["instance requires property \"webhook\""]]}}
-```
+Os toggles estao ON no dashboard, mas a URL do webhook pode estar vazia ou incorreta. O campo de URL fica **acima** dos toggles de eventos na pagina do Evolution API.
 
-A Evolution API esta **rejeitando** a configuracao do webhook com erro 400 porque o payload esta no formato errado. O codigo atual envia:
+**Acao manual imediata (CRITICA):**
+1. Na pagina do Evolution API, role para **cima** ate encontrar o campo "Webhook URL"
+2. Verifique se esta preenchido com: `https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/whatsapp-webhook`
+3. Se estiver vazio ou diferente, preencha com a URL acima
+4. Clique em **Save** no canto inferior direito
 
-```text
-{
-  "url": "...",
-  "webhook_by_events": false,
-  "events": [...]
-}
-```
+### Problema 2: Tabelas sem Realtime Publication
 
-Mas a Evolution API v2 espera os campos dentro de uma propriedade `webhook`:
+As tabelas `whatsapp_messages` e `whatsapp_conversations` nao estao na publicacao `supabase_realtime`. Isso significa que o frontend nao recebe notificacoes quando novas mensagens sao inseridas no banco.
 
-```text
-{
-  "webhook": {
-    "enabled": true,
-    "url": "...",
-    "webhook_by_events": false,
-    "events": [...]
-  }
-}
-```
+**Correcao: Migracao SQL**
 
-Resultado: **cada tentativa de configurar o webhook falha silenciosamente** (o codigo loga o erro mas nao o trata). Por isso o screenshot mostra webhook vazio na Evolution API.
-
-### Segundo Problema: Casing dos Eventos
-
-No screenshot da Evolution API, os eventos estao listados como `MESSAGES_UPSERT` (maiusculas com underscore). Porem o switch no webhook usa `messages.upsert` (minusculas com ponto).
-
-Analisando os logs das **outras instancias que FUNCIONAM**, os eventos chegam como `messages.upsert` (com ponto, minusculas). Isso indica que a Evolution API converte internamente. Porem, para garantir robustez, o switch deve aceitar ambos os formatos.
-
-### Plano de Correcao
-
-**1. Corrigir formato do payload do webhook (CORRECAO PRINCIPAL)**
-
-Arquivo: `supabase/functions/whatsapp-connect/index.ts`
-
-Em TODOS os locais onde `webhook/set` e chamado (3 ocorrencias: no `create-instance` quando instancia ja existe, no `status`, e no `reconfigure-webhook`), corrigir o body para:
+Criar uma migracao para adicionar ambas as tabelas ao Realtime:
 
 ```text
-body: JSON.stringify({
-  webhook: {
-    enabled: true,
-    url: webhookUrl,
-    webhook_by_events: false,
-    events: [
-      'MESSAGES_UPSERT',
-      'MESSAGES_UPDATE',
-      'CONNECTION_UPDATE',
-      'QRCODE_UPDATED',
-      'SEND_MESSAGE'
-    ]
-  }
-})
+ALTER PUBLICATION supabase_realtime ADD TABLE public.whatsapp_messages;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.whatsapp_conversations;
 ```
 
-Tambem corrigir o webhook inline na criacao de instancia (`instance/create`).
+### Problema 3: Falta diagnostico para verificar webhook via API
 
-**2. Aceitar ambos os formatos de evento no webhook**
+Adicionar uma acao `check-webhook` no `whatsapp-connect` que chama `webhook/find/{instanceName}` para verificar a configuracao real do webhook (URL, eventos habilitados, status). Isso permite diagnosticar problemas de webhook sem precisar acessar o painel da Evolution API manualmente.
 
-Arquivo: `supabase/functions/whatsapp-webhook/index.ts`
+**Arquivo: `supabase/functions/whatsapp-connect/index.ts`**
 
-Normalizar o nome do evento antes do switch:
+Adicionar novo case no switch:
 
 ```text
-// Normalizar nome do evento (MESSAGES_UPSERT -> messages.upsert)
-const normalizedEvent = event?.toLowerCase().replace(/_/g, '.')
+case 'check-webhook':
+  const findResponse = await fetch(
+    `${EVOLUTION_API_URL}/webhook/find/${instanceName}`,
+    { headers: { 'apikey': EVOLUTION_API_KEY } }
+  )
+  const webhookConfig = await findResponse.json()
+  console.log('[whatsapp-connect] Current webhook config:', JSON.stringify(webhookConfig))
+  return webhookConfig
 ```
 
-E usar `normalizedEvent` no switch. Isso garante compatibilidade independente do formato enviado pela Evolution API.
+Tambem modificar o case `status` para alem de configurar, tambem verificar o resultado:
 
-**3. Adicionar tratamento de erro na configuracao do webhook**
-
-Nos locais onde `webhook/set` e chamado, verificar se a resposta indica erro e logar adequadamente em vez de silenciar.
-
-### Arquivos Alterados
-
-- `supabase/functions/whatsapp-connect/index.ts` - Corrigir payload do webhook em 4 locais (create, already-exists, status, reconfigure-webhook)
-- `supabase/functions/whatsapp-webhook/index.ts` - Normalizar evento para aceitar ambos formatos
+```text
+// Apos webhook/set, chamar webhook/find para verificar
+const verifyResponse = await fetch(
+  `${EVOLUTION_API_URL}/webhook/find/${instanceName}`,
+  { headers: { 'apikey': EVOLUTION_API_KEY } }
+)
+const currentConfig = await verifyResponse.json()
+console.log('[whatsapp-connect] Webhook verified:', JSON.stringify(currentConfig).substring(0, 500))
+```
 
 ### Sequencia de Implementacao
 
-1. Corrigir o formato do payload em `whatsapp-connect`
-2. Adicionar normalizacao de evento em `whatsapp-webhook`
-3. Deploy de ambas as functions
-4. Acessar pagina de Configuracoes do WhatsApp (dispara status check que reconfigura webhook)
-5. Verificar nos logs se o webhook foi configurado com sucesso (status 200)
-6. Testar enviando uma mensagem de resposta do lead
+1. **Acao manual do usuario (PRIORITARIA)**: Verificar e preencher a URL do webhook no dashboard do Evolution API
+2. Criar migracao SQL para Realtime publication
+3. Adicionar diagnostico `check-webhook` e verificacao no `status`
+4. Deploy das edge functions
+5. Testar enviando mensagem do lead
 
 ### Resultado Esperado
 
-- O webhook sera configurado com sucesso na Evolution API (sem mais erro 400)
-- Mensagens recebidas dos leads chegarao ao webhook e serao salvas no banco
-- O chat no CRM mostrara as respostas em tempo real
-- Compatibilidade total com diferentes versoes da Evolution API
+- Com a URL do webhook correta, `messages.upsert` passara a chegar
+- Com Realtime habilitado, a UI atualizara automaticamente
+- Com o diagnostico, problemas futuros de webhook serao identificados sem acessar o painel manualmente
 
