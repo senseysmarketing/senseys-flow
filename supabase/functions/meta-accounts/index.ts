@@ -250,9 +250,10 @@ serve(async (req) => {
       }
 
       // Subscribe page to webhook if page_id is provided
+      let subscribeResult = null;
       if (page_id) {
         try {
-          // Get page token
+          console.log(`Subscribing page ${page_id} to leadgen webhooks...`);
           const pagesResponse = await fetch(
             `https://graph.facebook.com/v19.0/me/accounts?fields=id,access_token&access_token=${accessToken}`
           );
@@ -260,20 +261,23 @@ serve(async (req) => {
           const pageToken = pagesData.data?.find((p: any) => p.id === page_id)?.access_token;
 
           if (pageToken) {
-            // Subscribe page to leadgen
+            console.log(`Found page token for page ${page_id}, sending subscribed_apps...`);
             const subscribeResponse = await fetch(
               `https://graph.facebook.com/v19.0/${page_id}/subscribed_apps?subscribed_fields=leadgen&access_token=${pageToken}`,
               { method: 'POST' }
             );
             const subscribeData = await subscribeResponse.json();
-            console.log('Page subscription result:', subscribeData);
+            subscribeResult = subscribeData;
+            console.log('Page subscription result:', JSON.stringify(subscribeData));
+          } else {
+            console.error(`Page token NOT FOUND for page ${page_id}. Available pages: ${pagesData.data?.map((p: any) => p.id).join(', ')}`);
           }
         } catch (e) {
-          console.error('Error subscribing page:', e);
+          console.error('Error subscribing page:', e.message, e.stack);
         }
       }
 
-      return new Response(JSON.stringify({ success: true, config: data }), {
+      return new Response(JSON.stringify({ success: true, config: data, subscribeResult }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
