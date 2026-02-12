@@ -155,7 +155,7 @@ export function WhatsAppChatModal({ open, onClose, leadName, leadId, phone, prop
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
           </div>
         ) : isConnected && conversation ? (
-          <div className="h-[75vh] sm:h-[75vh]">
+          <div className="h-[75vh] sm:h-[75vh] [&>div>div:first-child]:pr-10">
             <ChatView
               conversation={conversation}
               messages={messages}
