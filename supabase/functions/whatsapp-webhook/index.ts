@@ -382,6 +382,9 @@ Deno.serve(async (req) => {
 
     const { event, instance, data } = body
 
+    // Normalize event name: MESSAGES_UPSERT -> messages.upsert, CONNECTION_UPDATE -> connection.update
+    const normalizedEvent = event?.toLowerCase().replace(/_/g, '.')
+
     if (!instance) {
       return new Response(JSON.stringify({ ok: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -401,7 +404,7 @@ Deno.serve(async (req) => {
       })
     }
 
-    switch (event) {
+    switch (normalizedEvent) {
       case 'connection.update':
         await handleConnectionUpdate(supabase, session, data, instance)
         break
@@ -416,7 +419,7 @@ Deno.serve(async (req) => {
         await handleMessagesUpdate(supabase, data)
         break
       default:
-        console.log(`[whatsapp-webhook] Unhandled event: ${event}`)
+        console.log(`[whatsapp-webhook] Unhandled event: ${event} (normalized: ${normalizedEvent})`)
     }
 
     return new Response(JSON.stringify({ ok: true }), {
