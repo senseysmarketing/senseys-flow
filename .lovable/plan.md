@@ -1,68 +1,48 @@
 
-## Configurar Processamento Automatico da Fila de WhatsApp
 
-### Status Atual
+## Mover Eventos Meta CAPI para Configuracoes de Leads
 
-- A funcao `process-whatsapp-queue` foi invocada manualmente com sucesso
-- **2 mensagens enviadas** (incluindo a saudacao da Daniela)
-- **3 follow-ups agendados** automaticamente para a lead Daniela
-- Fila agora esta vazia (todas as pendentes foram processadas)
+### Contexto
+
+Os eventos Meta CAPI estao sendo disparados corretamente para o pixel de cada cliente (todos os ultimos 20 logs com status 200). As informacoes enviadas incluem email e telefone em hash SHA-256, meta_lead_id para matching, interesse do lead e origem.
+
+A tela de configuracao de eventos Meta CAPI foi movida anteriormente para a pagina de Relatorios (`ReportsSettingsSheet`), mas o usuario deseja que ela fique acessivel diretamente nas configuracoes da pagina de Leads, seguindo o mesmo padrao de modal das demais opcoes.
 
 ### O que sera feito
 
-**1. Habilitar extensoes pg_cron e pg_net (via migration)**
+**1. Adicionar opcao "Eventos Meta CAPI" no `LeadsSettingsSheet`**
 
-Essas extensoes sao necessarias para agendar chamadas HTTP periodicas dentro do Supabase.
+- Adicionar um novo item no menu de configuracoes de leads com icone `Send` e descricao "Configure o disparo de eventos para otimizacao de campanhas"
+- Ao clicar, abre um modal (Dialog) com o componente `MetaEventMappingManager`, igual ao padrao das outras opcoes (Status, Distribuicao, etc.)
 
-**2. Criar cron job para processar a fila a cada minuto (via SQL insert)**
+**2. Remover da pagina de Relatorios (opcional)**
 
-O cron job vai chamar a edge function `process-whatsapp-queue` a cada minuto. A funcao ja possui logica para:
-- Buscar apenas mensagens com `scheduled_for <= now()`
-- Respeitar os delays configurados em cada saudacao e follow-up
-- Pular se nao houver mensagens pendentes (execucao leve)
-
-### Como funciona o fluxo completo
-
-```text
-Lead criada
-  |
-  v
-Saudacao agendada na fila (com delay configurado)
-  |
-  v
-pg_cron (a cada 1 min) -> process-whatsapp-queue
-  |
-  v
-Mensagem enviada via Evolution API
-  |
-  v
-Follow-ups agendados automaticamente (com delays individuais)
-  |
-  v
-pg_cron processa follow-ups quando scheduled_for <= now()
-```
+- Remover o `MetaEventMappingManager` do `ReportsSettingsSheet` para evitar duplicidade, ja que a configuracao passara a viver na tela de Leads
 
 ### Detalhes Tecnicos
 
-**Migration (schema change):**
-```sql
-CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
-CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
-```
+**Arquivo: `src/components/leads/LeadsSettingsSheet.tsx`**
 
-**Cron job (data insert via SQL insert tool):**
-```sql
-SELECT cron.schedule(
-  'process-whatsapp-queue-every-minute',
-  '* * * * *',
-  $$
-  SELECT net.http_post(
-    url := 'https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/process-whatsapp-queue',
-    headers := '{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}'::jsonb,
-    body := '{"time": "cron"}'::jsonb
-  ) AS request_id;
-  $$
-);
-```
+- Adicionar import do `Send` (lucide-react) - ja importado no arquivo
+- Adicionar novo item no array `settingsItems`:
+  ```
+  { id: "meta-events", icon: Send, label: "Eventos Meta CAPI", description: "Configure o disparo de eventos para otimizacao de campanhas" }
+  ```
+- Adicionar entrada no `modalConfig`:
+  ```
+  "meta-events": { title: "Eventos Meta CAPI", description: "Configure eventos de conversao enviados ao Meta", maxWidth: "!max-w-5xl" }
+  ```
+- Adicionar case no `renderModalContent`:
+  ```
+  case "meta-events": return <MetaEventMappingManager />;
+  ```
+- Importar `MetaEventMappingManager` no topo do arquivo
 
-Isso garante que todas as mensagens (saudacoes e follow-ups) sejam processadas no momento correto, respeitando os delays configurados por cada conta.
+**Arquivo: `src/components/reports/ReportsSettingsSheet.tsx`**
+
+- Remover o conteudo de eventos Meta CAPI, simplificando ou removendo o sheet se nao houver mais opcoes
+
+### Resultado
+
+O usuario podera acessar a configuracao completa de eventos Meta CAPI (mapeamento de status para eventos, teste de conexao, logs recentes e estatisticas) diretamente pelo icone de engrenagem na pagina de Leads, sem precisar navegar para outra pagina.
+
