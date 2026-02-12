@@ -381,8 +381,16 @@ Deno.serve(async (req) => {
                     }
                   }),
                 })
-                const webhookSetData = await webhookSetResponse.json()
+              const webhookSetData = await webhookSetResponse.json()
                 console.log('[whatsapp-connect] Webhook reconfigured for', instanceName, ':', JSON.stringify(webhookSetData).substring(0, 300))
+                
+                // Verify webhook was actually applied
+                const verifyResponse = await fetch(
+                  `${EVOLUTION_API_URL}/webhook/find/${instanceName}`,
+                  { headers: { 'apikey': EVOLUTION_API_KEY } }
+                )
+                const currentConfig = await verifyResponse.json()
+                console.log('[whatsapp-connect] Webhook verified:', JSON.stringify(currentConfig).substring(0, 500))
               } catch (e) {
                 console.log('[whatsapp-connect] Error reconfiguring webhook:', e)
               }
@@ -464,6 +472,32 @@ Deno.serve(async (req) => {
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
+      }
+
+      case 'check-webhook': {
+        console.log('[whatsapp-connect] Checking webhook config...')
+        
+        try {
+          const findResponse = await fetch(
+            `${EVOLUTION_API_URL}/webhook/find/${instanceName}`,
+            { headers: { 'apikey': EVOLUTION_API_KEY } }
+          )
+          const webhookConfig = await findResponse.json()
+          console.log('[whatsapp-connect] Current webhook config:', JSON.stringify(webhookConfig))
+          
+          return new Response(JSON.stringify({ 
+            success: true, 
+            webhookConfig 
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          })
+        } catch (e) {
+          console.log('[whatsapp-connect] Error checking webhook:', e)
+          return new Response(JSON.stringify({ error: 'Failed to check webhook', details: e.message }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          })
+        }
       }
 
       case 'reconfigure-webhook': {
