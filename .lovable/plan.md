@@ -1,157 +1,148 @@
 
-## Correcao: Webhook da instancia nao recebe mensagens
 
-### Problema identificado
+## Correcao: Mensagens do WhatsApp Web nao aparecem + instancia sem eventos
 
-As mensagens do Leo Henry **nao estao chegando ao nosso webhook** porque a Evolution API nao esta enviando eventos para a instancia `senseys_05f41011_8143_4a71_a3ca_8f42f043ab8c`. 
+### Diagnostico
 
-Confirmacoes:
-- **0 mensagens recebidas** no banco de dados para este contato (apenas 6 enviadas)
-- **0 logs do webhook** para esta instancia (enquanto outras 3 instancias funcionam normalmente)
-- **0 chamadas a `whatsapp-connect`** nos logs recentes, indicando que o erro 401 impediu qualquer reconfiguacao
+1. **Webhook configurado corretamente** - URL, eventos e status estao OK na Evolution API
+2. **Zero eventos recebidos** - Mesmo apos reconfigurar o webhook multiplas vezes, a Evolution API nao esta chamando o webhook para a instancia `senseys_05f41011_8143_4a71_a3ca_8f42f043ab8c` (outras instancias funcionam normalmente)
+3. **Evento SEND_MESSAGE sem handler** - O webhook registra o evento `SEND_MESSAGE`, mas o codigo nao tem um handler para `send.message` no switch
 
 ### Causa raiz
 
-A edge function `whatsapp-connect` exige autenticacao (verifica o header `Authorization`). Quando a sessao do usuario expira:
-1. O frontend chama `whatsapp-connect?action=status`
-2. A funcao retorna 401
-3. A correcao anterior apenas silenciou o erro no frontend (fez `return`)
-4. O webhook **nunca e reconfigurado** na Evolution API
-5. Resultado: mensagens recebidas nunca chegam ao sistema
+Dois problemas:
+
+1. **Instancia "travada"** - A Evolution API pode ter um bug onde a configuracao de webhook e salva mas nao e aplicada na instancia ativa. Solucao: reiniciar a instancia via API (`/instance/restart`)
+2. **Evento `send.message` nao processado** - Mensagens enviadas pela API (nao pelo WhatsApp Web) chegam como `SEND_MESSAGE` mas o webhook ignora esse evento. Mensagens do WhatsApp Web chegam como `MESSAGES_UPSERT` com `fromMe: true`, que ja e tratado corretamente
 
 ### Plano de correcao
 
-**1. Tornar a acao `status` mais resiliente no frontend**
+**1. Adicionar handler para `send.message` no webhook**
 
-Quando o status check falha por 401, tentar renovar a sessao automaticamente e re-executar a chamada. Se nao conseguir, exibir um alerta visual claro pedindo re-login.
+No arquivo `supabase/functions/whatsapp-webhook/index.ts`, adicionar o case `send.message` no switch (linha 438) para rotear ao mesmo handler de `messages.upsert`:
 
-**2. Adicionar um endpoint de health-check/reconfigure sem autenticacao**
+```typescript
+case 'send.message':
+  console.log('[whatsapp-webhook] send.message payload keys:', JSON.stringify(Object.keys(data || {})))
+  await handleMessagesUpsert(supabase, session, data)
+  break
+```
 
-Criar uma acao `reconfigure-webhook` na edge function `whatsapp-connect` que nao exija JWT do usuario, mas valide via um token interno ou pela propria chave da Evolution API. Isso permite que o sistema reconfigure o webhook independentemente do estado de login do usuario.
+**2. Adicionar acao `restart-instance` na edge function `whatsapp-connect`**
 
-Alternativa mais simples: **mover a logica de reconfigurar webhook para a edge function `whatsapp-webhook`**. Quando o webhook recebe um `connection.update` com estado `open`, ele ja pode reconfigurar a si mesmo (ja que a webhook function nao exige JWT).
+Para forcar a Evolution API a reaplicar a configuracao do webhook, adicionar uma acao que reinicia a instancia:
 
-**3. Solucao imediata: forcar reconfiguacao agora**
+```typescript
+case 'restart-instance': {
+  // Chamar /instance/restart da Evolution API
+  const restartResp = await fetch(
+    `${EVOLUTION_API_URL}/instance/restart/${instanceName}`,
+    { method: 'PUT', headers: { 'apikey': EVOLUTION_API_KEY } }
+  )
+  const restartData = await restartResp.json()
+  
+  // Aguardar reconexao e reconfigurar webhook
+  await new Promise(resolve => setTimeout(resolve, 3000))
+  await configureWebhook(instanceName, webhookUrl)
+  
+  return new Response(JSON.stringify({ 
+    success: true, message: 'Instance restarted and webhook reconfigured' 
+  }), { headers: corsHeaders })
+}
+```
 
-Adicionar na edge function `whatsapp-connect` uma acao `force-reconfigure` que aceita o `account_id` como parametro e valida via service role key, sem necessidade de sessao do usuario. Tambem expor um botao de "Diagnosticar Webhook" na tela de configuracoes.
+**3. Adicionar botao "Reiniciar Instancia" na UI de configuracoes**
+
+No arquivo `src/components/whatsapp/WhatsAppIntegrationSettings.tsx`, adicionar um botao ao lado do "Reconfigurar Webhook" que chama a nova acao `restart-instance`. Isso permite resolver o problema de instancias travadas sem precisar desconectar e reconectar o QR Code.
+
+**4. Executar restart imediatamente apos deploy**
+
+Apos deployar as funcoes, chamar `restart-instance` para forcar a reconexao e finalmente receber os eventos pendentes.
 
 ### Secao tecnica
 
+**Arquivo: `supabase/functions/whatsapp-webhook/index.ts`**
+
+Adicionar case no switch (apos linha 437):
+```typescript
+case 'send.message':
+  console.log('[whatsapp-webhook] send.message payload keys:', JSON.stringify(Object.keys(data || {})))
+  await handleMessagesUpsert(supabase, session, data)
+  break
+```
+
 **Arquivo: `supabase/functions/whatsapp-connect/index.ts`**
 
-Adicionar uma acao `force-reconfigure` que funcione sem autenticacao do usuario, usando uma verificacao alternativa (ex: API key interna ou permitindo que a propria funcao se auto-reconfigure quando detecta a instancia):
-
+Dentro do bloco de acoes nao autenticadas (apos o `force-reconfigure`, antes do auth check), adicionar:
 ```typescript
-// Antes do switch, adicionar caso especial para force-reconfigure
-// que nao precisa de auth do usuario
-case 'force-reconfigure': {
-  // Aceitar account_id como parametro de query
+if (action === 'restart-instance') {
   const targetAccountId = url.searchParams.get('account_id')
   if (!targetAccountId) {
-    return new Response(JSON.stringify({ error: 'account_id required' }), { status: 400, headers: corsHeaders })
+    return new Response(JSON.stringify({ error: 'account_id required' }), {
+      status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    })
+  }
+  
+  const { data: accountExists } = await supabase
+    .from('accounts').select('id').eq('id', targetAccountId).maybeSingle()
+  if (!accountExists) {
+    return new Response(JSON.stringify({ error: 'Invalid account_id' }), {
+      status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    })
   }
   
   const targetInstance = `senseys_${targetAccountId.replace(/-/g, '_')}`
   
-  // Verificar se instancia existe e esta conectada
-  const statusResp = await fetch(
-    `${EVOLUTION_API_URL}/instance/connectionState/${targetInstance}`,
-    { headers: { 'apikey': EVOLUTION_API_KEY } }
-  )
-  
-  if (statusResp.ok) {
-    const statusData = await statusResp.json()
-    if (statusData.instance?.state === 'open') {
-      // Reconfigurar webhook
-      await fetch(`${EVOLUTION_API_URL}/webhook/set/${targetInstance}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_API_KEY },
-        body: JSON.stringify({
-          webhook: {
-            enabled: true,
-            url: webhookUrl,
-            webhook_by_events: false,
-            events: ['CONNECTION_UPDATE','QRCODE_UPDATED','MESSAGES_UPSERT','MESSAGES_UPDATE','SEND_MESSAGE']
-          }
-        }),
-      })
-      
-      return new Response(JSON.stringify({ success: true, message: 'Webhook reconfigured' }), { headers: corsHeaders })
-    }
+  try {
+    const restartResp = await fetch(
+      `${EVOLUTION_API_URL}/instance/restart/${targetInstance}`,
+      { method: 'PUT', headers: { 'apikey': EVOLUTION_API_KEY } }
+    )
+    const restartData = await restartResp.json()
+    console.log('[whatsapp-connect] Restart result:', JSON.stringify(restartData))
+    
+    // Aguardar reconexao
+    await new Promise(resolve => setTimeout(resolve, 3000))
+    
+    // Reconfigurar webhook
+    const webhookData = await configureWebhook(targetInstance, webhookUrl)
+    
+    return new Response(JSON.stringify({ 
+      success: true, message: 'Instance restarted', restart: restartData, webhook: webhookData
+    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    })
   }
-  
-  return new Response(JSON.stringify({ error: 'Instance not connected' }), { status: 400, headers: corsHeaders })
-}
-```
-
-Para que esta acao funcione sem JWT, mover o check de autenticacao para DEPOIS do parse da action, e apenas exigir auth nas acoes que necessitam:
-
-```typescript
-// Extrair action antes do auth check
-const url = new URL(req.url)
-const action = url.searchParams.get('action') || 'status'
-
-// Acoes que nao precisam de auth
-if (action === 'force-reconfigure') {
-  // ... logica sem auth
-}
-
-// Auth check para todas as outras acoes
-const authHeader = req.headers.get('Authorization')
-if (!authHeader) {
-  return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders })
 }
 ```
 
 **Arquivo: `src/components/whatsapp/WhatsAppIntegrationSettings.tsx`**
 
-Adicionar um botao "Reconfigurar Webhook" visivel quando conectado e melhorar o tratamento do 401:
-
+Adicionar funcao e botao para reiniciar instancia:
 ```typescript
-// Quando status check falha com 401, tentar refresh da sessao
-if (response.error) {
-  console.log('Error checking WhatsApp status, trying session refresh:', response.error);
-  const { error: refreshError } = await supabase.auth.refreshSession();
-  if (!refreshError) {
-    // Retry after refresh
-    const retryResponse = await supabase.functions.invoke('whatsapp-connect?action=status');
-    if (!retryResponse.error) {
-      // processar normalmente
+const handleRestartInstance = async () => {
+  setReconfiguring(true) // reutilizar estado existente
+  try {
+    const { data: profile } = await supabase.from('profiles').select('account_id').single()
+    if (profile?.account_id) {
+      const response = await supabase.functions.invoke(
+        `whatsapp-connect?action=restart-instance&account_id=${profile.account_id}`
+      )
+      if (response.data?.success) {
+        toast({ title: "Instancia reiniciada!", description: "O webhook foi reconfigurado. Mensagens devem chegar em instantes." })
+      } else {
+        toast({ title: "Erro", description: response.data?.error || "Falha ao reiniciar", variant: "destructive" })
+      }
     }
-  } else {
-    toast({
-      title: "Sessao expirada",
-      description: "Faca login novamente para reconfigurar o WhatsApp.",
-      variant: "destructive"
-    });
-  }
-  return;
+  } finally { setReconfiguring(false) }
 }
-```
-
-Adicionar botao de diagnostico que chama `force-reconfigure`:
-
-```typescript
-const handleForceReconfigure = async () => {
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('account_id')
-    .single();
-  
-  if (profile?.account_id) {
-    const response = await supabase.functions.invoke(
-      `whatsapp-connect?action=force-reconfigure&account_id=${profile.account_id}`
-    );
-    if (response.data?.success) {
-      toast({ title: "Webhook reconfigurado!", description: "As mensagens devem comecar a chegar em instantes." });
-    }
-  }
-};
 ```
 
 ### Resultado esperado
 
-1. A acao `force-reconfigure` permite reconfigurar o webhook sem depender de sessao de usuario
-2. O botao de diagnostico da uma solucao rapida quando o webhook se desconfigura
-3. O auto-refresh de sessao no frontend reduz a chance de falhas silenciosas
-4. As mensagens do Leo Henry e de todos os outros contatos passarao a chegar normalmente apos a reconfiguacao
+1. O restart da instancia forca a Evolution API a reconectar e reaplicar o webhook
+2. Mensagens enviadas pelo WhatsApp Web passam a ser capturadas via `MESSAGES_UPSERT` (fromMe=true)
+3. Mensagens enviadas pela API passam a ser capturadas via `SEND_MESSAGE`
+4. O botao "Reiniciar Instancia" oferece auto-reparo quando eventos param de chegar
