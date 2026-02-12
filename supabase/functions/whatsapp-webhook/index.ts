@@ -435,6 +435,10 @@ Deno.serve(async (req) => {
       case 'messages.update':
         await handleMessagesUpdate(supabase, data)
         break
+      case 'send.message':
+        console.log('[whatsapp-webhook] send.message payload keys:', JSON.stringify(Object.keys(data || {})))
+        await handleMessagesUpsert(supabase, session, data)
+        break
       default:
         console.log(`[whatsapp-webhook] Unhandled event: ${event} (normalized: ${normalizedEvent})`)
     }

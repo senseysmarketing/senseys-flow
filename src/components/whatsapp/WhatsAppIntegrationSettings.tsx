@@ -450,6 +450,42 @@ export function WhatsAppIntegrationSettings() {
     }
   };
 
+  const handleRestartInstance = async () => {
+    setReconfiguring(true);
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('account_id')
+        .single();
+      
+      if (profile?.account_id) {
+        const response = await supabase.functions.invoke(
+          `whatsapp-connect?action=restart-instance&account_id=${profile.account_id}`
+        );
+        if (response.data?.success) {
+          toast({
+            title: 'Instância reiniciada!',
+            description: 'O webhook foi reconfigurado. Mensagens devem chegar em instantes.',
+          });
+        } else {
+          toast({
+            variant: 'destructive',
+            title: 'Erro',
+            description: response.data?.error || 'Falha ao reiniciar instância.',
+          });
+        }
+      }
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: error.message || 'Falha ao reiniciar instância.',
+      });
+    } finally {
+      setReconfiguring(false);
+    }
+  };
+
   const isConnected = session?.status === 'connected';
   const newLeadRule = automationRules.find(r => r.trigger_type === 'new_lead');
 
@@ -502,6 +538,19 @@ export function WhatsAppIntegrationSettings() {
                     <RotateCcw className="h-4 w-4 mr-2" />
                   )}
                   Reconfigurar Webhook
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleRestartInstance}
+                  disabled={reconfiguring}
+                >
+                  {reconfiguring ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
+                  Reiniciar Instância
                 </Button>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>

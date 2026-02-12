@@ -165,6 +165,62 @@ Deno.serve(async (req) => {
       }
     }
 
+    // === UNAUTHENTICATED ACTION: restart-instance ===
+    if (action === 'restart-instance') {
+      const targetAccountId = url.searchParams.get('account_id')
+      if (!targetAccountId) {
+        return new Response(JSON.stringify({ error: 'account_id required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      const { data: accountExists } = await supabase
+        .from('accounts')
+        .select('id')
+        .eq('id', targetAccountId)
+        .maybeSingle()
+
+      if (!accountExists) {
+        return new Response(JSON.stringify({ error: 'Invalid account_id' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      const targetInstance = `senseys_${targetAccountId.replace(/-/g, '_')}`
+      console.log(`[whatsapp-connect] Restarting instance: ${targetInstance}`)
+
+      try {
+        const restartResp = await fetch(
+          `${EVOLUTION_API_URL}/instance/restart/${targetInstance}`,
+          { method: 'PUT', headers: { 'apikey': EVOLUTION_API_KEY } }
+        )
+        const restartData = await restartResp.json()
+        console.log('[whatsapp-connect] Restart result:', JSON.stringify(restartData))
+
+        // Wait for reconnection
+        await new Promise(resolve => setTimeout(resolve, 3000))
+
+        // Reconfigure webhook
+        const webhookData = await configureWebhook(targetInstance, webhookUrl)
+        console.log('[whatsapp-connect] Webhook reconfigured after restart:', JSON.stringify(webhookData).substring(0, 300))
+
+        return new Response(JSON.stringify({ 
+          success: true, message: 'Instance restarted and webhook reconfigured',
+          restart: restartData, webhook: webhookData
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      } catch (e) {
+        console.log('[whatsapp-connect] Error restarting instance:', e)
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    }
+
     // === AUTHENTICATED ACTIONS: require JWT ===
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
