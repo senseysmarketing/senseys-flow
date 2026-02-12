@@ -93,6 +93,20 @@ function extractPhoneFromJid(jid: string): string {
 }
 
 function extractMessageContent(msg: any): { content: string | null, mediaType: string, mediaUrl: string | null } {
+  // Recursively unwrap ephemeral and viewOnce messages
+  if (msg.message?.ephemeralMessage?.message) {
+    return extractMessageContent({ ...msg, message: msg.message.ephemeralMessage.message })
+  }
+  if (msg.message?.viewOnceMessageV2?.message) {
+    return extractMessageContent({ ...msg, message: msg.message.viewOnceMessageV2.message })
+  }
+  if (msg.message?.viewOnceMessage?.message) {
+    return extractMessageContent({ ...msg, message: msg.message.viewOnceMessage.message })
+  }
+  // Skip protocol messages and reaction messages
+  if (msg.message?.protocolMessage || msg.message?.reactionMessage) {
+    return { content: null, mediaType: 'text', mediaUrl: null }
+  }
   if (msg.message?.conversation) {
     return { content: msg.message.conversation, mediaType: 'text', mediaUrl: null }
   }

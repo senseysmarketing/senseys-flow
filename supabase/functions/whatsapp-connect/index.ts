@@ -350,8 +350,35 @@ Deno.serve(async (req) => {
             console.log('[whatsapp-connect] Status data:', statusData)
 
             const isConnected = statusData.instance?.state === 'open'
-            // CORREÇÃO: Sempre atualizar para 'disconnected' quando não conectado
             const newStatus = isConnected ? 'connected' : 'disconnected'
+
+            // Reconfigure webhook automatically when connected
+            if (isConnected) {
+              try {
+                const webhookSetResponse = await fetch(`${EVOLUTION_API_URL}/webhook/set/${instanceName}`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': EVOLUTION_API_KEY,
+                  },
+                  body: JSON.stringify({
+                    url: webhookUrl,
+                    webhook_by_events: false,
+                    events: [
+                      'CONNECTION_UPDATE',
+                      'QRCODE_UPDATED',
+                      'MESSAGES_UPSERT',
+                      'MESSAGES_UPDATE',
+                      'SEND_MESSAGE'
+                    ]
+                  }),
+                })
+                const webhookSetData = await webhookSetResponse.json()
+                console.log('[whatsapp-connect] Webhook reconfigured for', instanceName, ':', JSON.stringify(webhookSetData).substring(0, 300))
+              } catch (e) {
+                console.log('[whatsapp-connect] Error reconfiguring webhook:', e)
+              }
+            }
 
             // Fetch phone number if connected but not saved yet
             let phoneNumber = session.phone_number
@@ -429,6 +456,46 @@ Deno.serve(async (req) => {
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
+      }
+
+      case 'reconfigure-webhook': {
+        console.log('[whatsapp-connect] Reconfiguring webhook...')
+        
+        try {
+          const webhookResponse = await fetch(`${EVOLUTION_API_URL}/webhook/set/${instanceName}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': EVOLUTION_API_KEY,
+            },
+            body: JSON.stringify({
+              url: webhookUrl,
+              webhook_by_events: false,
+              events: [
+                'CONNECTION_UPDATE',
+                'QRCODE_UPDATED',
+                'MESSAGES_UPSERT',
+                'MESSAGES_UPDATE',
+                'SEND_MESSAGE'
+              ]
+            }),
+          })
+          const webhookData = await webhookResponse.json()
+          console.log('[whatsapp-connect] Webhook reconfigure result:', JSON.stringify(webhookData))
+          
+          return new Response(JSON.stringify({ 
+            success: true, 
+            webhook: webhookData
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          })
+        } catch (e) {
+          console.log('[whatsapp-connect] Error reconfiguring webhook:', e)
+          return new Response(JSON.stringify({ error: 'Failed to reconfigure webhook', details: e.message }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          })
+        }
       }
 
       default:
