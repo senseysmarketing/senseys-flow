@@ -25,7 +25,6 @@ async function fetchPhoneNumber(instanceName: string): Promise<string | null> {
     
     console.log('[whatsapp-connect] fetchInstances response:', JSON.stringify(data).substring(0, 500))
     
-    // Estrutura real: data[0].ownerJid = "5516994213312@s.whatsapp.net"
     const ownerJid = data[0]?.ownerJid
     
     console.log('[whatsapp-connect] Extracted ownerJid:', ownerJid)
@@ -47,6 +46,33 @@ async function fetchPhoneNumber(instanceName: string): Promise<string | null> {
   return null
 }
 
+// Helper to configure webhook for an instance
+async function configureWebhook(instanceName: string, webhookUrl: string) {
+  const webhookResponse = await fetch(`${EVOLUTION_API_URL}/webhook/set/${instanceName}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': EVOLUTION_API_KEY,
+    },
+    body: JSON.stringify({
+      webhook: {
+        enabled: true,
+        url: webhookUrl,
+        webhook_by_events: false,
+        events: [
+          'CONNECTION_UPDATE',
+          'QRCODE_UPDATED',
+          'MESSAGES_UPSERT',
+          'MESSAGES_UPDATE',
+          'SEND_MESSAGE'
+        ]
+      }
+    }),
+  })
+  const webhookData = await webhookResponse.json()
+  return webhookData
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -57,8 +83,89 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`
 
-    // Get user from auth header
+    // Parse action BEFORE auth check to allow unauthenticated actions
+    const url = new URL(req.url)
+    const action = url.searchParams.get('action') || 'status'
+
+    // === UNAUTHENTICATED ACTION: force-reconfigure ===
+    if (action === 'force-reconfigure') {
+      const targetAccountId = url.searchParams.get('account_id')
+      if (!targetAccountId) {
+        return new Response(JSON.stringify({ error: 'account_id required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      // Validate account exists in database
+      const { data: accountExists } = await supabase
+        .from('accounts')
+        .select('id')
+        .eq('id', targetAccountId)
+        .maybeSingle()
+
+      if (!accountExists) {
+        return new Response(JSON.stringify({ error: 'Invalid account_id' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      const targetInstance = `senseys_${targetAccountId.replace(/-/g, '_')}`
+      console.log(`[whatsapp-connect] Force reconfigure for instance: ${targetInstance}`)
+
+      // Check if instance is connected
+      try {
+        const statusResp = await fetch(
+          `${EVOLUTION_API_URL}/instance/connectionState/${targetInstance}`,
+          { headers: { 'apikey': EVOLUTION_API_KEY } }
+        )
+
+        if (statusResp.ok) {
+          const statusData = await statusResp.json()
+          console.log('[whatsapp-connect] Instance state:', statusData)
+
+          if (statusData.instance?.state === 'open') {
+            const webhookData = await configureWebhook(targetInstance, webhookUrl)
+            console.log('[whatsapp-connect] Force reconfigure result:', JSON.stringify(webhookData).substring(0, 300))
+
+            // Verify
+            const verifyResponse = await fetch(
+              `${EVOLUTION_API_URL}/webhook/find/${targetInstance}`,
+              { headers: { 'apikey': EVOLUTION_API_KEY } }
+            )
+            const currentConfig = await verifyResponse.json()
+            console.log('[whatsapp-connect] Webhook verified after force-reconfigure:', JSON.stringify(currentConfig).substring(0, 500))
+
+            return new Response(JSON.stringify({ 
+              success: true, 
+              message: 'Webhook reconfigured successfully',
+              webhookConfig: currentConfig
+            }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            })
+          } else {
+            return new Response(JSON.stringify({ 
+              error: 'Instance not connected', 
+              state: statusData.instance?.state 
+            }), {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            })
+          }
+        }
+      } catch (e) {
+        console.log('[whatsapp-connect] Error in force-reconfigure:', e)
+        return new Response(JSON.stringify({ error: 'Failed to reconfigure', details: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    }
+
+    // === AUTHENTICATED ACTIONS: require JWT ===
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -93,11 +200,6 @@ Deno.serve(async (req) => {
 
     const accountId = profile.account_id
     const instanceName = `senseys_${accountId.replace(/-/g, '_')}`
-    const url = new URL(req.url)
-    const action = url.searchParams.get('action') || 'status'
-    
-    // Build webhook URL for Evolution API callbacks
-    const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`
 
     console.log(`[whatsapp-connect] Action: ${action}, Account: ${accountId}, Instance: ${instanceName}`)
 
@@ -113,16 +215,10 @@ Deno.serve(async (req) => {
           .maybeSingle()
 
         if (existingSession) {
-          // Try to get current status from Evolution API
           try {
             const statusResponse = await fetch(
               `${EVOLUTION_API_URL}/instance/connectionState/${instanceName}`,
-              {
-                method: 'GET',
-                headers: {
-                  'apikey': EVOLUTION_API_KEY,
-                },
-              }
+              { method: 'GET', headers: { 'apikey': EVOLUTION_API_KEY } }
             )
             
             if (statusResponse.ok) {
@@ -132,19 +228,12 @@ Deno.serve(async (req) => {
               if (statusData.instance?.state === 'open') {
                 await supabase
                   .from('whatsapp_sessions')
-                  .update({ 
-                    status: 'connected',
-                    updated_at: new Date().toISOString()
-                  })
+                  .update({ status: 'connected', updated_at: new Date().toISOString() })
                   .eq('account_id', accountId)
                 
                 return new Response(JSON.stringify({ 
-                  success: true, 
-                  status: 'connected',
-                  message: 'Instance already connected'
-                }), {
-                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                })
+                  success: true, status: 'connected', message: 'Instance already connected'
+                }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
               }
             }
           } catch (e) {
@@ -155,10 +244,7 @@ Deno.serve(async (req) => {
         // Create or recreate instance with webhook configuration
         const createResponse = await fetch(`${EVOLUTION_API_URL}/instance/create`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': EVOLUTION_API_KEY,
-          },
+          headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_API_KEY },
           body: JSON.stringify({
             instanceName,
             qrcode: true,
@@ -167,13 +253,7 @@ Deno.serve(async (req) => {
               enabled: true,
               url: webhookUrl,
               webhook_by_events: false,
-              events: [
-                'CONNECTION_UPDATE',
-                'QRCODE_UPDATED',
-                'MESSAGES_UPSERT',
-                'MESSAGES_UPDATE',
-                'SEND_MESSAGE'
-              ]
+              events: ['CONNECTION_UPDATE', 'QRCODE_UPDATED', 'MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'SEND_MESSAGE']
             }
           }),
         })
@@ -181,7 +261,6 @@ Deno.serve(async (req) => {
         const createData = await createResponse.json()
         console.log('[whatsapp-connect] Create response:', createData)
 
-        // Check if instance already exists (handle different error formats)
         const alreadyExists = 
           createData.error?.includes?.('already') || 
           createData.response?.message?.[0]?.includes?.('already in use') ||
@@ -189,38 +268,14 @@ Deno.serve(async (req) => {
 
         if (!createResponse.ok && !alreadyExists) {
           return new Response(JSON.stringify({ error: 'Failed to create instance', details: createData }), {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           })
         }
 
-        // If instance already exists, configure webhook on it
         if (alreadyExists) {
           console.log('[whatsapp-connect] Instance already exists, configuring webhook...')
-          
           try {
-            const webhookResponse = await fetch(`${EVOLUTION_API_URL}/webhook/set/${instanceName}`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'apikey': EVOLUTION_API_KEY,
-              },
-              body: JSON.stringify({
-                webhook: {
-                  enabled: true,
-                  url: webhookUrl,
-                  webhook_by_events: false,
-                  events: [
-                    'CONNECTION_UPDATE',
-                    'QRCODE_UPDATED',
-                    'MESSAGES_UPSERT',
-                    'MESSAGES_UPDATE',
-                    'SEND_MESSAGE'
-                  ]
-                }
-              }),
-            })
-            const webhookData = await webhookResponse.json()
+            const webhookData = await configureWebhook(instanceName, webhookUrl)
             console.log('[whatsapp-connect] Webhook config response:', webhookData)
           } catch (e) {
             console.log('[whatsapp-connect] Error configuring webhook:', e)
@@ -231,17 +286,11 @@ Deno.serve(async (req) => {
         await supabase
           .from('whatsapp_sessions')
           .upsert({
-            account_id: accountId,
-            instance_name: instanceName,
-            status: 'connecting',
-            updated_at: new Date().toISOString()
+            account_id: accountId, instance_name: instanceName,
+            status: 'connecting', updated_at: new Date().toISOString()
           }, { onConflict: 'account_id' })
 
-        return new Response(JSON.stringify({ 
-          success: true, 
-          instanceName,
-          status: 'connecting'
-        }), {
+        return new Response(JSON.stringify({ success: true, instanceName, status: 'connecting' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
@@ -249,22 +298,15 @@ Deno.serve(async (req) => {
       case 'qr-code': {
         console.log('[whatsapp-connect] Getting QR code...')
         
-        // Connect to instance to get QR code
         const connectResponse = await fetch(
           `${EVOLUTION_API_URL}/instance/connect/${instanceName}`,
-          {
-            method: 'GET',
-            headers: {
-              'apikey': EVOLUTION_API_KEY,
-            },
-          }
+          { method: 'GET', headers: { 'apikey': EVOLUTION_API_KEY } }
         )
 
         const connectData = await connectResponse.json()
         console.log('[whatsapp-connect] Connect response:', JSON.stringify(connectData).substring(0, 200))
 
         if (connectData.base64) {
-          // Update session with QR code
           await supabase
             .from('whatsapp_sessions')
             .update({ 
@@ -275,54 +317,35 @@ Deno.serve(async (req) => {
             })
             .eq('account_id', accountId)
 
-          return new Response(JSON.stringify({ 
-            success: true, 
-            qrCode: connectData.base64,
-            expiresIn: 60
-          }), {
+          return new Response(JSON.stringify({ success: true, qrCode: connectData.base64, expiresIn: 60 }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           })
         }
 
-        // Check if already connected
         if (connectData.instance?.state === 'open') {
-          // Fetch phone number when already connected
           const phoneNumber = await fetchPhoneNumber(instanceName)
           
           await supabase
             .from('whatsapp_sessions')
             .update({ 
-              status: 'connected',
-              phone_number: phoneNumber,
-              connected_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
+              status: 'connected', phone_number: phoneNumber,
+              connected_at: new Date().toISOString(), updated_at: new Date().toISOString()
             })
             .eq('account_id', accountId)
 
           return new Response(JSON.stringify({ 
-            success: true, 
-            status: 'connected',
-            phoneNumber: phoneNumber,
-            message: 'Already connected'
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          })
+            success: true, status: 'connected', phoneNumber, message: 'Already connected'
+          }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
         }
 
-        return new Response(JSON.stringify({ 
-          success: false, 
-          error: 'QR code not available',
-          details: connectData
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        return new Response(JSON.stringify({ success: false, error: 'QR code not available', details: connectData }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
 
       case 'status': {
         console.log('[whatsapp-connect] Checking status...')
         
-        // Get local session
         const { data: session } = await supabase
           .from('whatsapp_sessions')
           .select('*')
@@ -330,24 +353,15 @@ Deno.serve(async (req) => {
           .maybeSingle()
 
         if (!session) {
-          return new Response(JSON.stringify({ 
-            status: 'disconnected',
-            connected: false
-          }), {
+          return new Response(JSON.stringify({ status: 'disconnected', connected: false }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           })
         }
 
-        // Check Evolution API status
         try {
           const statusResponse = await fetch(
             `${EVOLUTION_API_URL}/instance/connectionState/${instanceName}`,
-            {
-              method: 'GET',
-              headers: {
-                'apikey': EVOLUTION_API_KEY,
-              },
-            }
+            { method: 'GET', headers: { 'apikey': EVOLUTION_API_KEY } }
           )
 
           if (statusResponse.ok) {
@@ -360,31 +374,9 @@ Deno.serve(async (req) => {
             // Reconfigure webhook automatically when connected
             if (isConnected) {
               try {
-                const webhookSetResponse = await fetch(`${EVOLUTION_API_URL}/webhook/set/${instanceName}`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'apikey': EVOLUTION_API_KEY,
-                  },
-                  body: JSON.stringify({
-                    webhook: {
-                      enabled: true,
-                      url: webhookUrl,
-                      webhook_by_events: false,
-                      events: [
-                        'CONNECTION_UPDATE',
-                        'QRCODE_UPDATED',
-                        'MESSAGES_UPSERT',
-                        'MESSAGES_UPDATE',
-                        'SEND_MESSAGE'
-                      ]
-                    }
-                  }),
-                })
-              const webhookSetData = await webhookSetResponse.json()
+                const webhookSetData = await configureWebhook(instanceName, webhookUrl)
                 console.log('[whatsapp-connect] Webhook reconfigured for', instanceName, ':', JSON.stringify(webhookSetData).substring(0, 300))
                 
-                // Verify webhook was actually applied
                 const verifyResponse = await fetch(
                   `${EVOLUTION_API_URL}/webhook/find/${instanceName}`,
                   { headers: { 'apikey': EVOLUTION_API_KEY } }
@@ -396,14 +388,12 @@ Deno.serve(async (req) => {
               }
             }
 
-            // Fetch phone number if connected but not saved yet
             let phoneNumber = session.phone_number
             if (isConnected && !phoneNumber) {
               phoneNumber = await fetchPhoneNumber(instanceName)
               console.log('[whatsapp-connect] Fetched phone number:', phoneNumber)
             }
 
-            // Sempre atualizar quando status mudar
             if (newStatus !== session.status || (isConnected && !session.phone_number && phoneNumber)) {
               console.log('[whatsapp-connect] Status changed:', session.status, '->', newStatus)
               await supabase
@@ -418,58 +408,37 @@ Deno.serve(async (req) => {
             }
 
             return new Response(JSON.stringify({ 
-              status: newStatus,
-              connected: isConnected,
-              phoneNumber: phoneNumber,
-              instanceName: session.instance_name
-            }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            })
+              status: newStatus, connected: isConnected,
+              phoneNumber, instanceName: session.instance_name
+            }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
           }
         } catch (e) {
           console.log('[whatsapp-connect] Error checking status:', e)
         }
 
         return new Response(JSON.stringify({ 
-          status: session.status,
-          connected: session.status === 'connected',
-          phoneNumber: session.phone_number,
-          instanceName: session.instance_name
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+          status: session.status, connected: session.status === 'connected',
+          phoneNumber: session.phone_number, instanceName: session.instance_name
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
 
       case 'disconnect': {
         console.log('[whatsapp-connect] Disconnecting...')
         
-        // Logout from Evolution API
         try {
           await fetch(`${EVOLUTION_API_URL}/instance/logout/${instanceName}`, {
-            method: 'DELETE',
-            headers: {
-              'apikey': EVOLUTION_API_KEY,
-            },
+            method: 'DELETE', headers: { 'apikey': EVOLUTION_API_KEY },
           })
         } catch (e) {
           console.log('[whatsapp-connect] Error logging out:', e)
         }
 
-        // Update local status
         await supabase
           .from('whatsapp_sessions')
-          .update({ 
-            status: 'disconnected',
-            qr_code: null,
-            connected_at: null,
-            updated_at: new Date().toISOString()
-          })
+          .update({ status: 'disconnected', qr_code: null, connected_at: null, updated_at: new Date().toISOString() })
           .eq('account_id', accountId)
 
-        return new Response(JSON.stringify({ 
-          success: true, 
-          status: 'disconnected'
-        }), {
+        return new Response(JSON.stringify({ success: true, status: 'disconnected' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
@@ -485,17 +454,13 @@ Deno.serve(async (req) => {
           const webhookConfig = await findResponse.json()
           console.log('[whatsapp-connect] Current webhook config:', JSON.stringify(webhookConfig))
           
-          return new Response(JSON.stringify({ 
-            success: true, 
-            webhookConfig 
-          }), {
+          return new Response(JSON.stringify({ success: true, webhookConfig }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           })
         } catch (e) {
           console.log('[whatsapp-connect] Error checking webhook:', e)
           return new Response(JSON.stringify({ error: 'Failed to check webhook', details: e.message }), {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           })
         }
       }
@@ -504,56 +469,29 @@ Deno.serve(async (req) => {
         console.log('[whatsapp-connect] Reconfiguring webhook...')
         
         try {
-          const webhookResponse = await fetch(`${EVOLUTION_API_URL}/webhook/set/${instanceName}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': EVOLUTION_API_KEY,
-            },
-            body: JSON.stringify({
-              webhook: {
-                enabled: true,
-                url: webhookUrl,
-                webhook_by_events: false,
-                events: [
-                  'CONNECTION_UPDATE',
-                  'QRCODE_UPDATED',
-                  'MESSAGES_UPSERT',
-                  'MESSAGES_UPDATE',
-                  'SEND_MESSAGE'
-                ]
-              }
-            }),
-          })
-          const webhookData = await webhookResponse.json()
+          const webhookData = await configureWebhook(instanceName, webhookUrl)
           console.log('[whatsapp-connect] Webhook reconfigure result:', JSON.stringify(webhookData))
           
-          return new Response(JSON.stringify({ 
-            success: true, 
-            webhook: webhookData
-          }), {
+          return new Response(JSON.stringify({ success: true, webhook: webhookData }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           })
         } catch (e) {
           console.log('[whatsapp-connect] Error reconfiguring webhook:', e)
           return new Response(JSON.stringify({ error: 'Failed to reconfigure webhook', details: e.message }), {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           })
         }
       }
 
       default:
         return new Response(JSON.stringify({ error: 'Invalid action' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
     }
   } catch (error) {
     console.error('[whatsapp-connect] Error:', error)
     return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
 })
