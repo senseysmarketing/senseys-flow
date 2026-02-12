@@ -5,7 +5,7 @@ import { useLeadNotifications } from "@/hooks/use-lead-notifications";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import WhatsAppFloat from "@/components/WhatsAppFloat";
+
 import BottomNav from "@/components/BottomNav";
 import { Button } from "@/components/ui/button";
 import { Sun, Moon, Bell, Search, Menu, Wrench, ArrowLeft } from "lucide-react";
@@ -187,7 +187,7 @@ const Layout = ({ children, fullHeight = false }: LayoutProps) => {
           </main>
         </div>
 
-        <WhatsAppFloat />
+        
         <BottomNav />
       </div>
     </SidebarProvider>
