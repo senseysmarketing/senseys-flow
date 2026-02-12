@@ -1,81 +1,82 @@
 
 
-## Modal de Chat WhatsApp no Botao de Leads
+## Corrigir Webhook WhatsApp - Mensagens Recebidas Nao Aparecem
 
-### O que sera feito
+### Problema Diagnosticado
 
-Ao clicar no botao "WhatsApp" no card de lead (Kanban ou tabela), em vez de abrir diretamente o wa.me, o sistema abrira um modal com a conversa do WhatsApp integrada ao CRM. O modal tera deteccao inteligente do estado da conexao WhatsApp da conta.
+Dois bugs encontrados nos logs da edge function `whatsapp-webhook`:
 
-### Fluxo de Decisao
+1. **`messages.update` crashando**: Erro repetido `TypeError: updates is not iterable` (linha 241). A Evolution API envia `data` como objeto, mas o codigo tenta iterar como array.
+
+2. **`messages.upsert` silenciosamente ignorando mensagens**: O handler espera `data.messages` como array, mas dependendo da versao/formato da Evolution API, os dados podem vir em estrutura diferente (ex: array direto, ou objeto sem propriedade `messages`). Quando `data?.messages` e `undefined`, o handler processa um array vazio sem registrar nenhum erro.
+
+**Resultado**: A mensagem "opa" do Leo Henry foi recebida pelo webhook (log confirma `messages.upsert` as 17:00), mas nao foi persistida no banco de dados.
+
+### Correcoes
+
+**Arquivo: `supabase/functions/whatsapp-webhook/index.ts`**
+
+**1. Corrigir `handleMessagesUpsert` (prioridade alta)**
+
+Adicionar tratamento robusto do formato de dados e logging:
 
 ```text
-Clique no botao WhatsApp
-       |
-       v
-  WhatsApp conectado?
-     /        \
-   SIM        NAO
-    |           |
-    v           v
-  Modal com    Modal de aviso:
-  chat do      - Icone ilustrativo
-  lead em      - "Conecte seu WhatsApp para
-  tempo real     enviar e receber mensagens
-  (igual tela    diretamente pelo CRM"
-  Conversas)   - Botao "Conectar WhatsApp"
-               - Botao "Abrir WhatsApp Web"
-                 (link wa.me tradicional)
+Antes:
+  const messages = data?.messages || []
+
+Depois:
+  // Aceitar diferentes formatos da Evolution API
+  let messages = []
+  if (Array.isArray(data)) {
+    messages = data
+  } else if (data?.messages && Array.isArray(data.messages)) {
+    messages = data.messages
+  } else if (data?.message) {
+    messages = [data.message]
+  } else if (data?.key) {
+    messages = [data]  // Objeto unico de mensagem
+  }
+  
+  console.log(`[whatsapp-webhook] Processing ${messages.length} messages`)
+  
+  if (messages.length === 0) {
+    console.log('[whatsapp-webhook] No messages to process, raw data keys:', Object.keys(data || {}))
+  }
 ```
 
-### Detalhes da Implementacao
+**2. Corrigir `handleMessagesUpdate` (corrige crash)**
 
-**1. Novo componente: `src/components/leads/WhatsAppChatModal.tsx`**
+```text
+Antes:
+  const updates = data || []
+  for (const update of updates) { ... }
 
-- Recebe props: `open`, `onClose`, `lead` (nome, telefone, id, propertyName)
-- Ao abrir, consulta `whatsapp_sessions` para verificar se a conta tem WhatsApp conectado
-- **Se conectado**: 
-  - Busca ou cria a conversa pelo telefone do lead na tabela `whatsapp_conversations`
-  - Renderiza o `ChatView` existente dentro do modal (reutiliza todo o componente de chat)
-  - Usa o hook `useMessages` para carregar e enviar mensagens em tempo real
-- **Se nao conectado**: 
-  - Exibe tela de aviso com icone `WifiOff` ou `MessageCircle`
-  - Texto explicativo sobre os beneficios da conexao (enviar/receber pelo CRM, automacoes, historico)
-  - Botao primario "Conectar WhatsApp" que redireciona para `/settings` (aba WhatsApp)
-  - Botao secundario "Abrir WhatsApp Web" que abre o link wa.me tradicional (comportamento atual)
+Depois:
+  let updates = []
+  if (Array.isArray(data)) {
+    updates = data
+  } else if (data && typeof data === 'object') {
+    updates = [data]
+  }
+  for (const update of updates) { ... }
+```
 
-**2. Alterar `src/components/WhatsAppButton.tsx`**
+**3. Adicionar log de debug no switch principal**
 
-- Adicionar estado para controlar abertura do modal
-- Em vez de chamar `window.open(wa.me...)` diretamente, abrir o `WhatsAppChatModal`
-- Passar `leadName`, `leadId`, `phone` e `propertyName` para o modal
+Adicionar um log do formato recebido para diagnostico futuro:
 
-**3. Alterar `src/components/LeadKanbanCard.tsx`**
+```text
+console.log('[whatsapp-webhook] Event:', event, 'instance:', instance, 'data type:', typeof data, 'isArray:', Array.isArray(data))
+```
 
-- Nenhuma mudanca necessaria - ja passa todas as props para o `WhatsAppButton`
+### Resultado Esperado
 
-### Estrutura do Modal
-
-**Estado: WhatsApp Conectado**
-- Header com nome do lead e telefone formatado
-- Area de mensagens com scroll (reutiliza ChatView)
-- Input de mensagem com templates rapidos
-- Tamanho do modal: largura media (~600px), altura 80vh
-
-**Estado: WhatsApp Nao Conectado**
-- Layout centralizado com icone grande
-- Titulo: "WhatsApp nao conectado"
-- Descricao: "Conecte seu WhatsApp para conversar com seus leads diretamente pelo CRM, enviar mensagens automaticas e manter todo o historico centralizado."
-- Lista de beneficios (icones + texto):
-  - Envie e receba mensagens pelo CRM
-  - Automacoes de saudacao e follow-up
-  - Historico completo de conversas
-- Botao verde: "Conectar WhatsApp" (vai para Settings)
-- Botao outline: "Abrir no WhatsApp Web" (abre wa.me como antes)
+- Mensagens recebidas dos leads serao salvas corretamente no banco
+- O erro `updates is not iterable` sera eliminado
+- Logs mais detalhados para diagnostico futuro
+- A conversa com Leo Henry passara a mostrar as respostas em tempo real
 
 ### Detalhes Tecnicos
 
-- O hook `useMessages` ja suporta buscar mensagens por `remote_jid` - precisaremos converter o telefone do lead para o formato de JID (`55DDXXXXXXXXX@s.whatsapp.net`)
-- A verificacao de conexao usara uma query simples a `whatsapp_sessions` (mesma logica usada em `Leads.tsx` linha 373)
-- O modal usara o componente `Dialog` existente com classe `!max-w-2xl` e altura controlada
-- O `ChatView` sera reutilizado diretamente, passando `isMobile={false}`
+A alteracao e apenas na edge function `whatsapp-webhook/index.ts`. Apos o deploy, sera necessario enviar uma nova mensagem de teste para confirmar que o recebimento funciona corretamente.
 
