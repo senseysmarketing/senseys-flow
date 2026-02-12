@@ -1,77 +1,111 @@
 
 
-## Diagnostico: Leads do Meta Ads nao chegam para ANZ Imoveis
+## Correcao: Subscribe da pagina ANZ Imoveis no Meta App
 
-### Problemas Identificados
+### Problema encontrado nos logs
 
-**1. Edge Function `meta-webhook` NAO esta deployada (CRITICO)**
+Os logs confirmam que:
+- A config da ANZ Imoveis foi salva com sucesso (`Saving config for account 03219d26...` as 20:29:59)
+- A pagina ANZ Imoveis (ID: `221484851232856`) existe na lista de paginas e tem page token
+- **O log "Page subscription result" NUNCA aparece**, indicando que a chamada `subscribed_apps` nao completou
 
-O endpoint que recebe os webhooks do Facebook (`meta-webhook`) retorna erro 404 - ele nao esta deployado no Supabase. O arquivo existe no codigo (`supabase/functions/meta-webhook/index.ts`), mas nunca foi publicado. Isso significa que NENHUM lead do Meta Ads chega automaticamente para NENHUM cliente, nao apenas para ANZ Imoveis.
+### Causa raiz
 
-**2. Pagina sem App associado**
+No codigo atual (`meta-accounts/index.ts`, linhas 240-270), apos salvar a config, o sistema:
+1. Faz uma **segunda chamada** a `/me/accounts` para buscar o page token (desnecessaria, pois ja tem essa info)
+2. Faz o POST para `subscribed_apps`
+3. Tudo dentro de um `try/catch` que engole erros silenciosamente
 
-A screenshot mostra: "A Pagina selecionada nao tem nenhum app associado a ela." Isso significa que o Facebook nao sabe para onde enviar os eventos de leadgen desta pagina. O sistema tenta fazer essa associacao automaticamente quando a configuracao e salva (via `subscribed_apps`), mas sem o webhook deployado, o Facebook nao consegue validar a URL de callback.
+A Edge Function pode estar encerrando (shutdown) antes dessas chamadas extras completarem, ou um erro esta sendo engolido pelo catch vazio.
 
-**3. Possivel App em modo Development**
+### Plano de correcao
 
-Se o App Meta estiver em modo "Development" (nao "Live"), webhooks so funcionam para administradores do App, nao para todas as paginas.
+**1. Melhorar logging no bloco de subscribe**
 
-### Plano de Correcao
+Adicionar logs detalhados em cada etapa do subscribe para identificar exatamente onde falha:
+- Log antes de buscar o page token
+- Log se o page token foi encontrado ou nao
+- Log do resultado do subscribe (sucesso ou erro)
+- Log no catch com o erro completo
 
-**Passo 1: Deploy do edge function `meta-webhook`**
+**2. Otimizar a chamada de subscribe**
 
-Fazer o deploy da funcao que ja existe no codigo. Isso ativara o endpoint:
-`https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/meta-webhook`
+Em vez de fazer uma segunda chamada a `/me/accounts` para buscar o page token, reutilizar o token que ja foi obtido anteriormente no fluxo de forms. Isso reduz a latencia e o risco de timeout.
 
-**Passo 2: Verificar configuracao do webhook no Meta App Dashboard**
+**3. Garantir que o subscribe complete antes de responder**
 
-Apos o deploy, e necessario que no Painel de Apps do Facebook (developers.facebook.com):
-- O produto "Webhooks" esteja adicionado ao App
-- O webhook para o objeto "Page" esteja configurado com a URL: `https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/meta-webhook`
-- O campo "leadgen" esteja inscrito
-- O Verify Token corresponda ao secret `META_WEBHOOK_VERIFY_TOKEN` configurado no projeto
+Mover o `await` do subscribe para ANTES de enviar a resposta ao cliente, garantindo que a Edge Function nao encerre prematuramente.
 
-**Passo 3: Re-inscrever a pagina ANZ Imoveis**
+### Secao tecnica
 
-Apos o webhook estar ativo, re-salvar a configuracao da ANZ Imoveis no painel da agencia para disparar a chamada `subscribed_apps` novamente, associando o App a Pagina.
+Alteracoes no arquivo `supabase/functions/meta-accounts/index.ts`:
 
-**Passo 4: Verificar modo do App**
+No bloco `save-config` (a partir da linha ~240), substituir:
 
-No Painel de Apps do Facebook, garantir que o App esteja no modo "Live" (nao "Development"). Em modo Development, apenas administradores do App recebem webhooks.
+```typescript
+// Subscribe page to webhook if page_id is provided
+if (page_id) {
+  try {
+    const pagesResponse = await fetch(
+      `https://graph.facebook.com/v19.0/me/accounts?fields=id,access_token&access_token=${accessToken}`
+    );
+    const pagesData = await pagesResponse.json();
+    const pageToken = pagesData.data?.find((p: any) => p.id === page_id)?.access_token;
 
-### Acoes Manuais do Usuario (Facebook Developer Dashboard)
-
-Essas acoes precisam ser feitas manualmente em developers.facebook.com:
-1. Abra o App Meta no Painel de Apps
-2. Va em **Webhooks** (menu lateral)
-3. Selecione o objeto **Page**
-4. Configure a Callback URL: `https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/meta-webhook`
-5. Configure o Verify Token com o mesmo valor do secret `META_WEBHOOK_VERIFY_TOKEN`
-6. Inscreva o campo **leadgen**
-7. Verifique que o App esta no modo **Live**
-
-### Secao Tecnica
-
-O fluxo completo de recebimento de leads Meta e:
-
-```text
-Facebook Lead Ad Submit
-  -> Facebook envia POST para meta-webhook (webhook configurado no App)
-  -> meta-webhook busca dados do lead via Graph API
-  -> Insere no banco (tabela leads)
-  -> Realtime notifica o frontend
+    if (pageToken) {
+      const subscribeResponse = await fetch(
+        `https://graph.facebook.com/v19.0/${page_id}/subscribed_apps?subscribed_fields=leadgen&access_token=${pageToken}`,
+        { method: 'POST' }
+      );
+      const subscribeData = await subscribeResponse.json();
+      console.log('Page subscription result:', subscribeData);
+    }
+  } catch (e) {
+    console.error('Error subscribing page:', e);
+  }
+}
 ```
 
-O ponto de falha atual e o primeiro passo: o Facebook nao tem para onde enviar porque:
-- A function `meta-webhook` nao esta deployada (404)
-- A Pagina ANZ Imoveis nao tem o App inscrito
+Por uma versao com logging detalhado e subscribe executado ANTES da resposta:
 
-A funcao `meta-accounts` ja possui logica (linhas 252-274) para inscrever a pagina automaticamente via `POST /{page_id}/subscribed_apps?subscribed_fields=leadgen`, mas isso so funciona se o webhook do App estiver configurado corretamente no Facebook Developer Dashboard primeiro.
+```typescript
+let subscribeResult = null;
+if (page_id) {
+  try {
+    console.log(`Subscribing page ${page_id} to leadgen webhooks...`);
+    const pagesResponse = await fetch(
+      `https://graph.facebook.com/v19.0/me/accounts?fields=id,access_token&access_token=${accessToken}`
+    );
+    const pagesData = await pagesResponse.json();
+    const pageToken = pagesData.data?.find((p: any) => p.id === page_id)?.access_token;
 
-### Resultado Esperado
+    if (pageToken) {
+      console.log(`Found page token for page ${page_id}, sending subscribed_apps...`);
+      const subscribeResponse = await fetch(
+        `https://graph.facebook.com/v19.0/${page_id}/subscribed_apps?subscribed_fields=leadgen&access_token=${pageToken}`,
+        { method: 'POST' }
+      );
+      const subscribeData = await subscribeResponse.json();
+      subscribeResult = subscribeData;
+      console.log('Page subscription result:', JSON.stringify(subscribeData));
+    } else {
+      console.error(`Page token NOT FOUND for page ${page_id}. Available pages: ${pagesData.data?.map((p: any) => p.id).join(', ')}`);
+    }
+  } catch (e) {
+    console.error('Error subscribing page:', e.message, e.stack);
+  }
+}
 
-Apos o deploy e configuracao:
-- Leads de TODOS os clientes com Meta configurado passarao a chegar automaticamente
-- A ferramenta de teste de leads do Facebook (na screenshot) devera funcionar
-- Nao sera mais necessario importar leads manualmente via CSV
+return new Response(JSON.stringify({ success: true, config: data, subscribeResult }), {
+  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+});
+```
+
+### Resultado esperado
+
+Apos esta correcao:
+- Os logs mostrarao exatamente o que acontece no subscribe (sucesso ou erro detalhado)
+- O subscribe completara antes da funcao encerrar
+- O resultado do subscribe sera retornado ao frontend para feedback visual
+- Ao re-salvar a config da ANZ Imoveis, veremos nos logs se o Facebook aceitou a inscricao
 
