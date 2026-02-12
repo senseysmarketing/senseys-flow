@@ -117,9 +117,12 @@ serve(async (req) => {
       );
     }
 
-    // Generate unique event_id for deduplication
+    // Generate event_id - use meta_lead_id for structural linking with Meta Lead Forms
     const timestamp = Math.floor(Date.now() / 1000);
-    const eventId = `${lead_id}_${event_name}_${timestamp}`;
+    const eventId = lead.meta_lead_id 
+      ? lead.meta_lead_id 
+      : `${lead_id}_${event_name}_${timestamp}`;
+    console.log(`Event ID: ${eventId} (${lead.meta_lead_id ? 'meta_lead_id - advanced matching' : 'fallback - internal ID'})`);
 
     // Build user_data with hashed values
     const userData: Record<string, any> = {};
