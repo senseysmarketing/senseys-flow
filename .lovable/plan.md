@@ -1,77 +1,77 @@
 
 
-## Corrigir Recebimento de Mensagens WhatsApp - Diagnostico Final
+## Diagnostico: Leads do Meta Ads nao chegam para ANZ Imoveis
 
-### Problema 1: Webhook URL possivelmente vazia na Evolution API
+### Problemas Identificados
 
-Os logs confirmam que para sua instancia `senseys_05f41011_8143_4a71_a3ca_8f42f043ab8c`:
-- `send.message` chega (evento de envio)
-- `messages.update` chega (status de entrega)
-- `messages.upsert` NUNCA chega (mensagens recebidas)
+**1. Edge Function `meta-webhook` NAO esta deployada (CRITICO)**
 
-Os toggles estao ON no dashboard, mas a URL do webhook pode estar vazia ou incorreta. O campo de URL fica **acima** dos toggles de eventos na pagina do Evolution API.
+O endpoint que recebe os webhooks do Facebook (`meta-webhook`) retorna erro 404 - ele nao esta deployado no Supabase. O arquivo existe no codigo (`supabase/functions/meta-webhook/index.ts`), mas nunca foi publicado. Isso significa que NENHUM lead do Meta Ads chega automaticamente para NENHUM cliente, nao apenas para ANZ Imoveis.
 
-**Acao manual imediata (CRITICA):**
-1. Na pagina do Evolution API, role para **cima** ate encontrar o campo "Webhook URL"
-2. Verifique se esta preenchido com: `https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/whatsapp-webhook`
-3. Se estiver vazio ou diferente, preencha com a URL acima
-4. Clique em **Save** no canto inferior direito
+**2. Pagina sem App associado**
 
-### Problema 2: Tabelas sem Realtime Publication
+A screenshot mostra: "A Pagina selecionada nao tem nenhum app associado a ela." Isso significa que o Facebook nao sabe para onde enviar os eventos de leadgen desta pagina. O sistema tenta fazer essa associacao automaticamente quando a configuracao e salva (via `subscribed_apps`), mas sem o webhook deployado, o Facebook nao consegue validar a URL de callback.
 
-As tabelas `whatsapp_messages` e `whatsapp_conversations` nao estao na publicacao `supabase_realtime`. Isso significa que o frontend nao recebe notificacoes quando novas mensagens sao inseridas no banco.
+**3. Possivel App em modo Development**
 
-**Correcao: Migracao SQL**
+Se o App Meta estiver em modo "Development" (nao "Live"), webhooks so funcionam para administradores do App, nao para todas as paginas.
 
-Criar uma migracao para adicionar ambas as tabelas ao Realtime:
+### Plano de Correcao
+
+**Passo 1: Deploy do edge function `meta-webhook`**
+
+Fazer o deploy da funcao que ja existe no codigo. Isso ativara o endpoint:
+`https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/meta-webhook`
+
+**Passo 2: Verificar configuracao do webhook no Meta App Dashboard**
+
+Apos o deploy, e necessario que no Painel de Apps do Facebook (developers.facebook.com):
+- O produto "Webhooks" esteja adicionado ao App
+- O webhook para o objeto "Page" esteja configurado com a URL: `https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/meta-webhook`
+- O campo "leadgen" esteja inscrito
+- O Verify Token corresponda ao secret `META_WEBHOOK_VERIFY_TOKEN` configurado no projeto
+
+**Passo 3: Re-inscrever a pagina ANZ Imoveis**
+
+Apos o webhook estar ativo, re-salvar a configuracao da ANZ Imoveis no painel da agencia para disparar a chamada `subscribed_apps` novamente, associando o App a Pagina.
+
+**Passo 4: Verificar modo do App**
+
+No Painel de Apps do Facebook, garantir que o App esteja no modo "Live" (nao "Development"). Em modo Development, apenas administradores do App recebem webhooks.
+
+### Acoes Manuais do Usuario (Facebook Developer Dashboard)
+
+Essas acoes precisam ser feitas manualmente em developers.facebook.com:
+1. Abra o App Meta no Painel de Apps
+2. Va em **Webhooks** (menu lateral)
+3. Selecione o objeto **Page**
+4. Configure a Callback URL: `https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/meta-webhook`
+5. Configure o Verify Token com o mesmo valor do secret `META_WEBHOOK_VERIFY_TOKEN`
+6. Inscreva o campo **leadgen**
+7. Verifique que o App esta no modo **Live**
+
+### Secao Tecnica
+
+O fluxo completo de recebimento de leads Meta e:
 
 ```text
-ALTER PUBLICATION supabase_realtime ADD TABLE public.whatsapp_messages;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.whatsapp_conversations;
+Facebook Lead Ad Submit
+  -> Facebook envia POST para meta-webhook (webhook configurado no App)
+  -> meta-webhook busca dados do lead via Graph API
+  -> Insere no banco (tabela leads)
+  -> Realtime notifica o frontend
 ```
 
-### Problema 3: Falta diagnostico para verificar webhook via API
+O ponto de falha atual e o primeiro passo: o Facebook nao tem para onde enviar porque:
+- A function `meta-webhook` nao esta deployada (404)
+- A Pagina ANZ Imoveis nao tem o App inscrito
 
-Adicionar uma acao `check-webhook` no `whatsapp-connect` que chama `webhook/find/{instanceName}` para verificar a configuracao real do webhook (URL, eventos habilitados, status). Isso permite diagnosticar problemas de webhook sem precisar acessar o painel da Evolution API manualmente.
-
-**Arquivo: `supabase/functions/whatsapp-connect/index.ts`**
-
-Adicionar novo case no switch:
-
-```text
-case 'check-webhook':
-  const findResponse = await fetch(
-    `${EVOLUTION_API_URL}/webhook/find/${instanceName}`,
-    { headers: { 'apikey': EVOLUTION_API_KEY } }
-  )
-  const webhookConfig = await findResponse.json()
-  console.log('[whatsapp-connect] Current webhook config:', JSON.stringify(webhookConfig))
-  return webhookConfig
-```
-
-Tambem modificar o case `status` para alem de configurar, tambem verificar o resultado:
-
-```text
-// Apos webhook/set, chamar webhook/find para verificar
-const verifyResponse = await fetch(
-  `${EVOLUTION_API_URL}/webhook/find/${instanceName}`,
-  { headers: { 'apikey': EVOLUTION_API_KEY } }
-)
-const currentConfig = await verifyResponse.json()
-console.log('[whatsapp-connect] Webhook verified:', JSON.stringify(currentConfig).substring(0, 500))
-```
-
-### Sequencia de Implementacao
-
-1. **Acao manual do usuario (PRIORITARIA)**: Verificar e preencher a URL do webhook no dashboard do Evolution API
-2. Criar migracao SQL para Realtime publication
-3. Adicionar diagnostico `check-webhook` e verificacao no `status`
-4. Deploy das edge functions
-5. Testar enviando mensagem do lead
+A funcao `meta-accounts` ja possui logica (linhas 252-274) para inscrever a pagina automaticamente via `POST /{page_id}/subscribed_apps?subscribed_fields=leadgen`, mas isso so funciona se o webhook do App estiver configurado corretamente no Facebook Developer Dashboard primeiro.
 
 ### Resultado Esperado
 
-- Com a URL do webhook correta, `messages.upsert` passara a chegar
-- Com Realtime habilitado, a UI atualizara automaticamente
-- Com o diagnostico, problemas futuros de webhook serao identificados sem acessar o painel manualmente
+Apos o deploy e configuracao:
+- Leads de TODOS os clientes com Meta configurado passarao a chegar automaticamente
+- A ferramenta de teste de leads do Facebook (na screenshot) devera funcionar
+- Nao sera mais necessario importar leads manualmente via CSV
 
