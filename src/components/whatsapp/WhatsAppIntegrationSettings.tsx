@@ -79,6 +79,7 @@ export function WhatsAppIntegrationSettings() {
   const [showTemplatesModal, setShowTemplatesModal] = useState(false);
   const [pendingAutoCreate, setPendingAutoCreate] = useState(false);
   const [followUpSteps, setFollowUpSteps] = useState<FollowUpStep[]>([]);
+  const [reconfiguring, setReconfiguring] = useState(false);
 
   const fetchSession = useCallback(async () => {
     if (!user) return;
@@ -96,9 +97,26 @@ export function WhatsAppIntegrationSettings() {
         try {
           const response = await supabase.functions.invoke('whatsapp-connect?action=status');
           
-          // Handle auth errors gracefully (expired session)
+          // Handle auth errors gracefully - try session refresh
           if (response.error) {
-            console.log('Error checking WhatsApp status:', response.error);
+            console.log('Error checking WhatsApp status, trying session refresh:', response.error);
+            const { error: refreshError } = await supabase.auth.refreshSession();
+            if (!refreshError) {
+              const retryResponse = await supabase.functions.invoke('whatsapp-connect?action=status');
+              if (!retryResponse.error && retryResponse.data) {
+                if (!retryResponse.data.connected) {
+                  setSession(prev => prev ? { ...prev, status: 'disconnected', connected_at: null } : null);
+                } else if (retryResponse.data.phoneNumber && !data.phone_number) {
+                  setSession(prev => prev ? { ...prev, phone_number: retryResponse.data.phoneNumber } : null);
+                }
+              }
+            } else {
+              toast({
+                variant: 'destructive',
+                title: 'Sessão expirada',
+                description: 'Faça login novamente para gerenciar o WhatsApp.',
+              });
+            }
             return;
           }
           
@@ -396,6 +414,42 @@ export function WhatsAppIntegrationSettings() {
     );
   }
 
+  const handleForceReconfigure = async () => {
+    setReconfiguring(true);
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('account_id')
+        .single();
+      
+      if (profile?.account_id) {
+        const response = await supabase.functions.invoke(
+          `whatsapp-connect?action=force-reconfigure&account_id=${profile.account_id}`
+        );
+        if (response.data?.success) {
+          toast({
+            title: 'Webhook reconfigurado!',
+            description: 'As mensagens devem começar a chegar em instantes.',
+          });
+        } else {
+          toast({
+            variant: 'destructive',
+            title: 'Erro ao reconfigurar',
+            description: response.data?.error || 'Não foi possível reconfigurar o webhook.',
+          });
+        }
+      }
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: error.message || 'Falha ao reconfigurar webhook.',
+      });
+    } finally {
+      setReconfiguring(false);
+    }
+  };
+
   const isConnected = session?.status === 'connected';
   const newLeadRule = automationRules.find(r => r.trigger_type === 'new_lead');
 
@@ -435,13 +489,27 @@ export function WhatsAppIntegrationSettings() {
                   </span>
                 )}
               </div>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <WifiOff className="h-4 w-4 mr-2" />
-                    Desconectar
-                  </Button>
-                </AlertDialogTrigger>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleForceReconfigure}
+                  disabled={reconfiguring}
+                >
+                  {reconfiguring ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <RotateCcw className="h-4 w-4 mr-2" />
+                  )}
+                  Reconfigurar Webhook
+                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <WifiOff className="h-4 w-4 mr-2" />
+                      Desconectar
+                    </Button>
+                  </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>Desconectar WhatsApp?</AlertDialogTitle>
@@ -454,7 +522,8 @@ export function WhatsAppIntegrationSettings() {
                     <AlertDialogAction onClick={handleDisconnect}>Desconectar</AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
-              </AlertDialog>
+                </AlertDialog>
+              </div>
             </div>
           ) : (
             <Button onClick={handleConnect} disabled={connecting}>
