@@ -152,8 +152,13 @@ export function useMessages(remoteJid: string | null) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Extract phone suffix for flexible JID matching (handles 9th digit variations)
+  const phoneSuffix = remoteJid
+    ? remoteJid.replace('@s.whatsapp.net', '').replace('@lid', '').replace('@c.us', '').slice(-8)
+    : null;
+
   const fetchMessages = useCallback(async () => {
-    if (!accountId || !remoteJid) {
+    if (!accountId || !remoteJid || !phoneSuffix) {
       setMessages([]);
       return;
     }
@@ -163,7 +168,7 @@ export function useMessages(remoteJid: string | null) {
       .from('whatsapp_messages')
       .select('id, content, media_type, media_url, is_from_me, status, timestamp, contact_name, message_id')
       .eq('account_id', accountId)
-      .eq('remote_jid', remoteJid)
+      .ilike('remote_jid', `%${phoneSuffix}%`)
       .order('timestamp', { ascending: true })
       .limit(200);
 
@@ -173,7 +178,7 @@ export function useMessages(remoteJid: string | null) {
       setMessages(data || []);
     }
     setLoading(false);
-  }, [accountId, remoteJid]);
+  }, [accountId, remoteJid, phoneSuffix]);
 
   useEffect(() => {
     fetchMessages();
@@ -181,7 +186,7 @@ export function useMessages(remoteJid: string | null) {
 
   // Realtime for new messages
   useEffect(() => {
-    if (!accountId || !remoteJid) return;
+    if (!accountId || !remoteJid || !phoneSuffix) return;
 
     const channel = supabase
       .channel(`messages-${remoteJid}`)
@@ -190,7 +195,9 @@ export function useMessages(remoteJid: string | null) {
         { event: 'INSERT', schema: 'public', table: 'whatsapp_messages', filter: `account_id=eq.${accountId}` },
         (payload) => {
           const newMsg = payload.new as any;
-          if (newMsg.remote_jid === remoteJid) {
+          // Match by phone suffix instead of exact JID to handle 9th digit variations
+          const msgPhone = (newMsg.remote_jid || '').replace('@s.whatsapp.net', '').replace('@lid', '').replace('@c.us', '');
+          if (msgPhone.endsWith(phoneSuffix)) {
             setMessages(prev => [...prev, {
               id: newMsg.id,
               content: newMsg.content,
@@ -210,7 +217,8 @@ export function useMessages(remoteJid: string | null) {
         { event: 'UPDATE', schema: 'public', table: 'whatsapp_messages' },
         (payload) => {
           const updated = payload.new as any;
-          if (updated.remote_jid === remoteJid) {
+          const msgPhone = (updated.remote_jid || '').replace('@s.whatsapp.net', '').replace('@lid', '').replace('@c.us', '');
+          if (msgPhone.endsWith(phoneSuffix)) {
             setMessages(prev => prev.map(m => m.id === updated.id ? { ...m, status: updated.status } : m));
           }
         }
@@ -218,7 +226,7 @@ export function useMessages(remoteJid: string | null) {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [accountId, remoteJid]);
+  }, [accountId, remoteJid, phoneSuffix]);
 
   const sendMessage = async (text: string, phone: string, leadId?: string) => {
     if (!accountId) return;
