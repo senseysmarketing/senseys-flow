@@ -92,6 +92,33 @@ Deno.serve(async (req) => {
           continue
         }
 
+        // Before sending follow-up messages, check if lead has responded
+        if (msg.followup_step_id && msg.lead_id) {
+          const phoneSuffix = (msg.phone || '').replace(/\D/g, '').slice(-9)
+          
+          const { data: incomingMessages } = await supabase
+            .from('whatsapp_messages')
+            .select('id')
+            .eq('account_id', msg.account_id)
+            .eq('is_from_me', false)
+            .ilike('phone', `%${phoneSuffix}%`)
+            .limit(1)
+          
+          if (incomingMessages && incomingMessages.length > 0) {
+            console.log(`[process-whatsapp-queue] Lead ${msg.lead_id} already responded, cancelling follow-up ${msg.id}`)
+            
+            // Cancel this and all remaining follow-ups for this lead
+            await supabase
+              .from('whatsapp_message_queue')
+              .update({ status: 'cancelled' })
+              .eq('lead_id', msg.lead_id)
+              .eq('status', 'pending')
+              .not('followup_step_id', 'is', null)
+            
+            continue
+          }
+        }
+
         // Compose message with template variables
         let message = msg.message || ''
         if (msg.whatsapp_templates?.template) {
