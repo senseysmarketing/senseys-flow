@@ -174,22 +174,26 @@ async function findLeadByPhone(supabase: any, accountId: string, phone: string):
 }
 
 async function handleMessagesUpsert(supabase: any, session: any, data: any) {
+  // Log raw payload for debugging
+  console.log('[whatsapp-webhook] messages.upsert raw data:', JSON.stringify(data).substring(0, 2000))
+  
   // Accept different formats from Evolution API
   let messages: any[] = []
   if (Array.isArray(data)) {
     messages = data
   } else if (data?.messages && Array.isArray(data.messages)) {
     messages = data.messages
-  } else if (data?.message) {
-    messages = [data.message]
+  } else if (data?.message && data?.key) {
+    // Single message object with key and message properties at root
+    messages = [data]
   } else if (data?.key) {
     messages = [data]
   }
 
-  console.log(`[whatsapp-webhook] Processing ${messages.length} messages`)
+  console.log(`[whatsapp-webhook] Processing ${messages.length} messages, parsed format: ${Array.isArray(data) ? 'array' : data?.messages ? 'data.messages' : data?.key ? 'single-object' : 'unknown'}`)
 
   if (messages.length === 0) {
-    console.log('[whatsapp-webhook] No messages to process, raw data keys:', Object.keys(data || {}))
+    console.log('[whatsapp-webhook] No messages to process, raw data keys:', JSON.stringify(Object.keys(data || {})))
   }
   
   for (const msg of messages) {
@@ -391,6 +395,7 @@ Deno.serve(async (req) => {
         await handleQRCodeUpdated(supabase, session, data)
         break
       case 'messages.upsert':
+        console.log('[whatsapp-webhook] messages.upsert payload keys:', JSON.stringify(Object.keys(data || {})))
         await handleMessagesUpsert(supabase, session, data)
         break
       case 'messages.update':
