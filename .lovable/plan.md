@@ -1,148 +1,62 @@
 
 
-## Correcao: Mensagens do WhatsApp Web nao aparecem + instancia sem eventos
+## Correcao: Follow-up enviado mesmo apos resposta do lead
 
-### Diagnostico
+### Problema
 
-1. **Webhook configurado corretamente** - URL, eventos e status estao OK na Evolution API
-2. **Zero eventos recebidos** - Mesmo apos reconfigurar o webhook multiplas vezes, a Evolution API nao esta chamando o webhook para a instancia `senseys_05f41011_8143_4a71_a3ca_8f42f043ab8c` (outras instancias funcionam normalmente)
-3. **Evento SEND_MESSAGE sem handler** - O webhook registra o evento `SEND_MESSAGE`, mas o codigo nao tem um handler para `send.message` no switch
+O lead "Gabrielly Ricci" respondeu com audios apos a saudacao, mas o follow-up automatico foi enviado mesmo assim. Isso ocorre porque:
 
-### Causa raiz
+1. O webhook (`whatsapp-webhook`) cancela follow-ups pendentes quando recebe mensagens -- mas essa instancia estava com problema de recepcao de eventos (corrigido agora)
+2. A edge function `process-whatsapp-queue` **nao faz nenhuma validacao** antes de enviar um follow-up. Ela simplesmente envia tudo que esta com status `pending` e `scheduled_for <= now()`
 
-Dois problemas:
+### Solucao
 
-1. **Instancia "travada"** - A Evolution API pode ter um bug onde a configuracao de webhook e salva mas nao e aplicada na instancia ativa. Solucao: reiniciar a instancia via API (`/instance/restart`)
-2. **Evento `send.message` nao processado** - Mensagens enviadas pela API (nao pelo WhatsApp Web) chegam como `SEND_MESSAGE` mas o webhook ignora esse evento. Mensagens do WhatsApp Web chegam como `MESSAGES_UPSERT` com `fromMe: true`, que ja e tratado corretamente
+Adicionar uma verificacao de seguranca diretamente no `process-whatsapp-queue`: antes de enviar qualquer mensagem que tenha `followup_step_id` (ou seja, e um follow-up), consultar a tabela `whatsapp_messages` para verificar se o lead respondeu apos a saudacao. Se houver mensagem recebida (`is_from_me = false`) para aquele lead/telefone, cancelar o follow-up ao inves de enviar.
 
-### Plano de correcao
-
-**1. Adicionar handler para `send.message` no webhook**
-
-No arquivo `supabase/functions/whatsapp-webhook/index.ts`, adicionar o case `send.message` no switch (linha 438) para rotear ao mesmo handler de `messages.upsert`:
-
-```typescript
-case 'send.message':
-  console.log('[whatsapp-webhook] send.message payload keys:', JSON.stringify(Object.keys(data || {})))
-  await handleMessagesUpsert(supabase, session, data)
-  break
-```
-
-**2. Adicionar acao `restart-instance` na edge function `whatsapp-connect`**
-
-Para forcar a Evolution API a reaplicar a configuracao do webhook, adicionar uma acao que reinicia a instancia:
-
-```typescript
-case 'restart-instance': {
-  // Chamar /instance/restart da Evolution API
-  const restartResp = await fetch(
-    `${EVOLUTION_API_URL}/instance/restart/${instanceName}`,
-    { method: 'PUT', headers: { 'apikey': EVOLUTION_API_KEY } }
-  )
-  const restartData = await restartResp.json()
-  
-  // Aguardar reconexao e reconfigurar webhook
-  await new Promise(resolve => setTimeout(resolve, 3000))
-  await configureWebhook(instanceName, webhookUrl)
-  
-  return new Response(JSON.stringify({ 
-    success: true, message: 'Instance restarted and webhook reconfigured' 
-  }), { headers: corsHeaders })
-}
-```
-
-**3. Adicionar botao "Reiniciar Instancia" na UI de configuracoes**
-
-No arquivo `src/components/whatsapp/WhatsAppIntegrationSettings.tsx`, adicionar um botao ao lado do "Reconfigurar Webhook" que chama a nova acao `restart-instance`. Isso permite resolver o problema de instancias travadas sem precisar desconectar e reconectar o QR Code.
-
-**4. Executar restart imediatamente apos deploy**
-
-Apos deployar as funcoes, chamar `restart-instance` para forcar a reconexao e finalmente receber os eventos pendentes.
+Isso funciona como uma camada dupla de protecao:
+- Camada 1 (ja existe): O webhook cancela follow-ups ao receber mensagem
+- Camada 2 (nova): O processador da fila valida antes de enviar
 
 ### Secao tecnica
 
-**Arquivo: `supabase/functions/whatsapp-webhook/index.ts`**
+**Arquivo: `supabase/functions/process-whatsapp-queue/index.ts`**
 
-Adicionar case no switch (apos linha 437):
+Apos a verificacao de sessao conectada (linha ~93) e antes do envio (linha ~96), adicionar para mensagens de follow-up:
+
 ```typescript
-case 'send.message':
-  console.log('[whatsapp-webhook] send.message payload keys:', JSON.stringify(Object.keys(data || {})))
-  await handleMessagesUpsert(supabase, session, data)
-  break
-```
-
-**Arquivo: `supabase/functions/whatsapp-connect/index.ts`**
-
-Dentro do bloco de acoes nao autenticadas (apos o `force-reconfigure`, antes do auth check), adicionar:
-```typescript
-if (action === 'restart-instance') {
-  const targetAccountId = url.searchParams.get('account_id')
-  if (!targetAccountId) {
-    return new Response(JSON.stringify({ error: 'account_id required' }), {
-      status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
-  }
+// Before sending follow-up messages, check if lead has responded
+if (msg.followup_step_id && msg.lead_id) {
+  const phoneSuffix = (msg.phone || '').replace(/\D/g, '').slice(-9)
   
-  const { data: accountExists } = await supabase
-    .from('accounts').select('id').eq('id', targetAccountId).maybeSingle()
-  if (!accountExists) {
-    return new Response(JSON.stringify({ error: 'Invalid account_id' }), {
-      status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
-  }
+  const { data: incomingMessages } = await supabase
+    .from('whatsapp_messages')
+    .select('id')
+    .eq('account_id', msg.account_id)
+    .eq('is_from_me', false)
+    .ilike('phone', `%${phoneSuffix}%`)
+    .limit(1)
   
-  const targetInstance = `senseys_${targetAccountId.replace(/-/g, '_')}`
-  
-  try {
-    const restartResp = await fetch(
-      `${EVOLUTION_API_URL}/instance/restart/${targetInstance}`,
-      { method: 'PUT', headers: { 'apikey': EVOLUTION_API_KEY } }
-    )
-    const restartData = await restartResp.json()
-    console.log('[whatsapp-connect] Restart result:', JSON.stringify(restartData))
+  if (incomingMessages && incomingMessages.length > 0) {
+    console.log(`[process-whatsapp-queue] Lead ${msg.lead_id} already responded, cancelling follow-up ${msg.id}`)
     
-    // Aguardar reconexao
-    await new Promise(resolve => setTimeout(resolve, 3000))
+    // Cancel this and all remaining follow-ups for this lead
+    await supabase
+      .from('whatsapp_message_queue')
+      .update({ status: 'cancelled' })
+      .eq('lead_id', msg.lead_id)
+      .eq('status', 'pending')
+      .not('followup_step_id', 'is', null)
     
-    // Reconfigurar webhook
-    const webhookData = await configureWebhook(targetInstance, webhookUrl)
-    
-    return new Response(JSON.stringify({ 
-      success: true, message: 'Instance restarted', restart: restartData, webhook: webhookData
-    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-  } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
+    continue
   }
 }
 ```
 
-**Arquivo: `src/components/whatsapp/WhatsAppIntegrationSettings.tsx`**
-
-Adicionar funcao e botao para reiniciar instancia:
-```typescript
-const handleRestartInstance = async () => {
-  setReconfiguring(true) // reutilizar estado existente
-  try {
-    const { data: profile } = await supabase.from('profiles').select('account_id').single()
-    if (profile?.account_id) {
-      const response = await supabase.functions.invoke(
-        `whatsapp-connect?action=restart-instance&account_id=${profile.account_id}`
-      )
-      if (response.data?.success) {
-        toast({ title: "Instancia reiniciada!", description: "O webhook foi reconfigurado. Mensagens devem chegar em instantes." })
-      } else {
-        toast({ title: "Erro", description: response.data?.error || "Falha ao reiniciar", variant: "destructive" })
-      }
-    }
-  } finally { setReconfiguring(false) }
-}
-```
+Tambem cancelar imediatamente os follow-ups pendentes da Gabrielly Ricci que ja estao na fila, para evitar novos envios enquanto o deploy ocorre.
 
 ### Resultado esperado
 
-1. O restart da instancia forca a Evolution API a reconectar e reaplicar o webhook
-2. Mensagens enviadas pelo WhatsApp Web passam a ser capturadas via `MESSAGES_UPSERT` (fromMe=true)
-3. Mensagens enviadas pela API passam a ser capturadas via `SEND_MESSAGE`
-4. O botao "Reiniciar Instancia" oferece auto-reparo quando eventos param de chegar
+1. Follow-ups sao cancelados automaticamente se o lead ja respondeu, independentemente do webhook ter processado a cancelamento a tempo
+2. A validacao e feita no momento do envio, eliminando race conditions
+3. Follow-ups pendentes da Gabrielly Ricci serao cancelados imediatamente
+
