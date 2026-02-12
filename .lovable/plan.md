@@ -1,48 +1,75 @@
 
 
-## Mover Eventos Meta CAPI para Configuracoes de Leads
+## Corrigir event_id no Envio de Eventos Meta CAPI
 
-### Contexto
+### Problema Identificado
 
-Os eventos Meta CAPI estao sendo disparados corretamente para o pixel de cada cliente (todos os ultimos 20 logs com status 200). As informacoes enviadas incluem email e telefone em hash SHA-256, meta_lead_id para matching, interesse do lead e origem.
+O `event_id` enviado para a Meta CAPI esta sendo gerado como um ID interno do CRM (`lead_id_eventName_timestamp`), em vez de usar o `meta_lead_id` original do formulario do Facebook. Isso impede que a Meta conecte estruturalmente o evento de qualificacao ao lead original do formulario, reduzindo a eficacia da otimizacao de campanhas.
 
-A tela de configuracao de eventos Meta CAPI foi movida anteriormente para a pagina de Relatorios (`ReportsSettingsSheet`), mas o usuario deseja que ela fique acessivel diretamente nas configuracoes da pagina de Leads, seguindo o mesmo padrao de modal das demais opcoes.
+### Status Atual (Nivel Intermediario)
 
-### O que sera feito
+```text
+Codigo atual (linha 122):
+  eventId = `${lead_id}_${event_name}_${timestamp}`
+  
+  -> Gera: "uuid-interno_Lead_1707480000"
+  -> Meta NAO consegue vincular ao lead original do formulario
+```
 
-**1. Adicionar opcao "Eventos Meta CAPI" no `LeadsSettingsSheet`**
+### Correcao (Nivel Avancado)
 
-- Adicionar um novo item no menu de configuracoes de leads com icone `Send` e descricao "Configure o disparo de eventos para otimizacao de campanhas"
-- Ao clicar, abre um modal (Dialog) com o componente `MetaEventMappingManager`, igual ao padrao das outras opcoes (Status, Distribuicao, etc.)
+```text
+Codigo corrigido:
+  Se meta_lead_id existir:
+    eventId = meta_lead_id   (ID original do formulario Meta)
+  Senao:
+    eventId = `${lead_id}_${event_name}_${timestamp}`  (fallback para leads sem meta_lead_id)
+```
 
-**2. Remover da pagina de Relatorios (opcional)**
+### O que sera alterado
 
-- Remover o `MetaEventMappingManager` do `ReportsSettingsSheet` para evitar duplicidade, ja que a configuracao passara a viver na tela de Leads
+**Arquivo: `supabase/functions/send-meta-event/index.ts`**
+
+1. Alterar a logica de geracao do `event_id` (linha 120-122):
+   - Usar `lead.meta_lead_id` como `event_id` quando disponivel
+   - Manter o fallback atual para leads que nao vieram do Meta (webhook manual, importacao, etc.)
+   - Adicionar log indicando qual tipo de event_id esta sendo usado
+
+2. Manter `userData.lead_id = lead.meta_lead_id` como esta (matching de usuario continua funcionando)
+
+### Resultado Esperado
+
+O payload enviado para a Meta ficara assim:
+
+```text
+{
+  "event_name": "Contact",
+  "event_time": 1707480000,
+  "event_id": "META_LEAD_ID_ORIGINAL",    <-- agora usa o ID do formulario
+  "action_source": "system_generated",
+  "user_data": {
+    "lead_id": "META_LEAD_ID_ORIGINAL",   <-- matching de usuario (ja existia)
+    "em": ["hash_sha256_email"],
+    "ph": ["hash_sha256_phone"]
+  },
+  "custom_data": {
+    "lead_event_source": "Senseys CRM",
+    "content_name": "Apartamento Centro",
+    "content_category": "Facebook"
+  }
+}
+```
+
+### Checklist de Conformidade
+
+- [x] Hash SHA-256 de email e telefone
+- [x] Envio rapido apos mudanca de status
+- [Corrigir] event_id usando meta_lead_id do formulario
+- [x] Mesmo pixel da campanha (via account_meta_config)
+- [x] action_source: "system_generated"
+- [x] user_data.lead_id para matching
 
 ### Detalhes Tecnicos
 
-**Arquivo: `src/components/leads/LeadsSettingsSheet.tsx`**
-
-- Adicionar import do `Send` (lucide-react) - ja importado no arquivo
-- Adicionar novo item no array `settingsItems`:
-  ```
-  { id: "meta-events", icon: Send, label: "Eventos Meta CAPI", description: "Configure o disparo de eventos para otimizacao de campanhas" }
-  ```
-- Adicionar entrada no `modalConfig`:
-  ```
-  "meta-events": { title: "Eventos Meta CAPI", description: "Configure eventos de conversao enviados ao Meta", maxWidth: "!max-w-5xl" }
-  ```
-- Adicionar case no `renderModalContent`:
-  ```
-  case "meta-events": return <MetaEventMappingManager />;
-  ```
-- Importar `MetaEventMappingManager` no topo do arquivo
-
-**Arquivo: `src/components/reports/ReportsSettingsSheet.tsx`**
-
-- Remover o conteudo de eventos Meta CAPI, simplificando ou removendo o sheet se nao houver mais opcoes
-
-### Resultado
-
-O usuario podera acessar a configuracao completa de eventos Meta CAPI (mapeamento de status para eventos, teste de conexao, logs recentes e estatisticas) diretamente pelo icone de engrenagem na pagina de Leads, sem precisar navegar para outra pagina.
+A alteracao e minima - apenas 5-6 linhas na edge function `send-meta-event/index.ts`. Nenhuma mudanca no banco de dados ou frontend e necessaria.
 
