@@ -229,10 +229,12 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any) {
     const rawRemoteJid = msg.key?.remoteJid
     if (!rawRemoteJid || rawRemoteJid.endsWith('@g.us') || rawRemoteJid === 'status@broadcast') continue
 
-    // Normalize Brazilian JIDs to always include the 9th digit
-    const remoteJid = normalizeBrazilianJid(rawRemoteJid)
-    const phone = extractPhoneFromJid(remoteJid)
-    if (!phone || phone.length < 8) continue
+    const isLid = rawRemoteJid.endsWith('@lid')
+    
+    // Normalize Brazilian JIDs to always include the 9th digit (only for real phone JIDs)
+    const remoteJid = isLid ? rawRemoteJid : normalizeBrazilianJid(rawRemoteJid)
+    const phone = isLid ? rawRemoteJid.replace('@lid', '') : extractPhoneFromJid(remoteJid)
+    if (!phone || (!isLid && phone.length < 8)) continue
 
     const isFromMe = !!msg.key?.fromMe
     const messageId = msg.key?.id
@@ -241,8 +243,23 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any) {
     
     if (!content && mediaType === 'text') continue // Skip empty messages
 
-    // Find matching lead
-    const leadId = await findLeadByPhone(supabase, session.account_id, phone)
+    // Find matching lead - for @lid, try by pushName; for normal JIDs, by phone suffix
+    let leadId: string | null = null
+    if (isLid && contactName) {
+      const { data: leadByName } = await supabase
+        .from('leads')
+        .select('id, phone')
+        .eq('account_id', session.account_id)
+        .ilike('name', `%${contactName}%`)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      leadId = leadByName?.[0]?.id || null
+      if (leadId) {
+        console.log(`[whatsapp-webhook] @lid JID matched lead by name "${contactName}": ${leadId}`)
+      }
+    } else {
+      leadId = await findLeadByPhone(supabase, session.account_id, phone)
+    }
 
     // Store the message
     await supabase

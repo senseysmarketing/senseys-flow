@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Conversation, Message } from "@/hooks/use-conversations";
-import { cn } from "@/lib/utils";
+import { cn, formatPhoneForDisplay } from "@/lib/utils";
 import { format, isToday, isYesterday } from "date-fns";
 import { QuickTemplatesPopover } from "./QuickTemplatesPopover";
 import { AvatarFallbackColored } from "@/components/ui/avatar-fallback-colored";
@@ -101,9 +101,9 @@ export function ChatView({ conversation, messages, loading, onSend, onBack, onSh
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">{displayName}</p>
           <p className="text-[11px] text-muted-foreground truncate">
-            {conversation.phone.length >= 12 
-              ? `+${conversation.phone.slice(0, 2)} (${conversation.phone.slice(2, 4)}) ${conversation.phone.slice(4, 9)}-${conversation.phone.slice(9)}`
-              : conversation.phone
+            {conversation.lead?.phone 
+              ? formatPhoneForDisplay(conversation.lead.phone) 
+              : formatPhoneForDisplay(conversation.phone) || conversation.contact_name || ''
             }
           </p>
         </div>
