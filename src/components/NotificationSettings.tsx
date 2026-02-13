@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell, Mail, Volume2, Smartphone, Flame, Thermometer, Snowflake, Download, Send, Loader2, CheckCircle2, XCircle, Bug, RefreshCw, Copy, AlertTriangle, Trash2 } from 'lucide-react';
+import { Bell, Mail, Volume2, Smartphone, Flame, Thermometer, Snowflake, Download, Send, Loader2, CheckCircle2, XCircle, RefreshCw, Copy, AlertTriangle, Trash2, Monitor } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -13,6 +13,31 @@ import { useAuth } from '@/hooks/use-auth';
 import { useFirebaseMessaging } from '@/hooks/use-firebase-messaging';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
+import { formatDistanceToNow } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+
+type DeviceSubscription = {
+  id: string;
+  device_name: string | null;
+  is_active: boolean | null;
+  created_at: string | null;
+};
+
+const parseDeviceType = (deviceName: string | null): { type: 'ios' | 'android' | 'desktop'; label: string } => {
+  if (!deviceName) return { type: 'desktop', label: 'Dispositivo desconhecido' };
+  const ua = deviceName.toLowerCase();
+  if (ua.includes('iphone') || ua.includes('ipad') || ua.includes('ipod')) {
+    const browser = ua.includes('crios') ? 'Chrome' : ua.includes('fxios') ? 'Firefox' : 'Safari';
+    return { type: 'ios', label: `${browser} - iPhone/iPad` };
+  }
+  if (ua.includes('android')) {
+    const browser = ua.includes('chrome') ? 'Chrome' : ua.includes('firefox') ? 'Firefox' : 'Navegador';
+    return { type: 'android', label: `${browser} - Android` };
+  }
+  const browser = ua.includes('chrome') ? 'Chrome' : ua.includes('firefox') ? 'Firefox' : ua.includes('safari') ? 'Safari' : ua.includes('edge') ? 'Edge' : 'Navegador';
+  return { type: 'desktop', label: `${browser} - Desktop` };
+};
 
 // Helper component for diagnostic info rows
 const DiagnosticRow = ({ 
@@ -85,6 +110,24 @@ export const NotificationSettings = () => {
   const [localPrefs, setLocalPrefs] = useState(preferences);
   const [isPWA, setIsPWA] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [devices, setDevices] = useState<DeviceSubscription[]>([]);
+  const [devicesLoading, setDevicesLoading] = useState(true);
+
+  // Fetch connected devices
+  useEffect(() => {
+    if (!user?.id) return;
+    const fetchDevices = async () => {
+      setDevicesLoading(true);
+      const { data } = await supabase
+        .from('push_subscriptions')
+        .select('id, device_name, is_active, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      setDevices(data || []);
+      setDevicesLoading(false);
+    };
+    fetchDevices();
+  }, [user?.id, isPushSubscribed]);
 
   useEffect(() => {
     setLocalPrefs(preferences);
@@ -290,17 +333,17 @@ export const NotificationSettings = () => {
       </Card>
 
       {/* Firebase Diagnostic Panel */}
-      <Card className="border-orange-500/30">
+      <Card className="border-primary/30">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-orange-500/10">
-                <Bug className="h-5 w-5 text-orange-500" />
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Bell className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <CardTitle className="text-lg">Diagnóstico Firebase</CardTitle>
+                <CardTitle className="text-lg">Diagnóstico de Notificações</CardTitle>
                 <CardDescription>
-                  Informações técnicas para debug
+                  Status dos seus dispositivos e conexões
                 </CardDescription>
               </div>
             </div>
@@ -316,6 +359,60 @@ export const NotificationSettings = () => {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Connected Devices Section */}
+          <div>
+            <Label className="text-sm font-medium">Dispositivos Conectados</Label>
+            <div className="mt-2 space-y-2">
+              {devicesLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </div>
+              ) : devices.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">
+                  Nenhum dispositivo registrado. Ative as notificações push para registrar este dispositivo.
+                </p>
+              ) : (
+                devices.map((device) => {
+                  const parsed = parseDeviceType(device.device_name);
+                  const DeviceIcon = parsed.type === 'desktop' ? Monitor : Smartphone;
+                  return (
+                    <div key={device.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border border-border/50">
+                      <div className="flex items-center gap-3">
+                        <DeviceIcon className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <span className="text-sm font-medium">{parsed.label}</span>
+                          {device.created_at && (
+                            <p className="text-xs text-muted-foreground">
+                              Registrado {formatDistanceToNow(new Date(device.created_at), { addSuffix: true, locale: ptBR })}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <Badge 
+                        variant="outline" 
+                        className={cn(
+                          "gap-1",
+                          device.is_active 
+                            ? "border-green-500/30 text-green-600" 
+                            : "border-destructive/30 text-destructive"
+                        )}
+                      >
+                        {device.is_active ? (
+                          <><CheckCircle2 className="h-3 w-3" /> Ativo</>
+                        ) : (
+                          <><XCircle className="h-3 w-3" /> Desconectado</>
+                        )}
+                      </Badge>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Technical Debug Section */}
           {/* Critical alert if no token but subscribed */}
           {diagnosticInfo.fcmToken === null && isPushSubscribed && (
             <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
