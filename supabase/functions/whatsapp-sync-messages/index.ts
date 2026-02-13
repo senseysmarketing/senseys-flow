@@ -159,7 +159,26 @@ Deno.serve(async (req) => {
     }
 
     const apiMessages = await response.json()
-    const messages = Array.isArray(apiMessages) ? apiMessages : apiMessages?.messages || []
+    console.log(`[whatsapp-sync] API response type: ${typeof apiMessages}, isArray: ${Array.isArray(apiMessages)}, keys: ${typeof apiMessages === 'object' && apiMessages ? JSON.stringify(Object.keys(apiMessages)).substring(0, 200) : 'n/a'}`)
+    
+    // Handle various response formats from Evolution API
+    let messages: any[] = []
+    if (Array.isArray(apiMessages)) {
+      messages = apiMessages
+    } else if (apiMessages?.messages && Array.isArray(apiMessages.messages)) {
+      messages = apiMessages.messages
+    } else if (apiMessages?.data && Array.isArray(apiMessages.data)) {
+      messages = apiMessages.data
+    } else if (typeof apiMessages === 'object' && apiMessages !== null) {
+      // Try to find any array property
+      for (const key of Object.keys(apiMessages)) {
+        if (Array.isArray(apiMessages[key])) {
+          messages = apiMessages[key]
+          console.log(`[whatsapp-sync] Found messages in property "${key}" (${messages.length} items)`)
+          break
+        }
+      }
+    }
 
     console.log(`[whatsapp-sync] Got ${messages.length} messages from Evolution API`)
 
