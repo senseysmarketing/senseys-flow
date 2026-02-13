@@ -1,4 +1,5 @@
 import { ArrowLeft, Mail, Phone, User, Tag, ThermometerSun, Building2, X } from "lucide-react";
+import LeadFormFields from "@/components/LeadFormFields";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -150,6 +151,10 @@ export function LeadPanel({ lead, onClose, isMobile }: LeadPanelProps) {
               </div>
             </>
           )}
+
+          {/* Form Fields */}
+          <Separator />
+          <LeadFormFields leadId={lead.id} />
         </div>
       </ScrollArea>
     </div>
