@@ -151,19 +151,16 @@ export function useMessages(remoteJid: string | null) {
   const accountId = account?.id;
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
+  const [hasSynced, setHasSynced] = useState<string | null>(null);
 
   // Extract phone suffix for flexible JID matching (handles 9th digit variations)
   const phoneSuffix = remoteJid
     ? remoteJid.replace('@s.whatsapp.net', '').replace('@lid', '').replace('@c.us', '').slice(-8)
     : null;
 
-  const fetchMessages = useCallback(async () => {
-    if (!accountId || !remoteJid || !phoneSuffix) {
-      setMessages([]);
-      return;
-    }
+  const fetchMessagesFromDB = useCallback(async () => {
+    if (!accountId || !phoneSuffix) return;
 
-    setLoading(true);
     const { data, error } = await supabase
       .from('whatsapp_messages')
       .select('id, content, media_type, media_url, is_from_me, status, timestamp, contact_name, message_id')
@@ -177,8 +174,33 @@ export function useMessages(remoteJid: string | null) {
     } else {
       setMessages(data || []);
     }
+  }, [accountId, phoneSuffix]);
+
+  const fetchMessages = useCallback(async () => {
+    if (!accountId || !remoteJid || !phoneSuffix) {
+      setMessages([]);
+      return;
+    }
+
+    setLoading(true);
+    await fetchMessagesFromDB();
     setLoading(false);
-  }, [accountId, remoteJid, phoneSuffix]);
+
+    // Background sync: fetch missing messages from Evolution API (once per conversation)
+    if (remoteJid && hasSynced !== remoteJid) {
+      setHasSynced(remoteJid);
+      supabase.functions.invoke('whatsapp-sync-messages', {
+        body: { remote_jid: remoteJid },
+      }).then((result) => {
+        if (result.data?.synced > 0) {
+          console.log(`[sync] ${result.data.synced} new messages synced for ${remoteJid}`);
+          fetchMessagesFromDB();
+        }
+      }).catch((err) => {
+        console.error('[sync] Error syncing messages:', err);
+      });
+    }
+  }, [accountId, remoteJid, phoneSuffix, fetchMessagesFromDB, hasSynced]);
 
   useEffect(() => {
     fetchMessages();
