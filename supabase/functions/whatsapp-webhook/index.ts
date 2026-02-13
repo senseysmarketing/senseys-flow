@@ -261,6 +261,26 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any) {
       leadId = await findLeadByPhone(supabase, session.account_id, phone)
     }
 
+    // Check for existing message to prevent duplicates from send.message + messages.upsert
+    if (messageId) {
+      const { data: existing } = await supabase
+        .from('whatsapp_messages')
+        .select('id')
+        .eq('account_id', session.account_id)
+        .eq('message_id', messageId)
+        .maybeSingle()
+
+      if (existing) {
+        console.log('[whatsapp-webhook] Message already exists, skipping:', messageId)
+        // Still update conversation metadata
+        await upsertConversation(
+          supabase, session.account_id, remoteJid, phone,
+          contactName, content, isFromMe, leadId
+        )
+        continue
+      }
+    }
+
     // Store the message
     await supabase
       .from('whatsapp_messages')

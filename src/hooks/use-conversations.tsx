@@ -198,17 +198,52 @@ export function useMessages(remoteJid: string | null) {
           // Match by phone suffix instead of exact JID to handle 9th digit variations
           const msgPhone = (newMsg.remote_jid || '').replace('@s.whatsapp.net', '').replace('@lid', '').replace('@c.us', '');
           if (msgPhone.endsWith(phoneSuffix)) {
-            setMessages(prev => [...prev, {
-              id: newMsg.id,
-              content: newMsg.content,
-              media_type: newMsg.media_type,
-              media_url: newMsg.media_url,
-              is_from_me: newMsg.is_from_me,
-              status: newMsg.status,
-              timestamp: newMsg.timestamp,
-              contact_name: newMsg.contact_name,
-              message_id: newMsg.message_id,
-            }]);
+            setMessages(prev => {
+              const incoming = {
+                id: newMsg.id,
+                content: newMsg.content,
+                media_type: newMsg.media_type,
+                media_url: newMsg.media_url,
+                is_from_me: newMsg.is_from_me,
+                status: newMsg.status,
+                timestamp: newMsg.timestamp,
+                contact_name: newMsg.contact_name,
+                message_id: newMsg.message_id,
+              };
+
+              // Skip if message with same DB id already exists
+              if (prev.some(m => m.id === incoming.id)) return prev;
+
+              // If message_id matches an existing message, replace it (optimistic -> real)
+              if (incoming.message_id && prev.some(m => m.message_id === incoming.message_id)) {
+                return prev.map(m =>
+                  m.message_id === incoming.message_id
+                    ? { ...m, id: incoming.id, status: incoming.status }
+                    : m
+                );
+              }
+
+              // Detect duplicate by content+timestamp for outgoing messages (optimistic fallback)
+              if (incoming.is_from_me) {
+                const msgTime = new Date(incoming.timestamp).getTime();
+                const isDuplicate = prev.some(m =>
+                  m.is_from_me &&
+                  m.content === incoming.content &&
+                  Math.abs(new Date(m.timestamp).getTime() - msgTime) < 5000
+                );
+                if (isDuplicate) {
+                  return prev.map(m =>
+                    m.is_from_me &&
+                    m.content === incoming.content &&
+                    Math.abs(new Date(m.timestamp).getTime() - msgTime) < 5000
+                      ? { ...m, id: incoming.id, status: incoming.status, message_id: incoming.message_id }
+                      : m
+                  );
+                }
+              }
+
+              return [...prev, incoming];
+            });
           }
         }
       )
