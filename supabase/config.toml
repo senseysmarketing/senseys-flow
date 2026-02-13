@@ -68,3 +68,6 @@ verify_jwt = false
 
 [functions.apply-distribution-rules]
 verify_jwt = false
+
+[functions.whatsapp-sync-messages]
+verify_jwt = false
