@@ -13,6 +13,7 @@ interface WhatsAppButtonProps {
   leadId?: string;
   propertyName?: string;
   interesse?: string;
+  onShowLead?: () => void;
 }
 
 const WhatsAppButton = ({ 
@@ -23,6 +24,7 @@ const WhatsAppButton = ({
   leadName,
   leadId,
   propertyName,
+  onShowLead,
 }: WhatsAppButtonProps) => {
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -39,6 +41,7 @@ const WhatsAppButton = ({
       leadId={leadId}
       phone={phone}
       propertyName={propertyName}
+      onShowLead={onShowLead}
     />
   );
 

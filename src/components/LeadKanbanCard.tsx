@@ -181,6 +181,7 @@ export function LeadKanbanCard({
         propertyName={lead.properties?.title}
         interesse={lead.interesse}
         className="w-full"
+        onShowLead={() => onViewDetails(lead)}
       />
     </div>
   );

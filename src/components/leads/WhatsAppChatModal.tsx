@@ -15,9 +15,10 @@ interface WhatsAppChatModalProps {
   leadId?: string;
   phone: string;
   propertyName?: string;
+  onShowLead?: () => void;
 }
 
-export function WhatsAppChatModal({ open, onClose, leadName, leadId, phone, propertyName }: WhatsAppChatModalProps) {
+export function WhatsAppChatModal({ open, onClose, leadName, leadId, phone, propertyName, onShowLead }: WhatsAppChatModalProps) {
   const { account } = useAccount();
   const navigate = useNavigate();
   const [isConnected, setIsConnected] = useState<boolean | null>(null);
@@ -162,7 +163,7 @@ export function WhatsAppChatModal({ open, onClose, leadName, leadId, phone, prop
               loading={messagesLoading}
               onSend={handleSend}
               onBack={onClose}
-              onShowLead={() => {}}
+              onShowLead={() => { if (onShowLead) { onClose(); onShowLead(); } }}
               isMobile={false}
             />
           </div>
