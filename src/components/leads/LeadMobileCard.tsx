@@ -196,6 +196,7 @@ const LeadMobileCard = ({
           propertyName={lead.properties?.title}
           interesse={lead.interesse}
           className="flex-1 h-10"
+          onShowLead={() => onViewDetails(lead)}
         />
         <Button
           variant="outline"

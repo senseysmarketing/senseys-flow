@@ -366,6 +366,7 @@ const LeadsTable = ({
                       propertyName={lead.properties?.title}
                       interesse={lead.interesse}
                       variant="icon"
+                      onShowLead={() => onViewDetails(lead)}
                     />
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
