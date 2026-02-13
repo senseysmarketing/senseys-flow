@@ -94,8 +94,6 @@ function extractPhoneFromJid(jid: string): string {
 
 function normalizeBrazilianJid(jid: string): string {
   const phone = extractPhoneFromJid(jid);
-  // Brazilian numbers: country code (55) + DDD (2 digits) + number (8 or 9 digits)
-  // If 12 digits (55 + DD + 8 digits), insert 9 after DDD to normalize
   if (phone.length === 12 && phone.startsWith('55')) {
     const ddd = phone.slice(2, 4);
     const number = phone.slice(4);
@@ -108,7 +106,6 @@ function normalizeBrazilianJid(jid: string): string {
 }
 
 function extractMessageContent(msg: any): { content: string | null, mediaType: string, mediaUrl: string | null } {
-  // Recursively unwrap ephemeral and viewOnce messages
   if (msg.message?.ephemeralMessage?.message) {
     return extractMessageContent({ ...msg, message: msg.message.ephemeralMessage.message })
   }
@@ -118,7 +115,6 @@ function extractMessageContent(msg: any): { content: string | null, mediaType: s
   if (msg.message?.viewOnceMessage?.message) {
     return extractMessageContent({ ...msg, message: msg.message.viewOnceMessage.message })
   }
-  // Skip protocol messages and reaction messages
   if (msg.message?.protocolMessage || msg.message?.reactionMessage) {
     return { content: null, mediaType: 'text', mediaUrl: null }
   }
@@ -146,8 +142,7 @@ function extractMessageContent(msg: any): { content: string | null, mediaType: s
   return { content: null, mediaType: 'text', mediaUrl: null }
 }
 
-async function upsertConversation(supabase: any, accountId: string, remoteJid: string, phone: string, contactName: string | null, lastMessage: string | null, isFromMe: boolean, leadId: string | null) {
-  // Try to update existing conversation
+async function upsertConversation(supabase: any, accountId: string, remoteJid: string, phone: string, contactName: string | null, lastMessage: string | null, isFromMe: boolean, leadId: string | null, lidJid?: string | null) {
   const { data: existing } = await supabase
     .from('whatsapp_conversations')
     .select('id, unread_count')
@@ -167,6 +162,7 @@ async function upsertConversation(supabase: any, accountId: string, remoteJid: s
     if (contactName) updateData.contact_name = contactName
     if (leadId) updateData.lead_id = leadId
     if (!isFromMe) updateData.unread_count = (existing.unread_count || 0) + 1
+    if (lidJid) updateData.lid_jid = lidJid
     
     await supabase
       .from('whatsapp_conversations')
@@ -185,6 +181,7 @@ async function upsertConversation(supabase: any, accountId: string, remoteJid: s
         last_message_is_from_me: isFromMe,
         unread_count: isFromMe ? 0 : 1,
         lead_id: leadId,
+        lid_jid: lidJid || null,
       })
   }
 }
@@ -202,24 +199,46 @@ async function findLeadByPhone(supabase: any, accountId: string, phone: string):
   return leads?.[0]?.id || null
 }
 
-async function handleMessagesUpsert(supabase: any, session: any, data: any) {
-  // Log raw payload for debugging
+async function resolveLidToPhone(instanceName: string, lidJid: string): Promise<string | null> {
+  const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL') || ''
+  const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || ''
+  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) return null
+
+  const apiUrl = EVOLUTION_API_URL.startsWith('http') ? EVOLUTION_API_URL : `https://${EVOLUTION_API_URL}`
+  try {
+    const res = await fetch(`${apiUrl}/chat/findContacts/${instanceName}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_API_KEY },
+      body: JSON.stringify({ where: { id: lidJid } })
+    })
+    const contacts = await res.json()
+    console.log(`[whatsapp-webhook] findContacts response for ${lidJid}:`, JSON.stringify(contacts).substring(0, 500))
+    const contact = Array.isArray(contacts) ? contacts[0] : contacts
+    const phoneJid = contact?.id || contact?.jid || contact?.remoteJid
+    if (phoneJid && phoneJid.includes('@s.whatsapp.net')) {
+      return normalizeBrazilianJid(phoneJid)
+    }
+  } catch (e) {
+    console.error('[whatsapp-webhook] findContacts error:', e)
+  }
+  return null
+}
+
+async function handleMessagesUpsert(supabase: any, session: any, data: any, instanceName: string) {
   console.log('[whatsapp-webhook] messages.upsert raw data:', JSON.stringify(data).substring(0, 2000))
   
-  // Accept different formats from Evolution API
   let messages: any[] = []
   if (Array.isArray(data)) {
     messages = data
   } else if (data?.messages && Array.isArray(data.messages)) {
     messages = data.messages
   } else if (data?.message && data?.key) {
-    // Single message object with key and message properties at root
     messages = [data]
   } else if (data?.key) {
     messages = [data]
   }
 
-  console.log(`[whatsapp-webhook] Processing ${messages.length} messages, parsed format: ${Array.isArray(data) ? 'array' : data?.messages ? 'data.messages' : data?.key ? 'single-object' : 'unknown'}`)
+  console.log(`[whatsapp-webhook] Processing ${messages.length} messages`)
 
   if (messages.length === 0) {
     console.log('[whatsapp-webhook] No messages to process, raw data keys:', JSON.stringify(Object.keys(data || {})))
@@ -230,38 +249,112 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any) {
     if (!rawRemoteJid || rawRemoteJid.endsWith('@g.us') || rawRemoteJid === 'status@broadcast') continue
 
     const isLid = rawRemoteJid.endsWith('@lid')
-    
-    // Normalize Brazilian JIDs to always include the 9th digit (only for real phone JIDs)
-    const remoteJid = isLid ? rawRemoteJid : normalizeBrazilianJid(rawRemoteJid)
-    const phone = isLid ? rawRemoteJid.replace('@lid', '') : extractPhoneFromJid(remoteJid)
-    if (!phone || (!isLid && phone.length < 8)) continue
-
     const isFromMe = !!msg.key?.fromMe
     const messageId = msg.key?.id
     const contactName = msg.pushName || null
     const { content, mediaType, mediaUrl } = extractMessageContent(msg)
     
-    if (!content && mediaType === 'text') continue // Skip empty messages
+    if (!content && mediaType === 'text') continue
 
-    // Find matching lead - for @lid, try by pushName; for normal JIDs, by phone suffix
+    // --- @lid resolution logic ---
+    let resolvedJid: string | null = null
+    let resolvedPhone: string | null = null
+    let lidJidForConversation: string | null = null
+
+    if (isLid) {
+      // 1. Try to resolve via Evolution API findContacts
+      resolvedJid = await resolveLidToPhone(instanceName, rawRemoteJid)
+      
+      // 2. Fallback: check if we have a mapping in the DB
+      if (!resolvedJid) {
+        const { data: mappedConv } = await supabase
+          .from('whatsapp_conversations')
+          .select('remote_jid')
+          .eq('account_id', session.account_id)
+          .eq('lid_jid', rawRemoteJid)
+          .maybeSingle()
+        
+        if (mappedConv?.remote_jid) {
+          resolvedJid = mappedConv.remote_jid
+          console.log(`[whatsapp-webhook] Resolved @lid via DB mapping: ${rawRemoteJid} -> ${resolvedJid}`)
+        }
+      } else {
+        console.log(`[whatsapp-webhook] Resolved @lid via findContacts: ${rawRemoteJid} -> ${resolvedJid}`)
+      }
+
+      // 3. Fallback: try matching by pushName to find the lead and its conversation
+      if (!resolvedJid && contactName) {
+        const { data: leadByName } = await supabase
+          .from('leads')
+          .select('id, phone')
+          .eq('account_id', session.account_id)
+          .ilike('name', `%${contactName}%`)
+          .order('created_at', { ascending: false })
+          .limit(1)
+        
+        if (leadByName?.[0]?.phone) {
+          const leadPhone = leadByName[0].phone.replace(/[^0-9]/g, '')
+          const normalizedLeadJid = normalizeBrazilianJid(`${leadPhone}@s.whatsapp.net`)
+          // Verify this conversation exists
+          const { data: existingConv } = await supabase
+            .from('whatsapp_conversations')
+            .select('remote_jid')
+            .eq('account_id', session.account_id)
+            .eq('remote_jid', normalizedLeadJid)
+            .maybeSingle()
+          
+          if (existingConv) {
+            resolvedJid = normalizedLeadJid
+            console.log(`[whatsapp-webhook] Resolved @lid via lead name "${contactName}": ${rawRemoteJid} -> ${resolvedJid}`)
+          }
+        }
+      }
+
+      lidJidForConversation = rawRemoteJid
+    }
+
+    // Determine final JID and phone to use
+    const finalJid = resolvedJid || (isLid ? rawRemoteJid : normalizeBrazilianJid(rawRemoteJid))
+    const finalPhone = isLid
+      ? (resolvedJid ? extractPhoneFromJid(resolvedJid) : rawRemoteJid.replace('@lid', ''))
+      : extractPhoneFromJid(finalJid)
+    
+    if (!finalPhone || (!isLid && !resolvedJid && finalPhone.length < 8)) continue
+
+    // If @lid resolved, save the mapping on the conversation
+    if (isLid && resolvedJid) {
+      lidJidForConversation = rawRemoteJid
+    }
+
+    // Extract previousRemoteJid from incoming messages to build @lid mapping
+    const previousRemoteJid = msg.key?.previousRemoteJid
+    if (previousRemoteJid && previousRemoteJid.endsWith('@lid') && !isLid) {
+      // This incoming message tells us the @lid for this contact
+      const normalizedIncomingJid = normalizeBrazilianJid(rawRemoteJid)
+      await supabase
+        .from('whatsapp_conversations')
+        .update({ lid_jid: previousRemoteJid })
+        .eq('account_id', session.account_id)
+        .eq('remote_jid', normalizedIncomingJid)
+      console.log(`[whatsapp-webhook] Saved @lid mapping from previousRemoteJid: ${normalizedIncomingJid} -> ${previousRemoteJid}`)
+    }
+
+    // Find matching lead
     let leadId: string | null = null
-    if (isLid && contactName) {
+    if (isLid && !resolvedJid && contactName) {
       const { data: leadByName } = await supabase
         .from('leads')
-        .select('id, phone')
+        .select('id')
         .eq('account_id', session.account_id)
         .ilike('name', `%${contactName}%`)
         .order('created_at', { ascending: false })
         .limit(1)
       leadId = leadByName?.[0]?.id || null
-      if (leadId) {
-        console.log(`[whatsapp-webhook] @lid JID matched lead by name "${contactName}": ${leadId}`)
-      }
     } else {
-      leadId = await findLeadByPhone(supabase, session.account_id, phone)
+      leadId = await findLeadByPhone(supabase, session.account_id, finalPhone)
     }
 
-    // Check for existing message to prevent duplicates from send.message + messages.upsert
+    // Check for existing message to prevent duplicates
     if (messageId) {
       const { data: existing } = await supabase
         .from('whatsapp_messages')
@@ -272,22 +365,26 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any) {
 
       if (existing) {
         console.log('[whatsapp-webhook] Message already exists, skipping:', messageId)
-        // Still update conversation metadata
-        await upsertConversation(
-          supabase, session.account_id, remoteJid, phone,
-          contactName, content, isFromMe, leadId
-        )
+        // Still update conversation metadata if we resolved
+        if (!isLid || resolvedJid) {
+          await upsertConversation(
+            supabase, session.account_id, isLid && resolvedJid ? resolvedJid : finalJid, finalPhone,
+            contactName, content, isFromMe, leadId, lidJidForConversation
+          )
+        }
         continue
       }
     }
 
-    // Store the message
+    // Store the message with the resolved JID (not the @lid)
+    const storeJid = (isLid && resolvedJid) ? resolvedJid : finalJid
+    
     await supabase
       .from('whatsapp_messages')
       .insert({
         account_id: session.account_id,
-        remote_jid: remoteJid,
-        phone,
+        remote_jid: storeJid,
+        phone: finalPhone,
         message_id: messageId,
         content,
         media_type: mediaType,
@@ -301,11 +398,15 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any) {
         contact_name: contactName,
       })
 
-    // Update/create conversation
-    await upsertConversation(
-      supabase, session.account_id, remoteJid, phone,
-      contactName, content, isFromMe, leadId
-    )
+    // Update/create conversation — skip if @lid couldn't be resolved (avoid ghost conversations)
+    if (!isLid || resolvedJid) {
+      await upsertConversation(
+        supabase, session.account_id, storeJid, finalPhone,
+        contactName, content, isFromMe, leadId, lidJidForConversation
+      )
+    } else {
+      console.log(`[whatsapp-webhook] Skipping conversation upsert for unresolved @lid: ${rawRemoteJid}`)
+    }
 
     // Update delivery status in message log (for outgoing)
     if (isFromMe && messageId) {
@@ -318,9 +419,9 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any) {
         .eq('message_id', messageId)
     }
 
-    // Handle incoming message lead status changes (existing logic)
-    if (!isFromMe) {
-      const phoneSuffix = phone.slice(-9)
+    // Handle incoming message lead status changes
+    if (!isFromMe && !isLid) {
+      const phoneSuffix = finalPhone.slice(-9)
 
       const { data: matchedLeads } = await supabase
         .from('leads')
@@ -348,7 +449,6 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any) {
 
       if (!novoLeadStatus || !emContatoStatus) continue
 
-      // Cancel pending follow-ups for ALL matched leads
       for (const lead of matchedLeads) {
         const { data: cancelledMsgs } = await supabase
           .from('whatsapp_message_queue')
@@ -363,7 +463,6 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any) {
         }
       }
 
-      // Move "Novo Lead" -> "Em Contato"
       const leadsToMove = matchedLeads.filter(l => l.status_id === novoLeadStatus.id)
       for (const lead of leadsToMove) {
         const { error: updateError } = await supabase
@@ -406,13 +505,11 @@ async function handleMessagesUpdate(supabase: any, data: any) {
                              status === 3 ? 'read' : 
                              status === 4 ? 'played' : 'sent'
       
-      // Update in message log
       await supabase
         .from('whatsapp_message_log')
         .update({ delivery_status: deliveryStatus })
         .eq('message_id', messageId)
 
-      // Update in messages table
       await supabase
         .from('whatsapp_messages')
         .update({ status: deliveryStatus })
@@ -432,11 +529,10 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     const body = await req.json()
-    console.log('[whatsapp-webhook] Event:', body.event, 'instance:', body.instance, 'data type:', typeof body.data, 'isArray:', Array.isArray(body.data))
+    console.log('[whatsapp-webhook] Event:', body.event, 'instance:', body.instance)
 
     const { event, instance, data } = body
 
-    // Normalize event name: MESSAGES_UPSERT -> messages.upsert, CONNECTION_UPDATE -> connection.update
     const normalizedEvent = event?.toLowerCase().replace(/_/g, '.')
 
     if (!instance) {
@@ -466,18 +562,16 @@ Deno.serve(async (req) => {
         await handleQRCodeUpdated(supabase, session, data)
         break
       case 'messages.upsert':
-        console.log('[whatsapp-webhook] messages.upsert payload keys:', JSON.stringify(Object.keys(data || {})))
-        await handleMessagesUpsert(supabase, session, data)
+        await handleMessagesUpsert(supabase, session, data, instance)
         break
       case 'messages.update':
         await handleMessagesUpdate(supabase, data)
         break
       case 'send.message':
-        console.log('[whatsapp-webhook] send.message payload keys:', JSON.stringify(Object.keys(data || {})))
-        await handleMessagesUpsert(supabase, session, data)
+        await handleMessagesUpsert(supabase, session, data, instance)
         break
       default:
-        console.log(`[whatsapp-webhook] Unhandled event: ${event} (normalized: ${normalizedEvent})`)
+        console.log(`[whatsapp-webhook] Unhandled event: ${event}`)
     }
 
     return new Response(JSON.stringify({ ok: true }), {

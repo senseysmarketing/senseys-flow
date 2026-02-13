@@ -58,6 +58,7 @@ export function useConversations() {
       .from('whatsapp_conversations')
       .select('*')
       .eq('account_id', accountId)
+      .not('remote_jid', 'like', '%@lid')
       .order('last_message_at', { ascending: false });
 
     if (error) {
@@ -185,21 +186,6 @@ export function useMessages(remoteJid: string | null) {
     setLoading(true);
     await fetchMessagesFromDB();
     setLoading(false);
-
-    // Background sync: fetch missing messages from Evolution API (once per conversation)
-    if (remoteJid && syncedRef.current !== remoteJid) {
-      syncedRef.current = remoteJid;
-      supabase.functions.invoke('whatsapp-sync-messages', {
-        body: { remote_jid: remoteJid },
-      }).then((result) => {
-        if (result.data?.synced > 0) {
-          console.log(`[sync] ${result.data.synced} new messages synced for ${remoteJid}`);
-          fetchMessagesFromDB();
-        }
-      }).catch((err) => {
-        console.error('[sync] Error syncing messages:', err);
-      });
-    }
   }, [accountId, remoteJid, phoneSuffix, fetchMessagesFromDB]);
 
   useEffect(() => {
