@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { ArrowLeft, User, Send, FileText, Check, CheckCheck } from "lucide-react";
+import { ArrowLeft, User, Send, FileText, Check, CheckCheck, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -107,6 +107,20 @@ export function ChatView({ conversation, messages, loading, onSend, onBack, onSh
             }
           </p>
         </div>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-1.5 text-xs bg-green-600 hover:bg-green-700 text-white hover:text-white"
+          onClick={() => {
+            const phone = (conversation.lead?.phone || conversation.phone || '').replace(/\D/g, '');
+            const fullPhone = phone.startsWith('55') ? phone : `55${phone}`;
+            window.open(`https://wa.me/${fullPhone}`, '_blank');
+          }}
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">WhatsApp Web</span>
+        </Button>
 
         {conversation.lead && (
           <Button variant="ghost" size="sm" onClick={onShowLead} className="gap-1.5 text-xs">
