@@ -172,37 +172,55 @@ export function FirebaseMessagingProvider({ children }: { children: ReactNode })
 
     const init = async () => {
       try {
-        addDiagnosticLog('Inicializando FCM Provider...');
+        addDiagnosticLog('Inicializando FCM Provider (per-device)...');
         setPermissionState(Notification.permission as 'default' | 'granted' | 'denied');
         
         if (Notification.permission === 'granted') {
-          // Check for existing valid FCM token (not old Web Push tokens)
-          const { data: existing } = await supabase
-            .from('push_subscriptions')
-            .select('endpoint, is_active')
-            .eq('user_id', user.id)
-            .eq('is_active', true)
-            .not('endpoint', 'like', 'https://%')
-            .limit(1)
-            .maybeSingle();
-          
-          if (existing && existing.endpoint) {
-            addDiagnosticLog('Token FCM válido encontrado, reconectando...');
+          // Per-device approach: always get the current device's FCM token
+          // and check if THIS specific token is registered in the database
+          try {
+            await loadFirebaseSDK();
+            const firebase = (window as any).firebase;
             
-            // Auto-reconnect: load Firebase SDK and setup listeners
-            try {
-              await loadFirebaseSDK();
-              const firebase = (window as any).firebase;
+            if (!firebase.apps.length) {
+              firebase.initializeApp(FIREBASE_CONFIG);
+            }
+            
+            // Register service worker
+            const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
+            await navigator.serviceWorker.ready;
+            
+            const messaging = firebase.messaging();
+            
+            // Get THIS device's FCM token
+            const currentToken = await messaging.getToken({ 
+              vapidKey: VAPID_KEY,
+              serviceWorkerRegistration: swReg 
+            });
+            
+            if (currentToken) {
+              addDiagnosticLog(`Token do dispositivo atual: ${currentToken.substring(0, 20)}...`);
+              setFcmToken(currentToken);
               
-              if (!firebase.apps.length) {
-                firebase.initializeApp(FIREBASE_CONFIG);
+              // Check if THIS specific token exists in the database
+              const { data: existing } = await supabase
+                .from('push_subscriptions')
+                .select('id, is_active')
+                .eq('endpoint', currentToken)
+                .eq('user_id', user.id)
+                .maybeSingle();
+              
+              if (existing && existing.is_active) {
+                // This device is already registered and active
+                addDiagnosticLog('Dispositivo atual já registrado e ativo');
+                setIsSubscribed(true);
+              } else {
+                // This device's token is NOT in the database - auto-subscribe
+                addDiagnosticLog('Dispositivo novo detectado, registrando automaticamente...');
+                await saveTokenToDatabase(currentToken, user.id, account!.id);
+                setIsSubscribed(true);
+                addDiagnosticLog('Auto-subscribe concluído para este dispositivo');
               }
-              
-              // Register service worker
-              const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
-              await navigator.serviceWorker.ready;
-              
-              const messaging = firebase.messaging();
               
               // Setup foreground message listener
               messaging.onMessage((payload: any) => {
@@ -215,24 +233,21 @@ export function FirebaseMessagingProvider({ children }: { children: ReactNode })
                 }
               });
               
-              setIsSubscribed(true);
-              setFcmToken(existing.endpoint);
-              updateDiagnosticInfo({ fcmToken: existing.endpoint, userId: user.id, serviceWorkerStatus: 'active' });
-              addDiagnosticLog('FCM reconectado com sucesso');
-            } catch (reconnectError: any) {
-              addDiagnosticLog(`AVISO: Falha ao reconectar FCM: ${reconnectError.message}`);
-              // Still mark as subscribed since token exists in DB
-              setIsSubscribed(true);
-              setFcmToken(existing.endpoint);
-              updateDiagnosticInfo({ fcmToken: existing.endpoint, userId: user.id });
+              updateDiagnosticInfo({ fcmToken: currentToken, userId: user.id, serviceWorkerStatus: 'active' });
+              addDiagnosticLog('FCM inicializado com sucesso (per-device)');
+            } else {
+              addDiagnosticLog('Não foi possível obter token FCM para este dispositivo');
             }
-          } else {
-            addDiagnosticLog('Nenhum token FCM válido encontrado');
+          } catch (fcmError: any) {
+            addDiagnosticLog(`AVISO: Falha ao inicializar FCM: ${fcmError.message}`);
+            updateDiagnosticInfo({ serviceWorkerStatus: 'error' });
           }
+        } else {
+          addDiagnosticLog(`Permissão de notificação: ${Notification.permission}`);
         }
         
         setIsInitialized(true);
-        updateDiagnosticInfo({ serviceWorkerStatus: 'active' });
+        updateDiagnosticInfo({ serviceWorkerStatus: Notification.permission === 'granted' ? 'active' : 'loading' });
       } catch (error: any) {
         addDiagnosticLog(`ERRO: ${error.message}`);
       } finally {

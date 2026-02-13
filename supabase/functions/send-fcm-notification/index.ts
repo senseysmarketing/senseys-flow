@@ -239,7 +239,9 @@ serve(async (req) => {
             },
           },
           data: {
-            ...data,
+            ...Object.fromEntries(
+              Object.entries(data || {}).map(([k, v]) => [k, String(v)])
+            ),
             url: absoluteUrl,
             click_action: absoluteUrl,
           },
