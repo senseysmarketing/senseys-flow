@@ -7,6 +7,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 
 import BottomNav from "@/components/BottomNav";
+import SmartBanner from "@/components/SmartBanner";
 import { Button } from "@/components/ui/button";
 import { Sun, Moon, Bell, Search, Menu, Wrench, ArrowLeft } from "lucide-react";
 import { useState } from "react";
@@ -187,8 +188,8 @@ const Layout = ({ children, fullHeight = false }: LayoutProps) => {
           </main>
         </div>
 
-        
         <BottomNav />
+        <SmartBanner />
       </div>
     </SidebarProvider>
   );
