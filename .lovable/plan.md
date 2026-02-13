@@ -1,26 +1,50 @@
 
 
-## Melhorar secao de Diagnostico de Notificacoes
+## Corrigir suporte a Push Notifications no Android PWA
 
-### Mudancas
+### Problema identificado
 
-**Arquivo: `src/components/NotificationSettings.tsx`**
+O usuario Bruno ativa as notificacoes no Desktop (Windows) e o token e salvo. Quando abre o app PWA no Android, o sistema encontra o token do Desktop e marca `isSubscribed = true` globalmente. Resultado: o SmartBanner nao aparece, nenhum token e gerado para o Android, e o dispositivo nunca recebe notificacoes.
 
-1. **Renomear titulo**: "Diagnostico Firebase" -> "Diagnostico de Notificacoes", e atualizar descricao para algo mais amigavel como "Status dos seus dispositivos e conexoes"
+### Mudancas necessarias
 
-2. **Nova secao "Dispositivos Conectados"**: Antes da tabela de diagnostico tecnico, adicionar uma secao que busca todos os registros da tabela `push_subscriptions` do usuario atual, mostrando:
-   - Lista de dispositivos com nome (campo `device_name`, parseado para exibir tipo: Desktop, Android, iOS)
-   - Badge de status: "Ativo" (verde) se `is_active = true`, "Desconectado" (vermelho) se `is_active = false`
-   - Icone por tipo de dispositivo (Monitor para desktop, Smartphone para mobile)
-   - Tempo desde a ultima notificacao: buscar o registro mais recente da tabela existente ou usar o campo `created_at` da subscription como referencia
+**1. Arquivo: `src/hooks/use-firebase-messaging.tsx`**
 
-3. **Query Supabase**: Fazer um `useEffect` + `useState` para buscar `push_subscriptions` do usuario logado, ordenadas por `created_at desc`. Parsear o `device_name` (que contem o user-agent) para detectar o tipo de dispositivo (verificar se contem "iPhone"/"iPad" -> iOS, "Android" -> Android, caso contrario -> Desktop).
+Corrigir a logica de inicializacao para ser **por-dispositivo** em vez de global:
 
-4. **Layout da secao de dispositivos**: Cards compactos em lista vertical, cada um com:
-   - Icone do tipo de dispositivo
-   - Nome curto do dispositivo (ex: "Chrome - Desktop", "Safari - iPhone")
-   - Badge ativo/desconectado
-   - Data de registro
+- Na funcao `init()`, ao encontrar um token existente no banco, verificar se esse token pertence ao **dispositivo atual** comparando com um token FCM obtido localmente
+- Se a permissao ja estiver `granted` mas nao houver token para este dispositivo, rodar automaticamente o fluxo de subscribe (obter novo token FCM e salvar no banco)
+- Adicionar uma flag `isCurrentDeviceSubscribed` que verifica se o token do dispositivo atual esta ativo, em vez de confiar em qualquer token existente
+- Na pratica: ao inicializar com permissao `granted`, sempre tentar obter o token FCM via `messaging.getToken()` e comparar com os tokens no banco. Se o token atual nao estiver no banco, salvar automaticamente
 
-A tabela de diagnostico tecnico existente (iOS, PWA, Token, etc.) permanece abaixo, mantendo as informacoes de debug para quem precisar.
+Fluxo corrigido:
+```text
+1. Carregar Firebase SDK e registrar Service Worker
+2. Obter token FCM do dispositivo atual via getToken()
+3. Verificar se esse token especifico existe no banco
+4. Se SIM -> marcar isSubscribed = true
+5. Se NAO -> salvar token automaticamente (auto-subscribe para este dispositivo)
+```
+
+**2. Arquivo: `public/manifest.webmanifest`**
+
+- Alterar `gcm_sender_id` de `103953800507` para `974602486500` (o messagingSenderId correto do projeto Firebase)
+- Este valor errado pode causar falhas silenciosas na entrega de push no Android
+
+**3. Arquivo: `supabase/functions/send-fcm-notification/index.ts`**
+
+- Garantir que todos os valores no objeto `data` do payload FCM sejam strings (requisito da API FCM v1)
+- Converter qualquer valor nao-string com `String()` antes de enviar
+- Isto evita falhas silenciosas na entrega para dispositivos Android
+
+**4. Arquivo: `src/components/SmartBanner.tsx`**
+
+- Nenhuma mudanca necessaria apos corrigir o hook -- o SmartBanner ja verifica `isSubscribed` corretamente. Com a correcao, `isSubscribed` refletira o estado do dispositivo atual
+
+### Resumo do impacto
+
+- Cada dispositivo (Desktop, Android, iOS) tera seu proprio token FCM registrado independentemente
+- O SmartBanner aparecera corretamente em novos dispositivos que ainda nao tem token
+- Se o usuario ja concedeu permissao em outro dispositivo, o novo dispositivo fara auto-subscribe silenciosamente (sem precisar clicar no banner)
+- Notificacoes serao entregues a todos os dispositivos ativos do usuario
 
