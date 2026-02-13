@@ -516,16 +516,16 @@ export function WhatsAppIntegrationSettings() {
         </CardHeader>
         <CardContent>
           {isConnected ? (
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">
+            <div className="space-y-3">
+              <div className="flex flex-col text-sm text-muted-foreground">
                 {session?.phone_number && <span>Número: {session.phone_number}</span>}
                 {session?.connected_at && (
-                  <span className="ml-4">
+                  <span>
                     Conectado desde: {new Date(session.connected_at).toLocaleDateString('pt-BR')}
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button 
                   variant="outline" 
                   size="sm" 
