@@ -1,88 +1,129 @@
 
+## Correcao: Mensagens enviadas pelo celular criando conversas duplicadas com @lid
 
-## Correcao: Mensagens enviadas pelo celular nao aparecem no chat
+### Problema
 
-### Problema identificado
+Quando o usuario envia mensagens pelo celular (WhatsApp), a Evolution API envia webhooks com identificadores `@lid` (Linked ID) em vez do numero real `@s.whatsapp.net`. Isso cria conversas separadas:
+- **Conversa real**: `5516994213312@s.whatsapp.net` (Biel Facioli) - apenas mensagens recebidas
+- **Conversa fantasma**: `192723789303918@lid` (Anz Imoveis) - apenas mensagens enviadas
 
-Investigando o banco de dados da conversa com **Karla Jeanne**, existem 19 mensagens armazenadas, sendo **apenas 1 com `is_from_me: true`** (a saudacao inicial enviada pelo CRM). Todas as respostas que o Bruno enviou pelo celular nao estao no banco de dados.
+O resultado: as conversas parecem incompletas, mostrando apenas um lado do dialogo.
 
-**Causa raiz:** A Evolution API nao dispara eventos webhook (`messages.upsert`) para mensagens enviadas diretamente pelo aplicativo WhatsApp no celular. O evento `SEND_MESSAGE` so e disparado para mensagens enviadas via API (pelo CRM). Isso significa que qualquer mensagem que o usuario digita no celular nunca chega ao webhook e nunca e armazenada.
+Alem disso, a funcao de sync (`findMessages`) retorna arrays vazios pois a Evolution API nao persiste mensagens localmente sem configuracao de banco (MongoDB/PostgreSQL store).
 
-**Evidencia:** Os logs do webhook mostram apenas eventos `messages.upsert` com `fromMe: false`. Nenhum evento de mensagem enviada pelo celular foi registrado.
+### Causa raiz
+
+A Evolution API v2 usa `@lid` para mensagens enviadas via celular Android. Esse e um problema conhecido (issues #1872, #1916 no GitHub da Evolution API). O webhook recebe payloads como:
+```text
+Outgoing: {"key":{"remoteJid":"192723789303918@lid","fromMe":true}}
+Incoming: {"key":{"remoteJid":"5516994213312@s.whatsapp.net","fromMe":false}}
+```
+
+Sao a mesma conversa, mas com JIDs diferentes.
 
 ### Solucao
 
-Implementar uma sincronizacao de mensagens usando o endpoint `POST /chat/findMessages/{instance}` da Evolution API. Quando o usuario abrir uma conversa, o sistema busca as mensagens diretamente da Evolution API e armazena as que estiverem faltando no banco.
+Resolver o @lid para o numero real usando o endpoint `findContacts` da Evolution API, com fallback para mapeamento interno baseado no campo `previousRemoteJid` que alguns payloads incluem.
 
 ### Etapas
 
-**1. Criar edge function `whatsapp-sync-messages`**
+**1. Adicionar coluna `lid_jid` na tabela `whatsapp_conversations`**
 
-Essa funcao recebe o `remote_jid` do chat, consulta a Evolution API para obter as mensagens reais e insere no banco qualquer mensagem que esteja faltando (identificada pelo `message_id`).
+Armazena o mapeamento @lid para cada conversa, permitindo lookups futuros.
 
-```text
-Fluxo:
-  Frontend abre conversa
-  -> Chama whatsapp-sync-messages com remote_jid
-  -> Edge function consulta Evolution API: POST /chat/findMessages/{instance}
-     body: { "where": { "key": { "remoteJid": "..." } } }
-  -> Compara mensagens retornadas com as existentes no banco (por message_id)
-  -> Insere as que faltam (especialmente as is_from_me: true do celular)
-  -> Retorna contagem de mensagens sincronizadas
+```sql
+ALTER TABLE whatsapp_conversations ADD COLUMN lid_jid text;
+CREATE INDEX idx_conversations_lid_jid ON whatsapp_conversations(lid_jid) WHERE lid_jid IS NOT NULL;
 ```
 
-**2. Adicionar ao `config.toml`**
+**2. Modificar o webhook (`whatsapp-webhook/index.ts`)**
 
-```toml
-[functions.whatsapp-sync-messages]
-verify_jwt = true
-```
+Adicionar funcao `resolveLidToPhone` que:
+- Chama `POST /chat/findContacts/{instance}` com `{ "where": { "id": "xxx@lid" } }` para obter o numero real
+- Se encontrar, retorna o JID normalizado `@s.whatsapp.net`
+- Se nao encontrar, retorna null
 
-**3. Modificar o hook `useMessages` em `src/hooks/use-conversations.tsx`**
+Modificar `handleMessagesUpsert`:
+- Extrair `previousRemoteJid` do payload de mensagens recebidas e salvar como `lid_jid` na conversa correspondente
+- Para mensagens enviadas (`fromMe: true`) com `@lid`:
+  1. Tentar resolver via `findContacts` na Evolution API
+  2. Se nao resolver, buscar conversa com aquele `lid_jid` no banco
+  3. Se encontrar o JID real, usar ele para armazenar a mensagem e atualizar a conversa
+  4. Se nao encontrar, armazenar a mensagem com @lid mas NAO criar nova conversa (evita fantasmas)
 
-Adicionar uma chamada a `whatsapp-sync-messages` antes de buscar as mensagens do banco. A sincronizacao acontece em paralelo com o carregamento das mensagens locais, e quando termina, refaz a busca para incluir as novas.
+**3. Limpeza dos dados existentes**
 
+SQL para:
+- Identificar @lid conversations e suas mensagens
+- Tentar re-atribuir mensagens @lid para conversas @s.whatsapp.net existentes (usando proximidade temporal de mensagens)
+- Deletar conversas @lid orfas
+
+**4. Ajustar o frontend (`use-conversations.tsx`)**
+
+- Filtrar conversas @lid da lista (como fallback, caso alguma escape)
+- Remover a chamada ao `whatsapp-sync-messages` que retorna sempre vazio (nao funciona sem message store configurado na Evolution API)
+
+### Secao tecnica detalhada
+
+**Arquivo: `supabase/functions/whatsapp-webhook/index.ts`**
+
+Nova funcao:
 ```typescript
-// Dentro de fetchMessages, antes do select:
-// 1. Disparar sync em background
-supabase.functions.invoke('whatsapp-sync-messages', {
-  body: { remote_jid: remoteJid }
-}).then(result => {
-  if (result.data?.synced > 0) {
-    // Re-fetch to include newly synced messages
-    refetchFromDB();
+async function resolveLidToPhone(instanceName: string, lidJid: string): Promise<string | null> {
+  const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL') || ''
+  const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || ''
+  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) return null
+  
+  const apiUrl = EVOLUTION_API_URL.startsWith('http') ? EVOLUTION_API_URL : `https://${EVOLUTION_API_URL}`
+  try {
+    const res = await fetch(`${apiUrl}/chat/findContacts/${instanceName}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_API_KEY },
+      body: JSON.stringify({ where: { id: lidJid } })
+    })
+    const contacts = await res.json()
+    // Extract phone from contact response
+    const contact = Array.isArray(contacts) ? contacts[0] : contacts
+    const phoneJid = contact?.id || contact?.jid || contact?.remoteJid
+    if (phoneJid && phoneJid.includes('@s.whatsapp.net')) {
+      return normalizeBrazilianJid(phoneJid)
+    }
+  } catch (e) {
+    console.error('[whatsapp-webhook] findContacts error:', e)
   }
-});
-// 2. Carregar mensagens locais normalmente (resposta instantanea)
+  return null
+}
 ```
 
-### Secao tecnica
+Modificacoes em `handleMessagesUpsert` (linha ~228-308):
+- Antes de processar mensagem, extrair `msg.key.previousRemoteJid`
+- Se `previousRemoteJid` contem @lid, atualizar conversa com `lid_jid`
+- Se `isFromMe && isLid`:
+  - Chamar `resolveLidToPhone` para obter JID real
+  - Se nao resolver, buscar no banco: `SELECT remote_jid FROM whatsapp_conversations WHERE lid_jid = $lid AND account_id = $account`
+  - Se encontrar, usar esse `remote_jid` em vez do @lid para o insert da mensagem e upsertConversation
+  - Se nao encontrar, inserir mensagem com @lid mas pular upsertConversation
 
-**Arquivo: `supabase/functions/whatsapp-sync-messages/index.ts`** (novo)
+**Arquivo: `src/hooks/use-conversations.tsx`**
 
-A edge function:
-- Recebe `remote_jid` no body
-- Busca o `account_id` do usuario autenticado
-- Busca a sessao WhatsApp conectada da conta
-- Chama `POST {EVOLUTION_API_URL}/chat/findMessages/{instance_name}` com `{ "where": { "key": { "remoteJid": remote_jid } } }`
-- Para cada mensagem retornada, verifica se ja existe no banco por `message_id`
-- Insere as mensagens faltantes com `is_from_me`, `content`, `timestamp`, `media_type` etc.
-- Retorna `{ synced: N }` com a contagem de mensagens inseridas
+- Na funcao `fetchConversations` (linha ~60), adicionar filtro `.not('remote_jid', 'like', '%@lid')` para excluir conversas @lid da lista
+- Remover a logica de sync background (linhas ~188-201) pois `findMessages` retorna vazio
 
-**Arquivo: `src/hooks/use-conversations.tsx`** (modificar `useMessages`)
+**Arquivo: Nova migracao SQL**
 
-Adicionar chamada de sincronizacao no `fetchMessages`:
-- Antes de buscar do Supabase, dispara `whatsapp-sync-messages` em background
-- Se a sync retornar `synced > 0`, refaz o select para incluir as novas mensagens
-- A UI carrega instantaneamente com os dados locais, e atualiza automaticamente se houver novas mensagens sincronizadas
+```sql
+-- Add lid_jid column
+ALTER TABLE whatsapp_conversations ADD COLUMN IF NOT EXISTS lid_jid text;
+CREATE INDEX IF NOT EXISTS idx_conversations_lid_jid 
+  ON whatsapp_conversations(lid_jid) WHERE lid_jid IS NOT NULL;
 
-**Arquivo: `supabase/config.toml`**
-
-Adicionar entrada para a nova funcao.
+-- Cleanup: delete @lid conversations (messages will remain orphaned but harmless)
+DELETE FROM whatsapp_conversations WHERE remote_jid LIKE '%@lid';
+```
 
 ### Resultado esperado
 
-1. Ao abrir qualquer conversa, o sistema busca automaticamente as mensagens da Evolution API
-2. Mensagens enviadas pelo celular do usuario serao sincronizadas e exibidas no chat
-3. A experiencia e instantanea - as mensagens locais aparecem primeiro, e as novas sao adicionadas em seguida
-4. O problema de mensagens "faltando" sera resolvido para todas as conversas, nao apenas para a Karla Jeanne
+1. Mensagens enviadas pelo celular aparecerao na mesma conversa das mensagens recebidas
+2. Nao serao criadas mais conversas fantasma "Anz Imoveis"
+3. A lista de conversas mostrara apenas conversas reais com contatos
+4. O historico completo (enviado + recebido) aparecera unificado no chat
