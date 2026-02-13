@@ -1,150 +1,109 @@
 
 
-## Correcao: Formatacao de telefone e vinculacao com numeros @lid
+## Correcao: Mensagens duplicadas/triplicadas no chat
 
 ### Problema
 
-A Evolution API envia mensagens com dois tipos de JID:
-- `@s.whatsapp.net` - numeros reais de telefone (ex: `5541995953025@s.whatsapp.net`)
-- `@lid` - IDs internos do WhatsApp (ex: `275419089621128@lid`) que NAO sao numeros de telefone
+Quando o usuario envia uma mensagem pelo CRM, ela aparece 2-3 vezes na tela porque tres fontes adicionam a mesma mensagem ao estado:
 
-O sistema trata ambos como telefones reais, causando:
-1. **Formatacao quebrada**: numeros LID como `275419089621128` sao formatados como `+27 (54) 19089-621128` (parece um numero invalido)
-2. **Vinculacao impossivel**: leads nunca sao encontrados por sufixo de telefone quando o JID e do tipo LID
-3. **Exibicao confusa**: usuarios veem numeros sem sentido na lista de conversas
+1. **Adicao otimista** - O `sendMessage` adiciona imediatamente a mensagem com um ID temporario (`crypto.randomUUID()`) para feedback instantaneo
+2. **Realtime INSERT** - O webhook salva a mensagem no banco e o Supabase Realtime dispara um evento INSERT, que adiciona a mesma mensagem novamente (com o ID real do banco)
+3. **Evento `send.message`** - O webhook agora tambem processa eventos `send.message` da Evolution API, potencialmente criando outra entrada no banco
 
 ### Solucao
 
-**1. Criar funcao centralizada de formatacao de telefone**
-
-Uma unica funcao `formatPhoneForDisplay` em `src/lib/utils.ts` que:
-- Detecta se e um numero brasileiro valido (13 digitos, comeca com 55) e formata como `+55 (XX) XXXXX-XXXX`
-- Detecta se e um numero brasileiro sem 9o digito (12 digitos) e formata adequadamente
-- Para numeros LID ou desconhecidos, exibe apenas "WhatsApp" ou o nome de contato, sem tentar formatar
-
-**2. Filtrar/marcar conversas @lid no webhook**
-
-No `whatsapp-webhook/index.ts`, ao processar mensagens de JIDs `@lid`:
-- Tentar resolver o numero real via `pushName` e busca no banco
-- Marcar a conversa com um campo indicando que o phone nao e confiavel
-- Priorizar o lead vinculado (se houver) para exibir o telefone correto
-
-**3. Atualizar todos os pontos de exibicao de telefone**
-
-Substituir as formatacoes inline em:
-- `ConversationList.tsx` (linha 34-35)
-- `ChatView.tsx` (linha 104-106)
+Corrigir o handler de Realtime para **deduplicar** mensagens antes de adiciona-las, e ajustar o fluxo otimista para ser substituido pela mensagem real quando ela chegar.
 
 ### Secao tecnica
 
-**Arquivo: `src/lib/utils.ts`**
+**Arquivo: `src/hooks/use-conversations.tsx`**
 
-Adicionar funcao centralizada:
+**Mudanca 1** - No handler de Realtime INSERT (linha ~200), verificar se a mensagem ja existe antes de adicionar:
 
 ```typescript
-export function formatPhoneForDisplay(phone: string): string {
-  if (!phone) return '';
-  const cleaned = phone.replace(/\D/g, '');
-  
-  // Brazilian number with 9th digit: 55 + DD + 9XXXXXXXX = 13 digits
-  if (cleaned.length === 13 && cleaned.startsWith('55')) {
-    return `+55 (${cleaned.slice(2, 4)}) ${cleaned.slice(4, 9)}-${cleaned.slice(9)}`;
-  }
-  
-  // Brazilian number without 9th digit: 55 + DD + XXXXXXXX = 12 digits
-  if (cleaned.length === 12 && cleaned.startsWith('55')) {
-    return `+55 (${cleaned.slice(2, 4)}) ${cleaned.slice(4, 8)}-${cleaned.slice(8)}`;
-  }
-  
-  // Brazilian number without country code: DD + 9XXXXXXXX = 11 digits
-  if (cleaned.length === 11) {
-    return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 7)}-${cleaned.slice(7)}`;
-  }
-  
-  // Brazilian number without country code, without 9th digit: DD + XXXXXXXX = 10 digits
-  if (cleaned.length === 10) {
-    return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 6)}-${cleaned.slice(6)}`;
-  }
-  
-  // LID or unknown format (15+ digits, doesn't start with valid country code)
-  // Don't try to format - return as-is or empty
-  if (cleaned.length > 13) {
-    return ''; // Will be hidden in favor of contact name
-  }
-  
-  return phone;
-}
+// ANTES (linha 201):
+setMessages(prev => [...prev, { id: newMsg.id, ... }]);
 
-export function isLidJid(remoteJid: string): boolean {
-  return remoteJid.endsWith('@lid');
-}
+// DEPOIS:
+setMessages(prev => {
+  // Skip if message with same DB id already exists
+  if (prev.some(m => m.id === newMsg.id)) return prev;
+  
+  // Skip if message with same message_id already exists (optimistic or duplicate webhook)
+  if (newMsg.message_id && prev.some(m => m.message_id === newMsg.message_id)) {
+    // Replace optimistic message with real one (update id and status)
+    return prev.map(m => 
+      m.message_id === newMsg.message_id 
+        ? { ...m, id: newMsg.id, status: newMsg.status }
+        : m
+    );
+  }
+  
+  // Skip if identical content sent by me within 5 seconds (catches optimistic duplicates)
+  if (newMsg.is_from_me) {
+    const msgTime = new Date(newMsg.timestamp).getTime();
+    const isDuplicate = prev.some(m => 
+      m.is_from_me && 
+      m.content === newMsg.content && 
+      Math.abs(new Date(m.timestamp).getTime() - msgTime) < 5000
+    );
+    if (isDuplicate) {
+      // Replace the optimistic message with the real one
+      return prev.map(m => 
+        m.is_from_me && 
+        m.content === newMsg.content && 
+        Math.abs(new Date(m.timestamp).getTime() - msgTime) < 5000
+          ? { ...m, id: newMsg.id, status: newMsg.status, message_id: newMsg.message_id }
+          : m
+      );
+    }
+  }
+  
+  return [...prev, { id: newMsg.id, content: newMsg.content, ... }];
+});
 ```
 
-**Arquivo: `src/components/conversations/ConversationList.tsx`**
-
-Alterar `getDisplayName` para usar a funcao centralizada e mostrar o telefone formatado como subtexto (ou ocultar para LIDs):
+**Mudanca 2** - No `sendMessage` (linha ~264), incluir um marcador para facilitar a deduplicacao. Guardar o `messageId` retornado pela API no objeto otimista:
 
 ```typescript
-import { formatPhoneForDisplay, isLidJid } from "@/lib/utils";
-
-const getDisplayName = (conv: Conversation) => {
-  if (conv.lead?.name) return conv.lead.name;
-  if (conv.contact_name) return conv.contact_name;
-  const formatted = formatPhoneForDisplay(conv.phone);
-  return formatted || conv.phone;
-};
-
-const getDisplayPhone = (conv: Conversation) => {
-  // If lead has a real phone, show that
-  if (conv.lead?.phone) return formatPhoneForDisplay(conv.lead.phone);
-  // If conversation phone is valid (not LID), format it
-  if (!isLidJid(conv.remote_jid)) return formatPhoneForDisplay(conv.phone);
-  return ''; // Hide phone for LID contacts
+// Apos receber result da API (linha ~257):
+const newMsg: Message = {
+  id: crypto.randomUUID(),
+  content: text,
+  media_type: 'text',
+  media_url: null,
+  is_from_me: true,
+  status: 'sent',
+  timestamp: new Date().toISOString(),
+  contact_name: null,
+  message_id: result.messageId || null,  // Usar o messageId real da API
 };
 ```
 
-Adicionar a exibicao do telefone formatado abaixo do nome na lista.
+**Mudanca 3** - No webhook `whatsapp-webhook/index.ts`, garantir que o evento `send.message` nao crie duplicatas no banco. Adicionar verificacao de `message_id` unico antes de inserir:
 
-**Arquivo: `src/components/conversations/ChatView.tsx`**
-
-Substituir a formatacao inline pelo uso da funcao centralizada:
+Antes do INSERT na funcao `handleMessagesUpsert`, verificar se ja existe uma mensagem com o mesmo `message_id`:
 
 ```typescript
-import { formatPhoneForDisplay } from "@/lib/utils";
-
-// Substituir linhas 103-107:
-<p className="text-[11px] text-muted-foreground truncate">
-  {conversation.lead?.phone 
-    ? formatPhoneForDisplay(conversation.lead.phone) 
-    : formatPhoneForDisplay(conversation.phone) || conversation.contact_name || ''
-  }
-</p>
-```
-
-**Arquivo: `supabase/functions/whatsapp-webhook/index.ts`**
-
-Melhorar o tratamento de JIDs @lid - ao salvar conversa/mensagem, tentar vincular ao lead usando `pushName` se o JID for @lid:
-
-```typescript
-// Ao processar mensagem com @lid, tentar encontrar lead pelo pushName
-if (remoteJid.endsWith('@lid') && contactName) {
-  const { data: leadByName } = await supabase
-    .from('leads')
-    .select('id, phone')
+// Check for existing message to prevent duplicates from send.message + messages.upsert
+if (messageId) {
+  const { data: existing } = await supabase
+    .from('whatsapp_messages')
+    .select('id')
     .eq('account_id', session.account_id)
-    .ilike('name', `%${contactName}%`)
-    .limit(1);
+    .eq('message_id', messageId)
+    .maybeSingle();
   
-  if (leadByName?.[0]) {
-    leadId = leadByName[0].id;
-    // Use the lead's real phone for the conversation
+  if (existing) {
+    console.log('[whatsapp-webhook] Message already exists, skipping:', messageId);
+    return; // Skip duplicate
   }
 }
 ```
 
 ### Resultado esperado
 
-1. Numeros brasileiros aparecem corretamente formatados como `+55 (XX) XXXXX-XXXX`
-2. Contatos com JID @lid mostram o nome de contato ao inves de numeros sem sentido
-3. O telefone do lead (quando vinculado) tem prioridade sobre o phone da conversa
-4. A funcao centralizada evita duplicacao e garante consistencia em toda a interface
+1. Cada mensagem aparece **exatamente uma vez** no chat
+2. A mensagem otimista aparece instantaneamente e e substituida silenciosamente pela versao real do banco
+3. Eventos duplicados do webhook (send.message + messages.upsert para a mesma mensagem) nao criam entradas duplicadas no banco
+
