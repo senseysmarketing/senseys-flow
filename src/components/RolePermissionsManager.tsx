@@ -34,6 +34,7 @@ const categoryIcons: { [key: string]: React.ReactNode } = {
   team: <Users className="h-4 w-4" />,
   settings: <Settings className="h-4 w-4" />,
   calendar: <Calendar className="h-4 w-4" />,
+  conversations: <FileText className="h-4 w-4" />,
 };
 
 const categoryLabels: { [key: string]: string } = {
@@ -42,6 +43,7 @@ const categoryLabels: { [key: string]: string } = {
   team: "Equipe",
   settings: "Configurações",
   calendar: "Agenda",
+  conversations: "Conversas",
 };
 
 const RolePermissionsManager = () => {

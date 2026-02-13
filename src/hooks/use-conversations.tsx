@@ -50,14 +50,36 @@ export function useConversations() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [isWhatsAppConnected, setIsWhatsAppConnected] = useState<boolean | null>(null);
+  const [sessionPhone, setSessionPhone] = useState<string | null>(null);
 
   const fetchConversations = useCallback(async () => {
     if (!accountId) return;
+
+    // First check WhatsApp connection status
+    const { data: session } = await supabase
+      .from('whatsapp_sessions')
+      .select('status, phone_number')
+      .eq('account_id', accountId)
+      .maybeSingle();
+
+    const connected = session?.status === 'connected';
+    setIsWhatsAppConnected(connected);
+    setSessionPhone(session?.phone_number || null);
+
+    if (!connected || !session?.phone_number) {
+      setConversations([]);
+      setLoading(false);
+      return;
+    }
+
+    const currentPhone = session.phone_number;
 
     const { data, error } = await supabase
       .from('whatsapp_conversations')
       .select('*')
       .eq('account_id', accountId)
+      .eq('session_phone', currentPhone)
       .not('remote_jid', 'like', '%@lid')
       .order('last_message_at', { ascending: false });
 
@@ -144,6 +166,8 @@ export function useConversations() {
     searchTerm,
     setSearchTerm,
     refetch: fetchConversations,
+    isWhatsAppConnected,
+    sessionPhone,
   };
 }
 

@@ -1,12 +1,13 @@
 import { NavLink, useLocation } from "react-router-dom";
 import { Home, Users, Building2, MessageSquare, Settings } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { usePermissions } from "@/hooks/use-permissions";
 import { cn } from "@/lib/utils";
 
-const navItems = [
+const allNavItems = [
   { to: "/dashboard", icon: Home, label: "Home" },
   { to: "/leads", icon: Users, label: "Leads" },
-  { to: "/conversations", icon: MessageSquare, label: "Conversas" },
+  { to: "/conversations", icon: MessageSquare, label: "Conversas", permission: "conversations.view" },
   { to: "/properties", icon: Building2, label: "Imóveis" },
   { to: "/settings", icon: Settings, label: "Config" },
 ];
@@ -14,6 +15,12 @@ const navItems = [
 const BottomNav = () => {
   const isMobile = useIsMobile();
   const location = useLocation();
+  const { hasPermission } = usePermissions();
+
+  const navItems = allNavItems.filter(item => {
+    if (item.permission) return hasPermission(item.permission);
+    return true;
+  });
 
   if (!isMobile) return null;
 

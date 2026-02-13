@@ -142,7 +142,7 @@ function extractMessageContent(msg: any): { content: string | null, mediaType: s
   return { content: null, mediaType: 'text', mediaUrl: null }
 }
 
-async function upsertConversation(supabase: any, accountId: string, remoteJid: string, phone: string, contactName: string | null, lastMessage: string | null, isFromMe: boolean, leadId: string | null, lidJid?: string | null) {
+async function upsertConversation(supabase: any, accountId: string, remoteJid: string, phone: string, contactName: string | null, lastMessage: string | null, isFromMe: boolean, leadId: string | null, lidJid?: string | null, sessionPhone?: string | null) {
   const { data: existing } = await supabase
     .from('whatsapp_conversations')
     .select('id, unread_count')
@@ -163,6 +163,7 @@ async function upsertConversation(supabase: any, accountId: string, remoteJid: s
     if (leadId) updateData.lead_id = leadId
     if (!isFromMe) updateData.unread_count = (existing.unread_count || 0) + 1
     if (lidJid) updateData.lid_jid = lidJid
+    if (sessionPhone) updateData.session_phone = sessionPhone
     
     await supabase
       .from('whatsapp_conversations')
@@ -182,6 +183,7 @@ async function upsertConversation(supabase: any, accountId: string, remoteJid: s
         unread_count: isFromMe ? 0 : 1,
         lead_id: leadId,
         lid_jid: lidJid || null,
+        session_phone: sessionPhone || null,
       })
   }
 }
@@ -369,7 +371,7 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any, inst
         if (!isLid || resolvedJid) {
           await upsertConversation(
             supabase, session.account_id, isLid && resolvedJid ? resolvedJid : finalJid, finalPhone,
-            contactName, content, isFromMe, leadId, lidJidForConversation
+            contactName, content, isFromMe, leadId, lidJidForConversation, session.phone_number || null
           )
         }
         continue
@@ -396,13 +398,14 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any, inst
           : new Date().toISOString(),
         lead_id: leadId,
         contact_name: contactName,
+        session_phone: session.phone_number || null,
       })
 
     // Update/create conversation — skip if @lid couldn't be resolved (avoid ghost conversations)
     if (!isLid || resolvedJid) {
       await upsertConversation(
         supabase, session.account_id, storeJid, finalPhone,
-        contactName, content, isFromMe, leadId, lidJidForConversation
+        contactName, content, isFromMe, leadId, lidJidForConversation, session.phone_number || null
       )
     } else {
       console.log(`[whatsapp-webhook] Skipping conversation upsert for unresolved @lid: ${rawRemoteJid}`)

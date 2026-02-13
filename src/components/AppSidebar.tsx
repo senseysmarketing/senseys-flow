@@ -26,6 +26,7 @@ import { signOut } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 import { useAccount } from "@/hooks/use-account";
 import { useSuperAdmin } from "@/hooks/use-super-admin";
+import { usePermissions } from "@/hooks/use-permissions";
 import logoAlternativaBranca from "@/assets/logo-alternativa-branca.png";
 import { cn } from "@/lib/utils";
 
@@ -73,7 +74,13 @@ const bottomItems = [
 export function AppSidebar() {
   const { account } = useAccount();
   const { isSuperAdmin } = useSuperAdmin();
+  const { hasPermission } = usePermissions();
   const location = useLocation();
+
+  const filteredMenuItems = menuItems.filter(item => {
+    if (item.url === '/conversations') return hasPermission('conversations.view');
+    return true;
+  });
   
   
   const handleSignOut = async () => {
@@ -124,7 +131,7 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-1">
-              {menuItems.map((item) => {
+              {filteredMenuItems.map((item) => {
                 const isActive = location.pathname === item.url;
                 return (
                   <SidebarMenuItem key={item.title}>
