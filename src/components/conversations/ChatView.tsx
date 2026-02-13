@@ -123,7 +123,7 @@ export function ChatView({ conversation, messages, loading, onSend, onBack, onSh
         </Button>
 
         {conversation.lead && (
-          <Button variant="ghost" size="sm" onClick={onShowLead} className="gap-1.5 text-xs">
+          <Button variant="outline" size="sm" onClick={onShowLead} className="gap-1.5 text-xs">
             <User className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Lead</span>
           </Button>
