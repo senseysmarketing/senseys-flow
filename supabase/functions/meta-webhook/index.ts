@@ -202,8 +202,16 @@ const handler = async (req: Request): Promise<Response> => {
           let brokerId: string | undefined;
           try {
             const dist = await supabase.functions.invoke("apply-distribution-rules", { body: { lead_id: newLead.id, account_id: cfg.account_id } });
-            if (dist.data?.success) brokerId = dist.data.broker_id;
-          } catch {}
+            console.log("Distribution result:", JSON.stringify(dist.data));
+            if (dist.data?.success) {
+              brokerId = dist.data.broker_id;
+              console.log(`Lead ${newLead.id} assigned to broker: ${dist.data.broker_name}`);
+            } else {
+              console.log("Distribution did not assign:", dist.data?.reason);
+            }
+          } catch (distErr) {
+            console.error("Distribution error:", distErr);
+          }
 
           // Store custom fields
           for (const [k, v] of Object.entries(fields)) {

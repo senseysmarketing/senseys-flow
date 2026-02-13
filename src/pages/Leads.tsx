@@ -334,7 +334,24 @@ const Leads = () => {
 
       if (error) throw error;
 
-      // Send email notification for manual leads
+      // Apply distribution rules to assign broker
+      let assignedBrokerId: string | undefined;
+      try {
+        const distResult = await supabase.functions.invoke('apply-distribution-rules', {
+          body: {
+            lead_id: insertedLead.id,
+            account_id: profile.account_id,
+          }
+        });
+        if (distResult.data?.success) {
+          assignedBrokerId = distResult.data.broker_id;
+          console.log(`Lead assigned to broker: ${distResult.data.broker_name}`);
+        }
+      } catch (distError) {
+        console.error('Distribution error:', distError);
+      }
+
+      // Send notification (with assigned broker if distribution worked)
       try {
         await supabase.functions.invoke('notify-new-lead', {
           body: {
@@ -346,6 +363,7 @@ const Leads = () => {
             lead_origem: newLead.origem || 'Manual',
             property_name: null,
             account_id: profile.account_id,
+            assigned_broker_id: assignedBrokerId,
           }
         });
       } catch (notifyError) {
