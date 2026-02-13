@@ -1538,6 +1538,7 @@ export type Database = {
           last_message_at: string | null
           last_message_is_from_me: boolean | null
           lead_id: string | null
+          lid_jid: string | null
           phone: string
           remote_jid: string
           unread_count: number | null
@@ -1552,6 +1553,7 @@ export type Database = {
           last_message_at?: string | null
           last_message_is_from_me?: boolean | null
           lead_id?: string | null
+          lid_jid?: string | null
           phone: string
           remote_jid: string
           unread_count?: number | null
@@ -1566,6 +1568,7 @@ export type Database = {
           last_message_at?: string | null
           last_message_is_from_me?: boolean | null
           lead_id?: string | null
+          lid_jid?: string | null
           phone?: string
           remote_jid?: string
           unread_count?: number | null
