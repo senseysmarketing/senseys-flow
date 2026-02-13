@@ -1541,6 +1541,7 @@ export type Database = {
           lid_jid: string | null
           phone: string
           remote_jid: string
+          session_phone: string | null
           unread_count: number | null
           updated_at: string
         }
@@ -1556,6 +1557,7 @@ export type Database = {
           lid_jid?: string | null
           phone: string
           remote_jid: string
+          session_phone?: string | null
           unread_count?: number | null
           updated_at?: string
         }
@@ -1571,6 +1573,7 @@ export type Database = {
           lid_jid?: string | null
           phone?: string
           remote_jid?: string
+          session_phone?: string | null
           unread_count?: number | null
           updated_at?: string
         }
@@ -1801,6 +1804,7 @@ export type Database = {
           message_id: string | null
           phone: string
           remote_jid: string
+          session_phone: string | null
           status: string | null
           timestamp: string
         }
@@ -1817,6 +1821,7 @@ export type Database = {
           message_id?: string | null
           phone: string
           remote_jid: string
+          session_phone?: string | null
           status?: string | null
           timestamp?: string
         }
@@ -1833,6 +1838,7 @@ export type Database = {
           message_id?: string | null
           phone?: string
           remote_jid?: string
+          session_phone?: string | null
           status?: string | null
           timestamp?: string
         }
@@ -1976,6 +1982,7 @@ export type Database = {
         | "team"
         | "settings"
         | "calendar"
+        | "conversations"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2103,7 +2110,14 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      permission_category: ["leads", "reports", "team", "settings", "calendar"],
+      permission_category: [
+        "leads",
+        "reports",
+        "team",
+        "settings",
+        "calendar",
+        "conversations",
+      ],
     },
   },
 } as const
