@@ -1,33 +1,19 @@
 
 
-## Corrigir botao "Lead" no modal de chat do WhatsApp
+## Adicionar "Dados do Formulario" ao painel lateral de Lead nas Conversas
 
-### Problema
-O botao "Lead" no header do chat dentro do `WhatsAppChatModal` nao faz nada porque o callback `onShowLead` esta definido como uma funcao vazia: `() => {}`.
+### O que sera feito
 
-### Solucao
-Passar um callback funcional que abra o modal de detalhes do lead (`LeadDetailModal`) ao clicar no botao.
+Incluir a secao "Dados do Formulario" no painel lateral (`LeadPanel`) que aparece na tela de Conversas e no modal de chat. O componente `LeadFormFields` ja existe e busca os dados automaticamente da tabela `lead_form_field_values` -- basta reutiliza-lo dentro do `LeadPanel`.
 
-### Implementacao
+### Detalhes tecnicos
 
-**Arquivo: `src/components/leads/WhatsAppChatModal.tsx`**
+**Arquivo: `src/components/conversations/LeadPanel.tsx`**
 
-1. Adicionar uma prop `onShowLead` ao componente, permitindo que o componente pai (card do lead) passe a acao de abrir o `LeadDetailModal`
-2. Usar essa prop no `ChatView` em vez da funcao vazia
+1. Importar o componente `LeadFormFields` de `@/components/LeadFormFields`
+2. Adicionar o componente apos a secao de "Observacoes" (ou apos "Detalhes" caso nao haja observacoes), precedido por um `<Separator />`
+3. Passar `lead.id` como prop: `<LeadFormFields leadId={lead.id} />`
+4. O componente ja se auto-oculta quando nao ha campos preenchidos, entao nao precisa de logica condicional extra
 
-Mudancas:
-- Adicionar `onShowLead?: () => void` na interface `WhatsAppChatModalProps`
-- Substituir `onShowLead={() => {}}` por `onShowLead={() => { if (onShowLead) onShowLead(); }}` na chamada ao `ChatView`
+Resultado visual: apos as secoes de Contato, Detalhes e Observacoes, aparecera a secao "Dados do Formulario" com os campos em grid, usando o mesmo layout compacto (`grid-cols-2`) que funciona bem no espaco do painel lateral. Como o painel tem largura limitada (~320-384px), o grid de 2 colunas pode precisar ser ajustado para `grid-cols-1` -- mas isso sera avaliado visualmente e o componente pode ser usado diretamente pois os cards sao compactos.
 
-**Arquivos que chamam o `WhatsAppChatModal`** (cards de lead no Kanban e tabela):
-- Passar o callback `onShowLead` que fecha o chat modal e abre o `LeadDetailModal` para o lead correspondente
-
-Sera necessario verificar como o `LeadDetailModal` e aberto atualmente nos componentes pai para reutilizar a mesma logica.
-
-### Secao tecnica
-
-Os componentes que renderizam `WhatsAppChatModal` precisarao:
-1. Receber ou ter acesso ao estado que controla a abertura do `LeadDetailModal`
-2. Passar `onShowLead={() => { setWhatsAppModalOpen(false); setSelectedLeadId(leadId); }}` como prop
-
-Isso garante que ao clicar em "Lead", o modal de chat fecha e o modal de detalhes do lead abre, mantendo o fluxo natural de navegacao.
