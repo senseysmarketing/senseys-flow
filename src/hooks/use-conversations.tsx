@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAccount } from "@/hooks/use-account";
 import { toast } from "@/hooks/use-toast";
@@ -151,7 +151,7 @@ export function useMessages(remoteJid: string | null) {
   const accountId = account?.id;
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
-  const [hasSynced, setHasSynced] = useState<string | null>(null);
+  const syncedRef = React.useRef<string | null>(null);
 
   // Extract phone suffix for flexible JID matching (handles 9th digit variations)
   const phoneSuffix = remoteJid
@@ -187,8 +187,8 @@ export function useMessages(remoteJid: string | null) {
     setLoading(false);
 
     // Background sync: fetch missing messages from Evolution API (once per conversation)
-    if (remoteJid && hasSynced !== remoteJid) {
-      setHasSynced(remoteJid);
+    if (remoteJid && syncedRef.current !== remoteJid) {
+      syncedRef.current = remoteJid;
       supabase.functions.invoke('whatsapp-sync-messages', {
         body: { remote_jid: remoteJid },
       }).then((result) => {
@@ -200,7 +200,7 @@ export function useMessages(remoteJid: string | null) {
         console.error('[sync] Error syncing messages:', err);
       });
     }
-  }, [accountId, remoteJid, phoneSuffix, fetchMessagesFromDB, hasSynced]);
+  }, [accountId, remoteJid, phoneSuffix, fetchMessagesFromDB]);
 
   useEffect(() => {
     fetchMessages();
