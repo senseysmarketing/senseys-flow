@@ -516,10 +516,23 @@ export function FirebaseMessagingProvider({ children }: { children: ReactNode })
   );
 }
 
+const FALLBACK_CONTEXT: FirebaseMessagingContextType = {
+  isInitialized: false,
+  isSubscribed: false,
+  isLoading: true,
+  permissionState: 'default',
+  subscribe: async () => false,
+  unsubscribe: async () => false,
+  sendTestNotification: async () => {},
+  diagnosticInfo: { fcmToken: null, userId: null, isIOS: false, isPWA: false, serviceWorkerStatus: 'loading', lastUpdated: null },
+  diagnosticLogs: [],
+  getDiagnosticInfo: async () => {},
+  addDiagnosticLog: () => {},
+  cleanupOldTokens: async () => ({ deleted: 0 }),
+  recheckSubscription: async () => {},
+};
+
 export function useFirebaseMessaging() {
   const context = useContext(FirebaseMessagingContext);
-  if (!context) {
-    throw new Error('useFirebaseMessaging must be used within a FirebaseMessagingProvider');
-  }
-  return context;
+  return context ?? FALLBACK_CONTEXT;
 }
