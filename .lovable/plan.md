@@ -1,79 +1,151 @@
 
 
-## Vincular conversas ao numero de WhatsApp e adicionar permissao de acesso
+## Corrigir notificacoes push no Android (caso Bruno - ANZ Imoveis)
 
-### Problema
+### Problemas identificados
 
-1. Conversas ficam visiveis mesmo apos desconectar o WhatsApp
-2. Se conectar um numero diferente, conversas antigas do numero anterior continuam aparecendo
-3. Todos os usuarios do CRM tem acesso as conversas (incluindo conversas pessoais acidentais)
+**Problema 1: Estado "nao ativado" ao entrar na tela de notificacoes**
 
-### Solucao em 3 partes
+O hook `use-firebase-messaging.tsx` usa um `initAttemptedRef` que impede re-inicializacao, mas o fluxo de inicializacao depende de obter o token FCM com sucesso. No Android Chrome, o `messaging.getToken()` pode falhar silenciosamente (rede instavel, service worker nao pronto), fazendo com que `isSubscribed` fique `false`. Alem disso, se o token FCM rotacionar (comportamento normal do Android), o token antigo no banco nao bate com o novo, e o sistema mostra "nao ativado".
 
----
+**Problema 2: Notificacoes nao chegam**
 
-### Parte 1: Vincular conversas ao numero conectado
+O token do Bruno esta no banco e marcado como ativo, mas tokens FCM no Android podem rotacionar. Se o token mudou desde o ultimo registro, as notificacoes sao enviadas para um token invalido. O `send-fcm-notification` marca tokens como inativos somente quando recebe erro `UNREGISTERED`, mas isso so acontece na proxima tentativa de envio.
 
-**Migracoes no banco de dados:**
-
-- Adicionar coluna `session_phone` (text, nullable) na tabela `whatsapp_conversations` para armazenar o numero do WhatsApp que originou a conversa
-- Adicionar coluna `session_phone` (text, nullable) na tabela `whatsapp_messages` para o mesmo proposito
-- Preencher retroativamente as conversas existentes com o `phone_number` atual da `whatsapp_sessions` da respectiva conta
-
-**Edge function `whatsapp-webhook`:**
-
-- Ao criar/atualizar conversas e mensagens, gravar o `phone_number` da sessao ativa no campo `session_phone`
-
-**Hook `use-conversations.tsx`:**
-
-- Ao buscar conversas, primeiro verificar se ha sessao conectada e obter o `phone_number`
-- Se conectado: filtrar conversas pelo `session_phone` correspondente ao numero atual
-- Se desconectado: retornar lista vazia (nenhuma conversa visivel)
-
-Isso garante que:
-- Ao trocar de numero, so aparecem conversas do numero novo (ou as que ja foram salvas com aquele numero anteriormente)
-- Ao desconectar, a tela fica "em branco" sem deletar nenhum dado
-- Ao reconectar o mesmo numero, todas as conversas antigas reaparecem
+### Solucao
 
 ---
 
-### Parte 2: Permissao de acesso a Conversas
+### Parte 1: Auto-refresh de token FCM (corrige ambos os problemas)
 
-**Migracoes no banco de dados:**
+**Arquivo: `src/hooks/use-firebase-messaging.tsx`**
 
-- Inserir nova permissao na tabela `permissions`:
-  - `key: 'conversations.view'`, `name: 'Ver conversas'`, `category: 'conversations'`
-- Atribuir essa permissao automaticamente aos perfis Proprietario e Gerente nos roles existentes (inserir em `role_permissions` para cada conta)
+Mudancas no fluxo de inicializacao:
 
-**Pagina de Conversas (`src/pages/Conversations.tsx`):**
+1. Remover a dependencia do `initAttemptedRef` para o fluxo de verificacao de token. Em vez de impedir completamente a re-inicializacao, permitir que o sistema verifique e atualize o token a cada montagem do provider (mantendo o ref apenas para evitar dupla execucao simultanea).
 
-- Antes de renderizar, verificar `hasPermission('conversations.view')` usando o hook `usePermissions`
-- Se nao tiver permissao, mostrar tela de "Acesso restrito" com mensagem explicando que o usuario nao tem permissao
+2. Adicionar listener `onTokenRefresh` do Firebase Messaging. Quando o Android rotaciona o token, esse listener e disparado e o novo token e salvo automaticamente no banco, desativando o antigo.
 
-**Menu lateral (`src/components/AppSidebar.tsx` e `src/components/BottomNav.tsx`):**
+3. Adicionar retry com delay caso `getToken()` falhe na primeira tentativa (comum em Android quando o service worker ainda esta inicializando).
 
-- Condicionar a exibicao do item "Conversas" no menu a `hasPermission('conversations.view')`
+```typescript
+// Dentro do init():
+// 1. Adicionar retry para getToken
+let currentToken: string | null = null;
+for (let attempt = 0; attempt < 3; attempt++) {
+  try {
+    currentToken = await messaging.getToken({ 
+      vapidKey: VAPID_KEY,
+      serviceWorkerRegistration: swReg 
+    });
+    if (currentToken) break;
+  } catch (e) {
+    if (attempt < 2) await new Promise(r => setTimeout(r, 1000));
+  }
+}
 
-**Tela de Permissoes (`src/components/RolePermissionsManager.tsx`):**
+// 2. Listener para rotacao de token
+messaging.onMessage(/* existente */);
 
-- A nova permissao `conversations.view` aparecera automaticamente na interface de gerenciamento de permissoes por usar a tabela `permissions` dinamicamente
+// Nao existe onTokenRefresh no compat SDK, 
+// entao a cada init verificamos se o token mudou
+if (currentToken) {
+  const { data: existing } = await supabase
+    .from('push_subscriptions')
+    .select('id, endpoint')
+    .eq('user_id', user.id)
+    .eq('is_active', true)
+    .neq('endpoint', currentToken)
+    .like('endpoint', '%:%'); // Somente tokens FCM (contem ":")
+  
+  // Desativar tokens FCM antigos DESTE dispositivo
+  // (nao de outros dispositivos)
+  if (existing && existing.length > 0) {
+    // Marcar antigos como inativos
+    for (const old of existing) {
+      await supabase.from('push_subscriptions')
+        .update({ is_active: false })
+        .eq('id', old.id);
+    }
+    addDiagnosticLog(`${existing.length} token(s) antigo(s) desativado(s)`);
+  }
+  
+  // Garantir que o token atual esta ativo
+  await saveTokenToDatabase(currentToken, user.id, account.id);
+  setIsSubscribed(true);
+}
+```
 
 ---
 
-### Parte 3: Tela de Conversas quando desconectado
+### Parte 2: Forcar re-verificacao ao navegar para Settings
 
-**Hook `use-conversations.tsx`:**
+**Arquivo: `src/hooks/use-firebase-messaging.tsx`**
 
-- Exportar o estado de conexao (`isWhatsAppConnected`) junto com as conversas
-- Quando desconectado, retornar `conversations: []` e `isConnected: false`
+Adicionar uma funcao `recheckSubscription` que pode ser chamada manualmente (por exemplo, quando o usuario abre a tela de notificacoes):
 
-**Pagina `src/pages/Conversations.tsx`:**
+```typescript
+const recheckSubscription = useCallback(async () => {
+  if (!user?.id || !account?.id) return;
+  if (!checkBrowserSupport()) return;
+  
+  try {
+    await loadFirebaseSDK();
+    const firebase = (window as any).firebase;
+    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    
+    const swReg = await navigator.serviceWorker.ready;
+    const messaging = firebase.messaging();
+    const currentToken = await messaging.getToken({ 
+      vapidKey: VAPID_KEY, 
+      serviceWorkerRegistration: swReg 
+    });
+    
+    if (currentToken) {
+      setFcmToken(currentToken);
+      await saveTokenToDatabase(currentToken, user.id, account.id);
+      setIsSubscribed(true);
+      updateDiagnosticInfo({ fcmToken: currentToken, serviceWorkerStatus: 'active' });
+    }
+  } catch (e) {
+    // silencioso
+  }
+}, [user?.id, account?.id]);
+```
 
-- Quando `isConnected === false`, renderizar uma tela vazia amigavel:
-  - Icone de WifiOff
-  - Titulo "WhatsApp nao conectado"
-  - Descricao "Conecte seu WhatsApp nas configuracoes para ver e gerenciar suas conversas"
-  - Botao "Ir para Configuracoes" que navega para `/settings`
+**Arquivo: `src/components/NotificationSettings.tsx`**
+
+Chamar `recheckSubscription` quando o componente monta para garantir que o estado esta atualizado:
+
+```typescript
+const { recheckSubscription, ...rest } = useFirebaseMessaging();
+
+useEffect(() => {
+  recheckSubscription();
+}, [recheckSubscription]);
+```
+
+---
+
+### Parte 3: Melhorar robustez do Service Worker no Android
+
+**Arquivo: `public/firebase-messaging-sw.js`**
+
+No Android Chrome, o service worker pode ser encerrado e reiniciado frequentemente. Adicionar tratamento para garantir que o push handler funcione corretamente apos restart:
+
+- Manter o handler de push simplificado (ja esta bom)
+- Adicionar `tag` unico por notificacao baseado no timestamp para evitar que notificacoes sejam agrupadas/ignoradas no Android
+
+```javascript
+const options = {
+  body,
+  icon: 'https://crmsenseys.com.br/pwa-192x192.png',
+  badge: 'https://crmsenseys.com.br/pwa-192x192.png',
+  tag: `fcm-${Date.now()}`,  // Tag unica por notificacao
+  renotify: true,             // Sempre notificar mesmo com tag
+  data: { ...msg?.data, click_action: url }
+};
+```
 
 ---
 
@@ -81,10 +153,15 @@ Isso garante que:
 
 | Arquivo | Mudanca |
 |---|---|
-| Migracao SQL | Adicionar `session_phone` em `whatsapp_conversations` e `whatsapp_messages`, nova permissao `conversations.view` |
-| `supabase/functions/whatsapp-webhook/index.ts` | Gravar `session_phone` ao criar conversas/mensagens |
-| `src/hooks/use-conversations.tsx` | Filtrar por `session_phone` do numero conectado, expor `isConnected` |
-| `src/pages/Conversations.tsx` | Tela de desconectado e verificacao de permissao |
-| `src/components/AppSidebar.tsx` | Condicionar item "Conversas" a permissao |
-| `src/components/BottomNav.tsx` | Condicionar item "Conversas" a permissao |
+| `src/hooks/use-firebase-messaging.tsx` | Retry no getToken, auto-refresh de tokens rotacionados, funcao recheckSubscription |
+| `src/components/NotificationSettings.tsx` | Chamar recheckSubscription ao montar |
+| `public/firebase-messaging-sw.js` | Tag unica por notificacao para Android |
+
+### Verificacao pos-implementacao
+
+Apos as mudancas, seria recomendavel pedir ao Bruno para:
+1. Abrir o CRM no Android Chrome
+2. Ir em Configuracoes > Notificacoes
+3. Verificar se aparece "Ativo" sem precisar clicar em nada
+4. Clicar em "Testar" para confirmar que a notificacao chega
 
