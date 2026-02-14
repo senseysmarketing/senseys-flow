@@ -104,8 +104,14 @@ export const NotificationSettings = () => {
     diagnosticInfo,
     diagnosticLogs,
     getDiagnosticInfo,
-    cleanupOldTokens
+    cleanupOldTokens,
+    recheckSubscription
   } = useFirebaseMessaging();
+
+  // Auto-recheck subscription on mount (fixes Android showing "not active")
+  useEffect(() => {
+    recheckSubscription();
+  }, [recheckSubscription]);
   
   const [localPrefs, setLocalPrefs] = useState(preferences);
   const [isPWA, setIsPWA] = useState(false);

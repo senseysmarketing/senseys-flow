@@ -74,8 +74,8 @@ self.addEventListener('push', (event) => {
         body,
         icon: 'https://crmsenseys.com.br/pwa-192x192.png',
         badge: 'https://crmsenseys.com.br/pwa-192x192.png',
-        tag: 'fcm-push',
-        renotify: false,
+        tag: `fcm-${Date.now()}`,
+        renotify: true,
         data: { ...msg?.data, click_action: url }
       };
 
