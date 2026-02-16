@@ -1,115 +1,108 @@
 
 
-## Corrigir bug critico: tokens de dispositivos diferentes se desativando mutuamente
+## Enriquecer dados de demonstracao da "Imobiliaria Demonstracao"
 
-### Causa raiz identificada
+### Conta identificada
+- **Account ID:** `6e7a7df6-a3d8-4775-8a43-3e20704ef985`
+- **User ID (unico):** `e4e07296-bd00-4160-af45-5e0a36eca0f0`
 
-Na query de banco, o Bruno tem:
-- Token Android: `is_active: false` (criado 13/02)  
-- Token Desktop: `is_active: true` (criado 11/02)
+### Estado atual
+- 8 imoveis (2 vendas fechadas, total ~R$1.2M em VGV)
+- 30 leads distribuidos nos 8 status do funil
+- 10 eventos na agenda
+- **Zero dados de investimento** (meta_ad_insights e meta_ad_insights_by_ad vazios)
+- **Zero mapeamento de formularios** (meta_form_property_mapping vazio)
+- Apenas 2 leads no status "Fechado"
 
-O codigo de "rotacao de token" (linhas 213-228 do `use-firebase-messaging.tsx`) desativa TODOS os tokens FCM ativos do usuario que nao sejam o token atual. Isso significa que quando o Bruno abre no Desktop, desativa o Android. Quando abre no Android, desativa o Desktop. Os dispositivos ficam se sabotando.
-
-### Solucao
-
----
-
-### Parte 1: Remover logica agressiva de rotacao de tokens
-
-**Arquivo: `src/hooks/use-firebase-messaging.tsx`**
-
-Remover completamente o bloco das linhas 213-228 que desativa tokens de outros dispositivos. A limpeza de tokens invalidos ja e feita corretamente pelo `send-fcm-notification` quando recebe erro `UNREGISTERED` do FCM. A funcao `saveTokenToDatabase` ja faz upsert correto (se o token existe, reativa; se e novo, insere sem desativar outros).
-
-O bloco a ser removido:
-```typescript
-// REMOVER ESTE BLOCO INTEIRO:
-const { data: oldTokens } = await supabase
-  .from('push_subscriptions')
-  .select('id, endpoint')
-  .eq('user_id', user.id)
-  .eq('is_active', true)
-  .neq('endpoint', currentToken)
-  .not('endpoint', 'like', 'https://%');
-
-if (oldTokens && oldTokens.length > 0) {
-  for (const old of oldTokens) {
-    await supabase.from('push_subscriptions')
-      .update({ is_active: false })
-      .eq('id', old.id);
-  }
-  addDiagnosticLog(`${oldTokens.length} token(s) antigo(s) desativado(s) (rotação)`);
-}
-```
+### O que sera adicionado
 
 ---
 
-### Parte 2: Reativar o token Android do Bruno
+#### 1. Mais vendas (leads "Fechado") para VGV acima de R$2.5M
 
-**Migracao SQL:**
+Mover/criar leads vinculados a imoveis de alto valor para o status "Fechado":
 
-```sql
-UPDATE push_subscriptions 
-SET is_active = true 
-WHERE user_id = 'f8cf2c28-cae0-453d-90ea-f676280d172f' 
-AND is_active = false;
-```
+| Lead | Imovel | Valor Venda | Status |
+|---|---|---|---|
+| (novo) Ricardo Mendes | Cobertura Duplex Jardins (R$4.2M) | R$4.200.000 | Fechado |
+| (novo) Patricia Almeida | Casa 4 Suites Alphaville (R$2.5M) | R$2.500.000 | Fechado |
+| (novo) Eduardo Santos | Apt 3 Quartos Itaim (R$1.85M) | R$1.850.000 | Fechado |
+| Renata Lima (existente) | Casa 3 Quartos Morumbi (R$1.2M) | R$1.200.000 | Ja fechado |
+| Samuel Oliveira (existente) | Conj Comercial Paulista | Aluguel | Ja fechado |
 
-Isso reativa o token Android que foi desativado erroneamente.
+**VGV total: R$4.2M + R$2.5M + R$1.85M + R$1.2M = R$9.75M** (bem acima de R$2.5M)
 
----
-
-### Parte 3: Adicionar prioridade Android no payload FCM
-
-**Arquivo: `supabase/functions/send-fcm-notification/index.ts`**
-
-Adicionar configuracao `android` no payload para garantir entrega prioritaria no Android:
-
-```typescript
-const fcmPayload = {
-  message: {
-    token: fcmToken,
-    notification: { title, body },
-    webpush: {
-      fcm_options: { link: absoluteUrl },
-      notification: {
-        icon: "https://crmsenseys.com.br/pwa-192x192.png",
-        badge: "https://crmsenseys.com.br/pwa-192x192.png",
-      },
-    },
-    android: {
-      priority: "high",
-      notification: {
-        channel_id: "default",
-        priority: "high",
-      },
-    },
-    data: { ... },
-  },
-};
-```
+Os imoveis vendidos terao status atualizado para "vendido" ou "reservado".
 
 ---
 
-### Parte 4: Melhorar recheckSubscription para nao interferir com outros dispositivos
+#### 2. Mais leads distribuidos no funil (~20 novos)
 
-**Arquivo: `src/hooks/use-firebase-messaging.tsx`**
+Leads com nomes realistas, vinculados a diferentes imoveis, distribuidos em todos os status:
 
-A funcao `recheckSubscription` (linhas 468-493) ja esta correta - apenas salva o token atual sem desativar outros. Nenhuma mudanca necessaria aqui.
+- **Novo Lead:** 5 novos (criados nos ultimos 2-3 dias)
+- **Em Contato:** 4 novos
+- **Qualificado:** 3 novos
+- **Visita Agendada:** 3 novos
+- **Proposta:** 2 novos
+- **Negociacao:** 2 novos
+- **Perdido:** 1 novo
+
+Temperaturas variadas: mix de hot, warm e cold.
 
 ---
 
-### Resumo dos arquivos alterados
+#### 3. Investimento em anuncios (meta_ad_insights)
 
-| Arquivo | Mudanca |
-|---|---|
-| `src/hooks/use-firebase-messaging.tsx` | Remover bloco de desativacao agressiva de tokens (linhas 213-228) |
-| `supabase/functions/send-fcm-notification/index.ts` | Adicionar `android.priority: "high"` no payload FCM |
-| Migracao SQL | Reativar token Android do Bruno |
+Inserir dados diarios nos ultimos 30 dias com media de ~R$100/dia (total ~R$3.000):
 
-### Resultado esperado
+- 30 registros em `meta_ad_insights` (1 por dia)
+- Metricas: spend (~R$80-120/dia), impressions, clicks, leads_count, CPL, CPC, CPM
+- Total acumulado: ~R$3.000
 
-- Cada dispositivo mantem seu proprio token ativo independentemente
-- Tokens invalidos sao limpos apenas pelo backend quando FCM retorna UNREGISTERED
-- Android recebe notificacoes com prioridade alta
-- O diagnostico do Bruno mostrara ambos dispositivos como "Ativo"
+---
+
+#### 4. Investimento por anuncio/imovel (meta_ad_insights_by_ad)
+
+Inserir dados vinculando gastos a formularios especificos para que o CPL por imovel funcione nos relatorios:
+
+- Criar mapeamentos em `meta_form_property_mapping` ligando form_ids ficticios aos reference_codes dos imoveis
+- Inserir dados em `meta_ad_insights_by_ad` com os mesmos form_ids
+- Distribuir o gasto entre os imoveis principais (Cobertura Jardins, Alphaville, Itaim, etc.)
+
+---
+
+#### 5. Eventos na agenda (proximos 7-14 dias)
+
+Adicionar ~15 novos eventos variados:
+
+- **Visitas a imoveis** (8 eventos) - vinculados a leads e imoveis especificos
+- **Reunioes com clientes** (3 eventos)
+- **Follow-ups** (3 eventos)
+- **Assinatura de contrato** (1 evento)
+
+Distribuidos ao longo dos proximos 14 dias, em horarios comerciais variados.
+
+---
+
+#### 6. Atualizar status de imoveis vendidos
+
+- Cobertura Duplex Jardins: `vendido`
+- Casa 4 Suites Alphaville: `reservado`
+- Apt 3 Quartos Itaim Bibi: `vendido`
+
+---
+
+### Detalhes tecnicos
+
+Todas as insercoes serao feitas via SQL usando a ferramenta de insercao de dados (nao migracao de schema). As queries serao executadas na seguinte ordem:
+
+1. Inserir novos leads (~20 registros em `leads`)
+2. Atualizar imoveis vendidos (UPDATE em `properties`)
+3. Inserir mapeamentos de formularios (`meta_form_property_mapping`)
+4. Inserir dados de investimento diario (`meta_ad_insights` - 30 dias)
+5. Inserir dados de investimento por anuncio (`meta_ad_insights_by_ad` - 30 dias x 4 imoveis)
+6. Inserir eventos na agenda (`events` - ~15 eventos)
+
+Todos os registros usarao `account_id = '6e7a7df6-a3d8-4775-8a43-3e20704ef985'`.
 
