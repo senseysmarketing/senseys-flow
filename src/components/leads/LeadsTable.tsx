@@ -373,8 +373,8 @@ const LeadsTable = ({
                             </div>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[200px] text-xs">
-                            {(whatsappFailures.get(lead.id) || '').toLowerCase().includes('não possui whatsapp')
-                              ? 'Número sem WhatsApp ativo'
+                            {(whatsappFailures.get(lead.id) || '').toLowerCase().includes('não existe no whatsapp') || (whatsappFailures.get(lead.id) || '').toLowerCase().includes('failed to send')
+                              ? 'Este número não existe no WhatsApp'
                               : 'Falha no envio de WhatsApp'}
                           </TooltipContent>
                         </Tooltip>

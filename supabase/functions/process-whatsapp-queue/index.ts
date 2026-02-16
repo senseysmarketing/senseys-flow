@@ -214,7 +214,7 @@ Deno.serve(async (req) => {
             .from('whatsapp_message_queue')
             .update({ 
               status: 'failed',
-              error_message: sendResult.error || 'Número não possui WhatsApp',
+              error_message: 'Este número não existe no WhatsApp',
               retry_count: 99 // Mark as permanently failed
             })
             .eq('id', msg.id)
