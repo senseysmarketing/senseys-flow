@@ -105,6 +105,9 @@ const AgencyAdmin = () => {
       };
       localStorage.setItem('agency_backup_session', JSON.stringify(backupSession));
       localStorage.setItem('support_account_name', account.company_name || account.name);
+      if (session.user?.id) {
+        localStorage.setItem('agency_backup_user_id', session.user.id);
+      }
 
       const { data, error } = await supabase.functions.invoke('generate-support-session', {
         headers: { Authorization: `Bearer ${session.access_token}` },

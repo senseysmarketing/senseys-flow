@@ -5,6 +5,7 @@ import { Session } from "@supabase/supabase-js";
 const AGENCY_SESSION_KEY = "agency_backup_session";
 const SUPPORT_MODE_KEY = "support_mode_active";
 const SUPPORT_ACCOUNT_KEY = "support_account_name";
+const AGENCY_USER_ID_KEY = "agency_backup_user_id";
 
 interface AgencyBackupSession {
   access_token: string;
@@ -24,15 +25,50 @@ export const useSupportMode = (): SupportModeContext => {
   const [isSupportMode, setIsSupportMode] = useState(false);
   const [supportAccountName, setSupportAccountName] = useState<string | null>(null);
 
+  const clearAllSupportFlags = useCallback(() => {
+    localStorage.removeItem(AGENCY_SESSION_KEY);
+    localStorage.removeItem(SUPPORT_MODE_KEY);
+    localStorage.removeItem(SUPPORT_ACCOUNT_KEY);
+    localStorage.removeItem(AGENCY_USER_ID_KEY);
+    setIsSupportMode(false);
+    setSupportAccountName(null);
+  }, []);
+
   useEffect(() => {
     // Check if we're in support mode on mount
     const supportActive = localStorage.getItem(SUPPORT_MODE_KEY) === "true";
     const agencySession = localStorage.getItem(AGENCY_SESSION_KEY);
     const accountName = localStorage.getItem(SUPPORT_ACCOUNT_KEY);
+    const agencyUserId = localStorage.getItem(AGENCY_USER_ID_KEY);
     
-    setIsSupportMode(supportActive && !!agencySession);
-    setSupportAccountName(accountName);
-  }, []);
+    if (supportActive && agencySession) {
+      // Validate: if current user is the agency user, support mode is stale
+      supabase.auth.getUser().then(({ data }) => {
+        if (data?.user && agencyUserId && data.user.id === agencyUserId) {
+          clearAllSupportFlags();
+        } else {
+          setIsSupportMode(true);
+          setSupportAccountName(accountName);
+        }
+      });
+    } else {
+      setIsSupportMode(false);
+    }
+  }, [clearAllSupportFlags]);
+
+  // Listen for auth changes to detect when session reverts to agency
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const agencyUserId = localStorage.getItem(AGENCY_USER_ID_KEY);
+      const supportActive = localStorage.getItem(SUPPORT_MODE_KEY) === "true";
+      
+      if (supportActive && agencyUserId && session?.user?.id === agencyUserId) {
+        clearAllSupportFlags();
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [clearAllSupportFlags]);
 
   const saveAgencySession = useCallback((session: Session, accountName: string) => {
     const backup: AgencyBackupSession = {
@@ -42,6 +78,10 @@ export const useSupportMode = (): SupportModeContext => {
     };
     localStorage.setItem(AGENCY_SESSION_KEY, JSON.stringify(backup));
     localStorage.setItem(SUPPORT_ACCOUNT_KEY, accountName);
+    // Store the agency user ID for stale detection
+    if (session.user?.id) {
+      localStorage.setItem(AGENCY_USER_ID_KEY, session.user.id);
+    }
   }, []);
 
   const markSupportModeActive = useCallback(() => {
@@ -55,12 +95,7 @@ export const useSupportMode = (): SupportModeContext => {
     
     if (!backupSessionStr) {
       console.error("No agency session backup found");
-      // Clear support mode flags anyway
-      localStorage.removeItem(SUPPORT_MODE_KEY);
-      localStorage.removeItem(SUPPORT_ACCOUNT_KEY);
-      setIsSupportMode(false);
-      setSupportAccountName(null);
-      // Redirect to login
+      clearAllSupportFlags();
       window.location.href = "/auth";
       return;
     }
@@ -79,28 +114,18 @@ export const useSupportMode = (): SupportModeContext => {
 
       if (error) {
         console.error("Error restoring agency session:", error);
-        // If session restoration fails, redirect to login
-        localStorage.removeItem(AGENCY_SESSION_KEY);
-        localStorage.removeItem(SUPPORT_MODE_KEY);
-        localStorage.removeItem(SUPPORT_ACCOUNT_KEY);
+        clearAllSupportFlags();
         window.location.href = "/auth";
         return;
       }
 
-      // Clear support mode data
-      localStorage.removeItem(AGENCY_SESSION_KEY);
-      localStorage.removeItem(SUPPORT_MODE_KEY);
-      localStorage.removeItem(SUPPORT_ACCOUNT_KEY);
-      setIsSupportMode(false);
-      setSupportAccountName(null);
+      clearAllSupportFlags();
 
       // Redirect to agency admin
       window.location.href = "/agency-admin";
     } catch (err) {
       console.error("Error parsing agency backup session:", err);
-      localStorage.removeItem(AGENCY_SESSION_KEY);
-      localStorage.removeItem(SUPPORT_MODE_KEY);
-      localStorage.removeItem(SUPPORT_ACCOUNT_KEY);
+      clearAllSupportFlags();
       window.location.href = "/auth";
     }
   }, []);
@@ -119,4 +144,5 @@ export const clearSupportModeOnLogout = () => {
   localStorage.removeItem(AGENCY_SESSION_KEY);
   localStorage.removeItem(SUPPORT_MODE_KEY);
   localStorage.removeItem(SUPPORT_ACCOUNT_KEY);
+  localStorage.removeItem(AGENCY_USER_ID_KEY);
 };
