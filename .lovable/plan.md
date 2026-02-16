@@ -1,108 +1,77 @@
 
 
-## Enriquecer dados de demonstracao da "Imobiliaria Demonstracao"
+## Aviso de numero invalido no WhatsApp
 
-### Conta identificada
-- **Account ID:** `6e7a7df6-a3d8-4775-8a43-3e20704ef985`
-- **User ID (unico):** `e4e07296-bd00-4160-af45-5e0a36eca0f0`
+### Problema
+Quando um lead tem um numero que nao possui WhatsApp, a mensagem automatica falha silenciosamente. O usuario nao recebe nenhum feedback visual e reclama que "a mensagem nao foi enviada", sem saber que o problema e o numero.
 
-### Estado atual
-- 8 imoveis (2 vendas fechadas, total ~R$1.2M em VGV)
-- 30 leads distribuidos nos 8 status do funil
-- 10 eventos na agenda
-- **Zero dados de investimento** (meta_ad_insights e meta_ad_insights_by_ad vazios)
-- **Zero mapeamento de formularios** (meta_form_property_mapping vazio)
-- Apenas 2 leads no status "Fechado"
+### Solucao
 
-### O que sera adicionado
+Adicionar avisos visuais em **3 pontos estrategicos**:
 
 ---
 
-#### 1. Mais vendas (leads "Fechado") para VGV acima de R$2.5M
+### 1. Alerta no modal de detalhes do lead (LeadDetailModal)
 
-Mover/criar leads vinculados a imoveis de alto valor para o status "Fechado":
+Quando o lead tem mensagens falhadas na fila (`whatsapp_message_queue` com `status = 'failed'`), exibir um banner de alerta amarelo/vermelho logo abaixo das informacoes de contato, similar ao alerta de "Lead Recorrente" que ja existe:
 
-| Lead | Imovel | Valor Venda | Status |
-|---|---|---|---|
-| (novo) Ricardo Mendes | Cobertura Duplex Jardins (R$4.2M) | R$4.200.000 | Fechado |
-| (novo) Patricia Almeida | Casa 4 Suites Alphaville (R$2.5M) | R$2.500.000 | Fechado |
-| (novo) Eduardo Santos | Apt 3 Quartos Itaim (R$1.85M) | R$1.850.000 | Fechado |
-| Renata Lima (existente) | Casa 3 Quartos Morumbi (R$1.2M) | R$1.200.000 | Ja fechado |
-| Samuel Oliveira (existente) | Conj Comercial Paulista | Aluguel | Ja fechado |
+- Icone de alerta + texto: "Falha no envio de WhatsApp"
+- Mostrar a mensagem de erro (`error_message` da fila)
+- Se o erro contem indicacao de numero invalido (ex: `exists: false`), exibir texto amigavel: "Este numero nao possui WhatsApp ativo"
 
-**VGV total: R$4.2M + R$2.5M + R$1.85M + R$1.2M = R$9.75M** (bem acima de R$2.5M)
+### 2. Indicador na tabela/card de leads
 
-Os imoveis vendidos terao status atualizado para "vendido" ou "reservado".
+Adicionar um pequeno icone de alerta (triangulo amarelo) ao lado do botao de WhatsApp nos cards/tabela de leads quando houver mensagem falhada para aquele lead. Isso dara visibilidade imediata sem precisar abrir o modal.
 
----
+### 3. Melhoria no backend (whatsapp-send)
 
-#### 2. Mais leads distribuidos no funil (~20 novos)
-
-Leads com nomes realistas, vinculados a diferentes imoveis, distribuidos em todos os status:
-
-- **Novo Lead:** 5 novos (criados nos ultimos 2-3 dias)
-- **Em Contato:** 4 novos
-- **Qualificado:** 3 novos
-- **Visita Agendada:** 3 novos
-- **Proposta:** 2 novos
-- **Negociacao:** 2 novos
-- **Perdido:** 1 novo
-
-Temperaturas variadas: mix de hot, warm e cold.
-
----
-
-#### 3. Investimento em anuncios (meta_ad_insights)
-
-Inserir dados diarios nos ultimos 30 dias com media de ~R$100/dia (total ~R$3.000):
-
-- 30 registros em `meta_ad_insights` (1 por dia)
-- Metricas: spend (~R$80-120/dia), impressions, clicks, leads_count, CPL, CPC, CPM
-- Total acumulado: ~R$3.000
-
----
-
-#### 4. Investimento por anuncio/imovel (meta_ad_insights_by_ad)
-
-Inserir dados vinculando gastos a formularios especificos para que o CPL por imovel funcione nos relatorios:
-
-- Criar mapeamentos em `meta_form_property_mapping` ligando form_ids ficticios aos reference_codes dos imoveis
-- Inserir dados em `meta_ad_insights_by_ad` com os mesmos form_ids
-- Distribuir o gasto entre os imoveis principais (Cobertura Jardins, Alphaville, Itaim, etc.)
-
----
-
-#### 5. Eventos na agenda (proximos 7-14 dias)
-
-Adicionar ~15 novos eventos variados:
-
-- **Visitas a imoveis** (8 eventos) - vinculados a leads e imoveis especificos
-- **Reunioes com clientes** (3 eventos)
-- **Follow-ups** (3 eventos)
-- **Assinatura de contrato** (1 evento)
-
-Distribuidos ao longo dos proximos 14 dias, em horarios comerciais variados.
-
----
-
-#### 6. Atualizar status de imoveis vendidos
-
-- Cobertura Duplex Jardins: `vendido`
-- Casa 4 Suites Alphaville: `reservado`
-- Apt 3 Quartos Itaim Bibi: `vendido`
+Atualizar a edge function `whatsapp-send` para:
+- Detectar quando a resposta da Evolution API indica `exists: false`
+- Salvar uma `error_message` mais descritiva (ex: "Numero nao possui WhatsApp") no `whatsapp_message_queue`
+- Marcar como `failed` permanentemente (sem retry) quando o numero nao existe, evitando tentativas inuteis
 
 ---
 
 ### Detalhes tecnicos
 
-Todas as insercoes serao feitas via SQL usando a ferramenta de insercao de dados (nao migracao de schema). As queries serao executadas na seguinte ordem:
+**Arquivos a modificar:**
 
-1. Inserir novos leads (~20 registros em `leads`)
-2. Atualizar imoveis vendidos (UPDATE em `properties`)
-3. Inserir mapeamentos de formularios (`meta_form_property_mapping`)
-4. Inserir dados de investimento diario (`meta_ad_insights` - 30 dias)
-5. Inserir dados de investimento por anuncio (`meta_ad_insights_by_ad` - 30 dias x 4 imoveis)
-6. Inserir eventos na agenda (`events` - ~15 eventos)
+1. **`supabase/functions/whatsapp-send/index.ts`**
+   - Apos receber resposta da Evolution API, verificar se o numero nao existe
+   - Se `exists: false` ou erro similar, retornar erro especifico com flag `invalid_number: true`
+   - Salvar `error_message` descritiva no log
 
-Todos os registros usarao `account_id = '6e7a7df6-a3d8-4775-8a43-3e20704ef985'`.
+2. **`supabase/functions/process-whatsapp-queue/index.ts`**
+   - Quando `whatsapp-send` retorna `invalid_number: true`, marcar como `failed` imediatamente (sem retry)
+   - Salvar `error_message`: "Numero nao possui WhatsApp"
+
+3. **`src/components/LeadDetailModal.tsx`**
+   - Adicionar `useEffect` para buscar mensagens falhadas do lead na `whatsapp_message_queue`
+   - Renderizar alerta visual quando houver falha, com mensagem amigavel
+
+4. **`src/components/LeadKanbanCard.tsx`** e **`src/components/leads/LeadMobileCard.tsx`**
+   - Consultar se ha mensagem falhada para o lead
+   - Mostrar icone de alerta discreto junto ao botao WhatsApp
+
+5. **`src/components/leads/LeadsTable.tsx`**
+   - Mesmo indicador visual na coluna de acoes/WhatsApp
+
+### Fluxo do aviso
+
+```text
+Lead chega -> Mensagem enfileirada -> whatsapp-send tenta enviar
+                                          |
+                                    Numero invalido?
+                                     /          \
+                                   Sim           Nao
+                                    |             |
+                              status: failed   Envia normalmente
+                              error: "Numero    
+                              sem WhatsApp"     
+                              (sem retry)       
+                                    |
+                              Frontend detecta
+                              e mostra alerta
+                              no card + modal
+```
 
