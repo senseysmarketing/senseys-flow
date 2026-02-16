@@ -186,8 +186,8 @@ export function LeadKanbanCard({
               </div>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-[200px] text-xs">
-              {whatsappError.toLowerCase().includes('não possui whatsapp')
-                ? 'Número sem WhatsApp ativo'
+              {whatsappError.toLowerCase().includes('não existe no whatsapp') || whatsappError.toLowerCase().includes('não possui whatsapp') || whatsappError.toLowerCase().includes('failed to send')
+                ? 'Este número não existe no WhatsApp'
                 : 'Falha no envio de WhatsApp'}
             </TooltipContent>
           </Tooltip>

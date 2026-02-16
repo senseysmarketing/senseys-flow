@@ -319,8 +319,8 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
                   Falha no envio de WhatsApp
                 </AlertTitle>
                 <AlertDescription className="text-muted-foreground">
-                  {whatsappFailure.toLowerCase().includes('não possui whatsapp') || whatsappFailure.toLowerCase().includes('numero nao possui')
-                    ? 'Este número não possui WhatsApp ativo. Verifique o telefone do lead.'
+                  {whatsappFailure.toLowerCase().includes('não existe no whatsapp') || whatsappFailure.toLowerCase().includes('não possui whatsapp') || whatsappFailure.toLowerCase().includes('failed to send')
+                    ? 'Este número não existe no WhatsApp. Verifique o telefone do lead.'
                     : whatsappFailure}
                 </AlertDescription>
               </Alert>

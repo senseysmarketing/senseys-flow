@@ -6,6 +6,26 @@ interface WhatsAppFailure {
   error_message: string | null;
 }
 
+/** Normaliza mensagens de erro do WhatsApp para português amigável */
+function normalizeWhatsAppError(msg: string | null): string {
+  if (!msg) return 'Falha no envio';
+  const lower = msg.toLowerCase();
+  if (
+    lower.includes('não possui whatsapp') ||
+    lower.includes('numero nao possui') ||
+    lower.includes('não existe no whatsapp') ||
+    lower.includes('failed to send') ||
+    lower.includes('not exist') ||
+    lower.includes('not registered') ||
+    lower.includes('not on whatsapp') ||
+    lower.includes('invalid number') ||
+    lower.includes('numero invalido')
+  ) {
+    return 'Este número não existe no WhatsApp';
+  }
+  return msg;
+}
+
 /**
  * Hook to check if specific leads have failed WhatsApp messages.
  * Returns a Map of lead_id -> error_message for leads with failures.
@@ -31,7 +51,7 @@ export function useWhatsAppFailures(leadIds: string[]) {
         const map = new Map<string, string>();
         for (const row of data) {
           if (row.lead_id && !map.has(row.lead_id)) {
-            map.set(row.lead_id, row.error_message || 'Falha no envio');
+            map.set(row.lead_id, normalizeWhatsAppError(row.error_message));
           }
         }
         setFailures(map);
@@ -67,7 +87,7 @@ export function useLeadWhatsAppFailure(leadId: string | undefined) {
       .limit(1)
       .maybeSingle()
       .then(({ data }) => {
-        setFailure(data?.error_message || null);
+        setFailure(normalizeWhatsAppError(data?.error_message || null));
         setLoading(false);
       });
   }, [leadId]);
