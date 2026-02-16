@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useWhatsAppFailures } from "@/hooks/use-whatsapp-failures";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -85,6 +86,9 @@ const LeadsDatabaseView = ({
 }: LeadsDatabaseViewProps) => {
   const { hasPermission, isOwner } = usePermissions();
   const canAssign = hasPermission("leads.assign") || isOwner;
+  
+  const leadIds = useMemo(() => leads.map(l => l.id), [leads]);
+  const whatsappFailures = useWhatsAppFailures(leadIds);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
@@ -381,6 +385,7 @@ const LeadsDatabaseView = ({
           sortColumn={sortColumn}
           sortDirection={sortDirection}
           onSort={handleSort}
+          whatsappFailures={whatsappFailures}
         />
 
         {/* Pagination */}

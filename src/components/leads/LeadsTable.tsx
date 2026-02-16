@@ -24,7 +24,9 @@ import {
   ArrowUp,
   ArrowDown,
   AlertTriangle,
+  MessageSquareWarning,
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import TemperatureBadge from "@/components/TemperatureBadge";
 import OriginBadge from "@/components/OriginBadge";
 import WhatsAppButton from "@/components/WhatsAppButton";
@@ -87,6 +89,7 @@ interface LeadsTableProps {
   sortColumn: string;
   sortDirection: "asc" | "desc";
   onSort: (column: string) => void;
+  whatsappFailures?: Map<string, string>;
 }
 
 const LeadsTable = ({
@@ -103,6 +106,7 @@ const LeadsTable = ({
   sortColumn,
   sortDirection,
   onSort,
+  whatsappFailures,
 }: LeadsTableProps) => {
   const isMobile = useIsMobile();
   const isAllSelected = leads.length > 0 && selectedLeads.length === leads.length;
@@ -186,6 +190,7 @@ const LeadsTable = ({
             onEditLead={onEditLead}
             onDeleteLead={onDeleteLead}
             isSelected={selectedLeads.includes(lead.id)}
+            whatsappError={whatsappFailures?.get(lead.id) || null}
             onSelect={(id) => {
               if (selectedLeads.includes(id)) {
                 onSelectionChange(selectedLeads.filter((sid) => sid !== id));
@@ -359,15 +364,31 @@ const LeadsTable = ({
                 )}
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center gap-1">
-                    <WhatsAppButton
-                      phone={lead.phone}
-                      leadName={lead.name}
-                      leadId={lead.id}
-                      propertyName={lead.properties?.title}
-                      interesse={lead.interesse}
-                      variant="icon"
-                      onShowLead={() => onViewDetails(lead)}
-                    />
+                    <div className="relative">
+                      {whatsappFailures?.has(lead.id) && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="absolute -top-1 -right-1 z-10">
+                              <MessageSquareWarning className="h-3.5 w-3.5 text-amber-500" />
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[200px] text-xs">
+                            {(whatsappFailures.get(lead.id) || '').toLowerCase().includes('não possui whatsapp')
+                              ? 'Número sem WhatsApp ativo'
+                              : 'Falha no envio de WhatsApp'}
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                      <WhatsAppButton
+                        phone={lead.phone}
+                        leadName={lead.name}
+                        leadId={lead.id}
+                        propertyName={lead.properties?.title}
+                        interesse={lead.interesse}
+                        variant="icon"
+                        onShowLead={() => onViewDetails(lead)}
+                      />
+                    </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
