@@ -209,23 +209,8 @@ export function FirebaseMessagingProvider({ children }: { children: ReactNode })
               addDiagnosticLog(`Token do dispositivo atual: ${currentToken.substring(0, 20)}...`);
               setFcmToken(currentToken);
               
-              // Detect token rotation: deactivate old FCM tokens for this user
-              const { data: oldTokens } = await supabase
-                .from('push_subscriptions')
-                .select('id, endpoint')
-                .eq('user_id', user.id)
-                .eq('is_active', true)
-                .neq('endpoint', currentToken)
-                .not('endpoint', 'like', 'https://%'); // Only FCM tokens (not old Web Push)
-
-              if (oldTokens && oldTokens.length > 0) {
-                for (const old of oldTokens) {
-                  await supabase.from('push_subscriptions')
-                    .update({ is_active: false })
-                    .eq('id', old.id);
-                }
-                addDiagnosticLog(`${oldTokens.length} token(s) antigo(s) desativado(s) (rotação)`);
-              }
+              // Token cleanup is handled by send-fcm-notification when FCM returns UNREGISTERED
+              // Each device keeps its own token active independently
               
               // Ensure current token is saved and active
               await saveTokenToDatabase(currentToken, user.id, account!.id);

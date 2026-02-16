@@ -238,6 +238,12 @@ serve(async (req) => {
               badge: "https://crmsenseys.com.br/pwa-192x192.png",
             },
           },
+          android: {
+            priority: "high" as const,
+            notification: {
+              channel_id: "default",
+            },
+          },
           data: {
             ...Object.fromEntries(
               Object.entries(data || {}).map(([k, v]) => [k, String(v)])
