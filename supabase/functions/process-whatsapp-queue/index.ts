@@ -206,6 +206,35 @@ Deno.serve(async (req) => {
 
         const sendResult = await sendResponse.json()
 
+        // If number is invalid (no WhatsApp), mark as permanently failed - no retries
+        if (sendResult.invalid_number) {
+          console.log(`[process-whatsapp-queue] Invalid number for message ${msg.id}: ${sendResult.error}`)
+          
+          await supabase
+            .from('whatsapp_message_queue')
+            .update({ 
+              status: 'failed',
+              error_message: sendResult.error || 'Número não possui WhatsApp',
+              retry_count: 99 // Mark as permanently failed
+            })
+            .eq('id', msg.id)
+          
+          // Also cancel any pending follow-ups for this lead
+          if (msg.lead_id) {
+            await supabase
+              .from('whatsapp_message_queue')
+              .update({ 
+                status: 'cancelled',
+                error_message: 'Cancelado: número sem WhatsApp'
+              })
+              .eq('lead_id', msg.lead_id)
+              .eq('status', 'pending')
+          }
+          
+          errorCount++
+          continue
+        }
+
         if (!sendResponse.ok) {
           throw new Error(sendResult.error || 'Failed to send message')
         }

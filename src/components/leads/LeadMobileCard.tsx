@@ -6,8 +6,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreVertical, Eye, Edit, Trash, Phone, Mail, Building2 } from "lucide-react";
+import { MoreVertical, Eye, Edit, Trash, Phone, Mail, Building2, MessageSquareWarning } from "lucide-react";
 import { AvatarFallbackColored } from "@/components/ui/avatar-fallback-colored";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import TemperatureBadge from "@/components/TemperatureBadge";
 import OriginBadge from "@/components/OriginBadge";
 import WhatsAppButton from "@/components/WhatsAppButton";
@@ -40,6 +41,7 @@ interface LeadMobileCardProps {
   onDeleteLead: (id: string) => void;
   isSelected?: boolean;
   onSelect?: (id: string) => void;
+  whatsappError?: string | null;
 }
 
 const formatPhone = (phone: string) => {
@@ -84,6 +86,7 @@ const LeadMobileCard = ({
   onDeleteLead,
   isSelected,
   onSelect,
+  whatsappError = null,
 }: LeadMobileCardProps) => {
   const temp = (lead.temperature as keyof typeof temperatureStyles) || 'warm';
   const styles = temperatureStyles[temp] || temperatureStyles.warm;
@@ -189,15 +192,31 @@ const LeadMobileCard = ({
 
       {/* Actions */}
       <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-        <WhatsAppButton
-          phone={lead.phone}
-          leadName={lead.name}
-          leadId={lead.id}
-          propertyName={lead.properties?.title}
-          interesse={lead.interesse}
-          className="flex-1 h-10"
-          onShowLead={() => onViewDetails(lead)}
-        />
+        <div className="relative flex-1">
+          {whatsappError && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="absolute -top-2 -right-2 z-10">
+                  <MessageSquareWarning className="h-4 w-4 text-amber-500" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-[200px] text-xs">
+                {whatsappError.toLowerCase().includes('não possui whatsapp')
+                  ? 'Número sem WhatsApp ativo'
+                  : 'Falha no envio de WhatsApp'}
+              </TooltipContent>
+            </Tooltip>
+          )}
+          <WhatsAppButton
+            phone={lead.phone}
+            leadName={lead.name}
+            leadId={lead.id}
+            propertyName={lead.properties?.title}
+            interesse={lead.interesse}
+            className="w-full h-10"
+            onShowLead={() => onViewDetails(lead)}
+          />
+        </div>
         <Button
           variant="outline"
           size="icon"

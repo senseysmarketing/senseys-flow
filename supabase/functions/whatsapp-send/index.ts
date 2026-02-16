@@ -12,25 +12,17 @@ const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || ''
 
 // Robust phone formatting for Evolution API
 function formatPhoneForEvolution(phone: string): string {
-  // Remove all non-digit characters
   let cleaned = phone.replace(/\D/g, '')
-  
-  // If already starts with 55 and has proper length (12-13 digits), it's valid
   if (cleaned.startsWith('55') && cleaned.length >= 12) {
     return cleaned
   }
-  
-  // If has 10-11 digits (DDD + number without country code), add 55
   if (cleaned.length >= 10 && cleaned.length <= 11) {
     return '55' + cleaned
   }
-  
-  // Return as is (might be international or incomplete)
   return cleaned
 }
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -40,31 +32,25 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Check if this is an internal call from another edge function
     const isInternalCall = req.headers.get('x-internal-call') === 'true'
     const authHeader = req.headers.get('Authorization')
 
     let accountId: string
     let userId: string | null = null
     
-    // Parse body first (we need it for both paths)
     const body = await req.json()
     const { phone, message, lead_id, template_id, account_id: bodyAccountId } = body
 
     if (isInternalCall) {
-      // Internal call from process-whatsapp-queue - account_id comes from body
       console.log('[whatsapp-send] Internal call detected')
-      
       if (!bodyAccountId) {
         return new Response(JSON.stringify({ error: 'account_id is required for internal calls' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
-      
       accountId = bodyAccountId
     } else {
-      // External call from frontend - validate user token
       if (!authHeader) {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), {
           status: 401,
@@ -84,7 +70,6 @@ Deno.serve(async (req) => {
 
       userId = user.id
 
-      // Get user's account_id
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('account_id')
@@ -108,11 +93,9 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Format phone number for Evolution API
     const formattedPhone = formatPhoneForEvolution(phone)
     console.log(`[whatsapp-send] Sending message to ${phone} -> formatted: ${formattedPhone} for account ${accountId}`)
 
-    // Get session for this account
     const { data: session, error: sessionError } = await supabase
       .from('whatsapp_sessions')
       .select('*')
@@ -148,9 +131,22 @@ Deno.serve(async (req) => {
     )
 
     const sendData = await sendResponse.json()
-    console.log('[whatsapp-send] Send response:', sendData)
+    console.log('[whatsapp-send] Send response:', JSON.stringify(sendData))
 
-    if (!sendResponse.ok) {
+    // Detect invalid number: Evolution API returns exists: false or specific error patterns
+    const isInvalidNumber = 
+      sendData?.exists === false || 
+      sendData?.error?.includes?.('not exist') ||
+      sendData?.error?.includes?.('not registered') ||
+      sendData?.message?.includes?.('not exist') ||
+      (sendData?.status === 404) ||
+      (typeof sendData === 'object' && sendData !== null && 'exists' in sendData && sendData.exists === false)
+
+    if (!sendResponse.ok || isInvalidNumber) {
+      const errorMsg = isInvalidNumber 
+        ? 'Número não possui WhatsApp' 
+        : (sendData?.error || sendData?.message || 'Failed to send message')
+
       // Log failed message
       await supabase.from('whatsapp_message_log').insert({
         account_id: accountId,
@@ -163,10 +159,11 @@ Deno.serve(async (req) => {
       })
 
       return new Response(JSON.stringify({ 
-        error: 'Failed to send message',
+        error: errorMsg,
+        invalid_number: isInvalidNumber,
         details: sendData
       }), {
-        status: 500,
+        status: isInvalidNumber ? 422 : 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
@@ -183,7 +180,7 @@ Deno.serve(async (req) => {
       delivery_status: 'sent',
     })
 
-    // Also store in whatsapp_messages for conversation view
+    // Store in whatsapp_messages for conversation view
     const remoteJid = `${formattedPhone}@s.whatsapp.net`
     await supabase.from('whatsapp_messages').insert({
       account_id: accountId,

@@ -35,6 +35,9 @@ import { DISQUALIFICATION_REASONS } from "@/components/leads/DisqualifyLeadModal
 import { toast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useLeadWhatsAppFailure } from "@/hooks/use-whatsapp-failures";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { MessageSquareWarning } from "lucide-react";
 
 interface Lead {
   id: string;
@@ -87,6 +90,7 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
   const [propertyInfo, setPropertyInfo] = useState<{ title: string; city?: string } | null>(null);
   const [disqualificationData, setDisqualificationData] = useState<{ reasons: string[]; notes: string | null } | null>(null);
   const [duplicateLeadInfo, setDuplicateLeadInfo] = useState<DuplicateLeadInfo | null>(null);
+  const { failure: whatsappFailure } = useLeadWhatsAppFailure(lead?.id);
 
   useEffect(() => {
     if (lead?.assigned_broker_id) {
@@ -302,6 +306,24 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
                   </div>
                 )}
               </div>
+              <Separator />
+            </>
+          )}
+
+          {/* Alerta de falha no WhatsApp */}
+          {whatsappFailure && (
+            <>
+              <Alert variant="destructive" className="border-amber-500/30 bg-amber-500/10 text-foreground [&>svg]:text-amber-500">
+                <MessageSquareWarning className="h-5 w-5" />
+                <AlertTitle className="text-amber-600 dark:text-amber-400 font-semibold">
+                  Falha no envio de WhatsApp
+                </AlertTitle>
+                <AlertDescription className="text-muted-foreground">
+                  {whatsappFailure.toLowerCase().includes('não possui whatsapp') || whatsappFailure.toLowerCase().includes('numero nao possui')
+                    ? 'Este número não possui WhatsApp ativo. Verifique o telefone do lead.'
+                    : whatsappFailure}
+                </AlertDescription>
+              </Alert>
               <Separator />
             </>
           )}

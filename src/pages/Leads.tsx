@@ -42,6 +42,7 @@ import LeadMobileCard from "@/components/leads/LeadMobileCard";
 import { LeadsSettingsSheet } from "@/components/leads/LeadsSettingsSheet";
 import { LeadsHeroStats } from "@/components/leads/LeadsHeroStats";
 import DisqualifyLeadModal from "@/components/leads/DisqualifyLeadModal";
+import { useWhatsAppFailures } from "@/hooks/use-whatsapp-failures";
 
 interface Lead {
   id: string;
@@ -110,6 +111,10 @@ const Leads = () => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(
     localStorage.getItem('lead-notifications-enabled') !== 'false'
   );
+
+  // Track WhatsApp failures for visible leads
+  const leadIds = useMemo(() => leads.map(l => l.id), [leads]);
+  const whatsappFailures = useWhatsAppFailures(leadIds);
 
   // Silent refresh when new leads arrive (notifications are handled globally in Layout.tsx)
   useLeadNotifications(notificationsEnabled ? () => {
@@ -1184,6 +1189,7 @@ const Leads = () => {
                                   const l = leads.find(x => x.id === id);
                                   if (l) requestDeleteLead(l);
                                 }}
+                                whatsappError={whatsappFailures.get(lead.id) || null}
                               />
                             ))
                           )}
@@ -1277,6 +1283,7 @@ const Leads = () => {
                                               if (l) requestDeleteLead(l);
                                             }}
                                             isDragging={snapshot.isDragging}
+                                            whatsappError={whatsappFailures.get(lead.id) || null}
                                           />
                                         </div>
                                       );
