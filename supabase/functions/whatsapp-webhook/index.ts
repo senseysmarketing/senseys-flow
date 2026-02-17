@@ -343,15 +343,46 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any, inst
 
     // Find matching lead
     let leadId: string | null = null
+    let lidResolvedLeadId: string | null = null // track if we resolved lead via @lid name match
+
     if (isLid && !resolvedJid && contactName) {
+      // For unresolved @lid, try to find lead by pushName
       const { data: leadByName } = await supabase
         .from('leads')
-        .select('id')
+        .select('id, phone')
         .eq('account_id', session.account_id)
         .ilike('name', `%${contactName}%`)
         .order('created_at', { ascending: false })
         .limit(1)
       leadId = leadByName?.[0]?.id || null
+      if (leadId) {
+        lidResolvedLeadId = leadId
+        console.log(`[whatsapp-webhook] Found lead ${leadId} for @lid via pushName "${contactName}"`)
+
+        // Save lid_jid to the existing conversation for this lead so future @lid messages resolve correctly
+        await supabase
+          .from('whatsapp_conversations')
+          .update({ lid_jid: rawRemoteJid })
+          .eq('account_id', session.account_id)
+          .eq('lead_id', leadId)
+          .is('lid_jid', null) // only update if not already set
+        console.log(`[whatsapp-webhook] Saved lid_jid ${rawRemoteJid} to conversation for lead ${leadId}`)
+
+        // Immediately cancel pending follow-ups for this lead since they responded
+        const { data: cancelledMsgs } = await supabase
+          .from('whatsapp_message_queue')
+          .update({ 
+            status: 'cancelled',
+            error_message: 'Cancelado: lead respondeu via @lid (identificado por nome)'
+          })
+          .eq('lead_id', leadId)
+          .eq('status', 'pending')
+          .not('followup_step_id', 'is', null)
+          .select('id')
+        if (cancelledMsgs?.length > 0) {
+          console.log(`[whatsapp-webhook] Cancelled ${cancelledMsgs.length} follow-up(s) for lead ${leadId} (via @lid name resolution)`)
+        }
+      }
     } else {
       leadId = await findLeadByPhone(supabase, session.account_id, finalPhone)
     }
