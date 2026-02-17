@@ -93,24 +93,42 @@ Deno.serve(async (req) => {
         }
 
         // Before sending follow-up messages, check if lead has responded
+        // Uses dual check: phone suffix (standard) OR lead_id directly (handles @lid responses)
         if (msg.followup_step_id && msg.lead_id) {
           const phoneSuffix = (msg.phone || '').replace(/\D/g, '').slice(-9)
           
-          const { data: incomingMessages } = await supabase
+          // Check 1: by phone suffix (standard case)
+          const { data: incomingByPhone } = await supabase
             .from('whatsapp_messages')
             .select('id')
             .eq('account_id', msg.account_id)
             .eq('is_from_me', false)
             .ilike('phone', `%${phoneSuffix}%`)
             .limit(1)
-          
-          if (incomingMessages && incomingMessages.length > 0) {
-            console.log(`[process-whatsapp-queue] Lead ${msg.lead_id} already responded, cancelling follow-up ${msg.id}`)
+
+          // Check 2: by lead_id directly (handles @lid responses where phone doesn't match)
+          const { data: incomingByLeadId } = await supabase
+            .from('whatsapp_messages')
+            .select('id')
+            .eq('account_id', msg.account_id)
+            .eq('lead_id', msg.lead_id)
+            .eq('is_from_me', false)
+            .limit(1)
+
+          const leadHasResponded = (incomingByPhone && incomingByPhone.length > 0) ||
+                                   (incomingByLeadId && incomingByLeadId.length > 0)
+
+          if (leadHasResponded) {
+            const detectedBy = (incomingByPhone?.length > 0) ? 'phone suffix' : 'lead_id (@lid)'
+            console.log(`[process-whatsapp-queue] Lead ${msg.lead_id} already responded (detected by ${detectedBy}), cancelling follow-up ${msg.id}`)
             
             // Cancel this and all remaining follow-ups for this lead
             await supabase
               .from('whatsapp_message_queue')
-              .update({ status: 'cancelled' })
+              .update({ 
+                status: 'cancelled',
+                error_message: `Cancelado: lead respondeu (detectado por ${detectedBy})`
+              })
               .eq('lead_id', msg.lead_id)
               .eq('status', 'pending')
               .not('followup_step_id', 'is', null)
