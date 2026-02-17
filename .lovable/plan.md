@@ -1,80 +1,66 @@
 
-## Corrigir follow-up enviado mesmo com lead já tendo respondido (@lid)
+## Corrigir exibição do histórico completo no modal de chat (caso @lid)
 
-### Diagnóstico confirmado
+### Diagnóstico
 
-A Raquel Rosselli respondeu via WhatsApp Business com o JID `276175070957762@lid`. Este é um formato especial de identificador (@lid) que o WhatsApp usa em algumas situações. O webhook recebeu a mensagem mas não conseguiu resolver o @lid para o telefone real da Raquel (`5512996165317`), pois a conversa principal não tinha o campo `lid_jid` preenchido.
+No banco de dados existem 6 mensagens da conversa da Raquel Rosselli, mas apenas 2 aparecem no modal:
 
-Resultado:
-- A mensagem da Raquel foi salva com `phone = 276175070957762` e `lead_id = null`
-- Quando o `process-whatsapp-queue` verificou se o lead havia respondido, buscou mensagens recebidas pelo sufixo do telefone (`%996165317%`), não encontrou nada, e disparou o follow-up
+| Timestamp | Conteúdo | remote_jid | Aparece? |
+|-----------|----------|-----------|----------|
+| 17:41 | Saudação automática (enviada) | `5512996165317@s.whatsapp.net` | ✅ Sim |
+| 17:42 | **"Me interessei sim. Aceita financiamento."** (resposta dela) | `276175070957762@lid` | ❌ Não |
+| 18:13 | "Olá Raquel, ótima tarde." (Thiago) | `276175070957762@lid` | ❌ Não |
+| 18:13 | "Aceita sim, gostaria de fazer uma simulação..." (Thiago) | `276175070957762@lid` | ❌ Não |
+| 18:13 | "Prazer, Belisa." (Thiago) | `276175070957762@lid` | ❌ Não |
+| 19:42 | Follow-up indevido (enviado) | `5512996165317@s.whatsapp.net` | ✅ Sim |
 
-### Dois bugs a corrigir
+**Causa raiz:** O `useMessages` busca mensagens via `ilike('remote_jid', '%96165317%')` (sufixo do número de telefone). As mensagens @lid têm `remote_jid = 276175070957762@lid` que não contém o sufixo `96165317`, então nunca são encontradas.
 
-**Bug 1 — Proteção do follow-up fraca** (`process-whatsapp-queue/index.ts`):
-A verificação atual busca por `phone ilike '%{sufixo}%'`, mas isso falha quando a resposta chegou via @lid. A proteção precisa ser reforçada para também buscar pelo `lead_id` diretamente na tabela `whatsapp_messages`.
+### Solução
 
-**Bug 2 — @lid não conectado à conversa existente** (`whatsapp-webhook/index.ts`):
-Quando uma resposta chega via @lid e o webhook não consegue resolver para um telefone, o sistema deveria tentar casar com uma conversa existente pelo `lead_id` (via nome ou telefone do lead no banco). Além disso, deve salvar o `lid_jid` na conversa para futuras resoluções.
+**Dupla estratégia de busca por `lead_id`:**
 
-### Correções
+O campo `lead_id` já está preenchido corretamente em TODAS as 6 mensagens (graças à correção aplicada anteriormente). A solução é enriquecer a query do `useMessages` para buscar também por `lead_id`, unindo os resultados e removendo duplicatas.
 
-**1. `supabase/functions/process-whatsapp-queue/index.ts`**
+### Detalhes técnicos
 
-Tornar a verificação de resposta do lead **dupla**:
-- Verificação atual (por telefone) — mantida
-- **Nova verificação por `lead_id`**: buscar em `whatsapp_messages` qualquer mensagem com `lead_id = msg.lead_id` E `is_from_me = false`
+**Arquivo: `src/hooks/use-conversations.tsx`** — função `fetchMessagesFromDB`
 
-Isso garante que mesmo que a mensagem tenha chegado via @lid (com telefone diferente), se o `lead_id` foi corretamente associado, o follow-up será cancelado.
-
-```
--- Pseudocódigo da nova verificação dupla:
-SE (mensagens com phone sufixo) OU (mensagens com lead_id AND is_from_me=false)
-  -> Cancelar follow-up
+A query atual:
+```typescript
+.ilike('remote_jid', `%${phoneSuffix}%`)
 ```
 
-**2. `supabase/functions/whatsapp-webhook/index.ts`**
+Nova lógica — duas queries paralelas, resultados unidos e ordenados:
+1. Query existente por `phoneSuffix` no `remote_jid` (mantida para compatibilidade)
+2. Nova query por `lead_id` quando disponível
 
-Melhorar a resolução de @lid para associar ao lead correto quando o webhook recebe uma mensagem via @lid:
+O hook `useMessages` receberá um parâmetro adicional opcional `leadId` para habilitar a segunda busca.
 
-- Ao processar mensagem @lid que não resolve para telefone, tentar buscar o lead pelo `pushName` (nome do contato) na conta
-- Se encontrar o lead, associar o `lead_id` à mensagem e salvar o `lid_jid` na conversa existente para resolver futuras mensagens
-- Cancelar follow-ups pendentes quando uma mensagem @lid for associada a um lead, independente do telefone
+**Arquivo: `src/components/leads/WhatsAppChatModal.tsx`**
 
-**3. Cancelamento do follow-up ainda `pending` para Raquel**
+Passar o `leadId` para o `useMessages` através do `conversation.lead_id`.
 
-Há 2 follow-ups ainda `pending` na fila para Raquel (`d503b14e` e `1aec864c`). Como parte da correção, esses devem ser cancelados via SQL direto pois ela já respondeu.
+**Realtime também corrigido:** O handler de Realtime atual também verifica apenas o `phoneSuffix`. Precisamos adicionar uma verificação adicional: se `newMsg.lead_id === leadId`, incluir a mensagem independente do JID.
 
 ### Arquivos a modificar
 
-1. **`supabase/functions/process-whatsapp-queue/index.ts`**
-   - Adicionar verificação secundária por `lead_id` na tabela `whatsapp_messages` (`is_from_me = false`)
-   - Se encontrar qualquer mensagem recebida do lead (independente de como veio), cancelar o follow-up
+1. **`src/hooks/use-conversations.tsx`**
+   - `useMessages`: adicionar parâmetro opcional `leadId?: string | null`
+   - `fetchMessagesFromDB`: executar query adicional por `lead_id` quando disponível, unir e desduplicar resultados por `id`
+   - Handler de Realtime INSERT: também aceitar mensagem se `newMsg.lead_id === leadId`
 
-2. **`supabase/functions/whatsapp-webhook/index.ts`**
-   - Na seção de cancelamento de follow-ups (linha ~455), também cancelar quando a mensagem chegou via @lid mas o `lead_id` foi resolvido pelo nome
-   - Quando um @lid é associado a um lead, salvar o `lid_jid` na conversa existente do lead para resolver futuras mensagens automaticamente
+2. **`src/components/leads/WhatsAppChatModal.tsx`**
+   - Passar `leadId` para `useMessages` via segundo argumento
 
-3. **Migração de dados** (SQL executado como parte do deploy):
-   - Cancelar os 2 follow-ups pendentes da Raquel
-   - Atualizar a mensagem `@lid` com o `lead_id` correto da Raquel
+### Resultado esperado
 
-### Fluxo corrigido
+Com essas mudanças, ao abrir o chat da Raquel, os 6 itens aparecerão em ordem cronológica:
+1. 14:41 - Saudação automática ✅
+2. 14:42 - "Me interessei sim. Aceita financiamento." (resposta dela, em cinza à esquerda) ✅
+3. 15:13 - "Olá Raquel, ótima tarde." (Thiago) ✅
+4. 15:13 - "Aceita sim, gostaria de fazer uma simulação..." ✅
+5. 15:13 - "Prazer, Belisa." ✅
+6. 16:42 - Follow-up indevido ✅
 
-```text
-Lead responde via @lid
-        |
-Webhook recebe @lid, tenta resolver via API
-        |
-Não resolve? -> Busca lead pelo pushName no banco
-        |
-Encontra lead -> Associa lead_id + salva lid_jid na conversa
-        |
-Cancela follow-ups pendentes do lead_id
-        |
-process-whatsapp-queue roda a cada minuto:
-  Verificação 1: phone sufixo -> não encontra (ainda @lid)
-  Verificação 2: lead_id + is_from_me=false -> ENCONTRA
-        |
-Follow-up cancelado corretamente
-```
+Novas mensagens (inclusive vindas via @lid) também aparecerão em tempo real corretamente.
