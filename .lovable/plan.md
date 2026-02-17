@@ -1,50 +1,80 @@
 
+## Corrigir follow-up enviado mesmo com lead já tendo respondido (@lid)
 
-## Correcao do bug visual do Modo Suporte
+### Diagnóstico confirmado
 
-### Problema
-Quando o usuario fica um tempo sem acessar o sistema enquanto esta no Modo Suporte, a sessao do cliente expira e o Supabase restaura automaticamente a sessao original (Senseys). Porem, o `localStorage` ainda contem `support_mode_active: "true"`, fazendo o banner amarelo aparecer incorretamente. Ao clicar em "Voltar para Agencia", o sistema tenta restaurar uma sessao de backup ja expirada, causando erros.
+A Raquel Rosselli respondeu via WhatsApp Business com o JID `276175070957762@lid`. Este é um formato especial de identificador (@lid) que o WhatsApp usa em algumas situações. O webhook recebeu a mensagem mas não conseguiu resolver o @lid para o telefone real da Raquel (`5512996165317`), pois a conversa principal não tinha o campo `lid_jid` preenchido.
 
-### Solucao
+Resultado:
+- A mensagem da Raquel foi salva com `phone = 276175070957762` e `lead_id = null`
+- Quando o `process-whatsapp-queue` verificou se o lead havia respondido, buscou mensagens recebidas pelo sufixo do telefone (`%996165317%`), não encontrou nada, e disparou o follow-up
 
-Validar ativamente se o Modo Suporte ainda e legitimo, comparando o usuario atual com o usuario da agencia (backup).
+### Dois bugs a corrigir
 
-### Detalhes tecnicos
+**Bug 1 — Proteção do follow-up fraca** (`process-whatsapp-queue/index.ts`):
+A verificação atual busca por `phone ilike '%{sufixo}%'`, mas isso falha quando a resposta chegou via @lid. A proteção precisa ser reforçada para também buscar pelo `lead_id` diretamente na tabela `whatsapp_messages`.
 
-**Arquivo: `src/hooks/use-support-mode.tsx`**
+**Bug 2 — @lid não conectado à conversa existente** (`whatsapp-webhook/index.ts`):
+Quando uma resposta chega via @lid e o webhook não consegue resolver para um telefone, o sistema deveria tentar casar com uma conversa existente pelo `lead_id` (via nome ou telefone do lead no banco). Além disso, deve salvar o `lid_jid` na conversa para futuras resoluções.
 
-1. **Armazenar o user_id da agencia** ao salvar a sessao de backup (novo campo `agency_user_id` no localStorage)
+### Correções
 
-2. **Escutar mudancas de autenticacao** (`onAuthStateChange`) dentro do hook. Quando o usuario muda:
-   - Obter o `user.id` atual
-   - Comparar com o `agency_user_id` armazenado
-   - Se forem iguais, significa que a sessao voltou para a agencia sozinha - limpar automaticamente os flags de Modo Suporte (`support_mode_active`, `agency_backup_session`, `support_account_name`)
-   - Isso faz o banner desaparecer imediatamente
+**1. `supabase/functions/process-whatsapp-queue/index.ts`**
 
-3. **Validar na montagem** (useEffect existente): alem de checar se as flags existem no localStorage, tambem verificar se o usuario atual e diferente do usuario da agencia no backup. Se forem iguais, limpar tudo.
+Tornar a verificação de resposta do lead **dupla**:
+- Verificação atual (por telefone) — mantida
+- **Nova verificação por `lead_id`**: buscar em `whatsapp_messages` qualquer mensagem com `lead_id = msg.lead_id` E `is_from_me = false`
 
-**Arquivo: `src/pages/AgencyAdmin.tsx`**
+Isso garante que mesmo que a mensagem tenha chegado via @lid (com telefone diferente), se o `lead_id` foi corretamente associado, o follow-up será cancelado.
 
-4. Ao salvar o backup da sessao, tambem armazenar o `user.id` da agencia no localStorage (nova chave `agency_backup_user_id`).
+```
+-- Pseudocódigo da nova verificação dupla:
+SE (mensagens com phone sufixo) OU (mensagens com lead_id AND is_from_me=false)
+  -> Cancelar follow-up
+```
+
+**2. `supabase/functions/whatsapp-webhook/index.ts`**
+
+Melhorar a resolução de @lid para associar ao lead correto quando o webhook recebe uma mensagem via @lid:
+
+- Ao processar mensagem @lid que não resolve para telefone, tentar buscar o lead pelo `pushName` (nome do contato) na conta
+- Se encontrar o lead, associar o `lead_id` à mensagem e salvar o `lid_jid` na conversa existente para resolver futuras mensagens
+- Cancelar follow-ups pendentes quando uma mensagem @lid for associada a um lead, independente do telefone
+
+**3. Cancelamento do follow-up ainda `pending` para Raquel**
+
+Há 2 follow-ups ainda `pending` na fila para Raquel (`d503b14e` e `1aec864c`). Como parte da correção, esses devem ser cancelados via SQL direto pois ela já respondeu.
+
+### Arquivos a modificar
+
+1. **`supabase/functions/process-whatsapp-queue/index.ts`**
+   - Adicionar verificação secundária por `lead_id` na tabela `whatsapp_messages` (`is_from_me = false`)
+   - Se encontrar qualquer mensagem recebida do lead (independente de como veio), cancelar o follow-up
+
+2. **`supabase/functions/whatsapp-webhook/index.ts`**
+   - Na seção de cancelamento de follow-ups (linha ~455), também cancelar quando a mensagem chegou via @lid mas o `lead_id` foi resolvido pelo nome
+   - Quando um @lid é associado a um lead, salvar o `lid_jid` na conversa existente do lead para resolver futuras mensagens automaticamente
+
+3. **Migração de dados** (SQL executado como parte do deploy):
+   - Cancelar os 2 follow-ups pendentes da Raquel
+   - Atualizar a mensagem `@lid` com o `lead_id` correto da Raquel
 
 ### Fluxo corrigido
 
 ```text
-Usuario entra no Modo Suporte (sessao do cliente)
-    |
-Fica tempo sem acessar
-    |
-Sessao do cliente expira, Supabase restaura sessao Senseys
-    |
-onAuthStateChange dispara -> user.id === agency_backup_user_id?
-    |
-  SIM -> Limpa flags do localStorage, banner desaparece
-    |
-Usuario ve a interface normal da conta Senseys
+Lead responde via @lid
+        |
+Webhook recebe @lid, tenta resolver via API
+        |
+Não resolve? -> Busca lead pelo pushName no banco
+        |
+Encontra lead -> Associa lead_id + salva lid_jid na conversa
+        |
+Cancela follow-ups pendentes do lead_id
+        |
+process-whatsapp-queue roda a cada minuto:
+  Verificação 1: phone sufixo -> não encontra (ainda @lid)
+  Verificação 2: lead_id + is_from_me=false -> ENCONTRA
+        |
+Follow-up cancelado corretamente
 ```
-
-### Arquivos modificados
-
-- `src/hooks/use-support-mode.tsx` - Adicionar validacao ativa com `onAuthStateChange` e comparacao de user_id
-- `src/pages/AgencyAdmin.tsx` - Salvar `user.id` da agencia junto com o backup da sessao
-
