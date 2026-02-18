@@ -171,12 +171,11 @@ export function useConversations() {
   };
 }
 
-export function useMessages(remoteJid: string | null) {
+export function useMessages(remoteJid: string | null, leadId?: string | null) {
   const { account } = useAccount();
   const accountId = account?.id;
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
-  const syncedRef = React.useRef<string | null>(null);
 
   // Extract phone suffix for flexible JID matching (handles 9th digit variations)
   const phoneSuffix = remoteJid
@@ -186,20 +185,51 @@ export function useMessages(remoteJid: string | null) {
   const fetchMessagesFromDB = useCallback(async () => {
     if (!accountId || !phoneSuffix) return;
 
-    const { data, error } = await supabase
+    const select = 'id, content, media_type, media_url, is_from_me, status, timestamp, contact_name, message_id';
+
+    // Run both queries in parallel: by phone suffix AND by lead_id
+    const byPhone = supabase
       .from('whatsapp_messages')
-      .select('id, content, media_type, media_url, is_from_me, status, timestamp, contact_name, message_id')
+      .select(select)
       .eq('account_id', accountId)
       .ilike('remote_jid', `%${phoneSuffix}%`)
       .order('timestamp', { ascending: true })
-      .limit(200);
+      .limit(200)
+      .then(r => r);
 
-    if (error) {
-      console.error('Error fetching messages:', error);
-    } else {
-      setMessages(data || []);
+    const byLeadId = leadId
+      ? supabase
+          .from('whatsapp_messages')
+          .select(select)
+          .eq('account_id', accountId)
+          .eq('lead_id', leadId)
+          .order('timestamp', { ascending: true })
+          .limit(200)
+          .then(r => r)
+      : Promise.resolve({ data: [], error: null });
+
+    const [phoneResult, leadResult] = await Promise.all([byPhone, byLeadId]);
+
+    if (phoneResult.error) {
+      console.error('Error fetching messages by phone:', phoneResult.error);
+      return;
     }
-  }, [accountId, phoneSuffix]);
+    if (leadResult.error) {
+      console.error('Error fetching messages by lead_id:', leadResult.error);
+    }
+
+    // Merge and deduplicate by id, then sort chronologically
+    const allMessages: Message[] = [];
+    const seen = new Set<string>();
+    for (const msg of [...(phoneResult.data || []), ...(leadResult.data || [])]) {
+      if (!seen.has(msg.id)) {
+        seen.add(msg.id);
+        allMessages.push(msg);
+      }
+    }
+    allMessages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    setMessages(allMessages);
+  }, [accountId, phoneSuffix, leadId]);
 
   const fetchMessages = useCallback(async () => {
     if (!accountId || !remoteJid || !phoneSuffix) {
@@ -228,8 +258,11 @@ export function useMessages(remoteJid: string | null) {
         (payload) => {
           const newMsg = payload.new as any;
           // Match by phone suffix instead of exact JID to handle 9th digit variations
+          // Also match by lead_id to capture @lid messages
           const msgPhone = (newMsg.remote_jid || '').replace('@s.whatsapp.net', '').replace('@lid', '').replace('@c.us', '');
-          if (msgPhone.endsWith(phoneSuffix)) {
+          const matchesByPhone = phoneSuffix && msgPhone.endsWith(phoneSuffix);
+          const matchesByLeadId = leadId && newMsg.lead_id === leadId;
+          if (matchesByPhone || matchesByLeadId) {
             setMessages(prev => {
               const incoming = {
                 id: newMsg.id,

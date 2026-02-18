@@ -30,7 +30,8 @@ export function WhatsAppChatModal({ open, onClose, leadName, leadId, phone, prop
   const remoteJid = `${fullPhone}@s.whatsapp.net`;
 
   const { messages, loading: messagesLoading, sendMessage, markAsRead } = useMessages(
-    isConnected && conversation ? conversation.remote_jid : null
+    isConnected && conversation ? conversation.remote_jid : null,
+    isConnected && conversation ? (conversation.lead_id || leadId || null) : null
   );
 
   // Check WhatsApp connection status
