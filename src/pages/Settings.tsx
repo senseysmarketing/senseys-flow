@@ -9,7 +9,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Edit2, Trash2, Move, User, Bell, MessageCircle, Users, Webhook, Copy, Check, Building2, Shield } from "lucide-react";
+import { Plus, Edit2, Trash2, Move, User, Bell, MessageCircle, Users, Building2, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -26,8 +26,6 @@ import MetaFormScoringManager from "@/components/MetaFormScoringManager";
 import MetaEventMappingManager from "@/components/MetaEventMappingManager";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import DataImporter from "@/components/DataImporter";
-import { WhatsAppIntegrationSettings } from "@/components/whatsapp/WhatsAppIntegrationSettings";
-import { OlxIntegrationSettings } from "@/components/OlxIntegrationSettings";
 
 interface Profile {
   id: string;
@@ -52,14 +50,10 @@ interface WhatsAppTemplate {
 }
 const PRESET_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "#22c55e", "#10b981", "#14b8a6", "#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#d946ef", "#ec4899", "#f43f5e", "#64748b", "#374151", "#111827"];
 
-interface Property {
-  id: string;
-  title: string;
-  type: string;
-  city: string | null;
-}
 
-type TabValue = 'profile' | 'team' | 'notifications' | 'statuses' | 'whatsapp' | 'followup' | 'distribution' | 'webhook' | 'olx' | 'whatsapp-integration' | 'qualification' | 'metacapi' | 'permissions' | 'whitelabel' | 'import';
+
+
+type TabValue = 'profile' | 'team' | 'notifications' | 'statuses' | 'whatsapp' | 'followup' | 'distribution' | 'qualification' | 'metacapi' | 'permissions' | 'whitelabel' | 'import';
 
 interface NavItem {
   value: TabValue;
@@ -75,7 +69,7 @@ const SettingsPage = () => {
   const [searchParams] = useSearchParams();
   const initialTab = useMemo(() => {
     const param = searchParams.get('tab');
-    const validTabs: TabValue[] = ['profile','team','notifications','statuses','whatsapp','followup','distribution','webhook','olx','whatsapp-integration','qualification','metacapi','permissions','whitelabel','import'];
+    const validTabs: TabValue[] = ['profile','team','notifications','statuses','whatsapp','followup','distribution','qualification','metacapi','permissions','whitelabel','import'];
     return validTabs.includes(param as TabValue) ? (param as TabValue) : 'profile';
   }, []);
   const [activeTab, setActiveTab] = useState<TabValue>(initialTab);
@@ -83,37 +77,20 @@ const SettingsPage = () => {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [leadStatuses, setLeadStatuses] = useState<LeadStatus[]>([]);
   const [whatsappTemplates, setWhatsappTemplates] = useState<WhatsAppTemplate[]>([]);
-  const [properties, setProperties] = useState<Property[]>([]);
   const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false);
   const [isWhatsAppDialogOpen, setIsWhatsAppDialogOpen] = useState(false);
   const [editingStatus, setEditingStatus] = useState<LeadStatus | null>(null);
   const [editingTemplate, setEditingTemplate] = useState<WhatsAppTemplate | null>(null);
-  const [statusForm, setStatusForm] = useState({
-    name: "",
-    color: "#5a5f65"
-  });
-  const [templateForm, setTemplateForm] = useState({
-    name: "",
-    template: ""
-  });
-  const [profileForm, setProfileForm] = useState({
-    full_name: "",
-    timezone: "America/Sao_Paulo"
-  });
-  const [accountId, setAccountId] = useState<string>("");
-  const [copiedUrl, setCopiedUrl] = useState(false);
-  const [copiedPayload, setCopiedPayload] = useState(false);
-  const [copiedPropertyId, setCopiedPropertyId] = useState<string | null>(null);
-  const [testingWebhook, setTestingWebhook] = useState(false);
+  const [statusForm, setStatusForm] = useState({ name: "", color: "#5a5f65" });
+  const [templateForm, setTemplateForm] = useState({ name: "", template: "" });
+  const [profileForm, setProfileForm] = useState({ full_name: "", timezone: "America/Sao_Paulo" });
+
 
   // Flat navigation tabs
   const navItems: NavItem[] = [
     { value: 'profile', label: 'Perfil', icon: <User className="h-4 w-4" /> },
     { value: 'team', label: 'Equipe', icon: <Users className="h-4 w-4" /> },
     { value: 'notifications', label: 'Notificações', icon: <Bell className="h-4 w-4" /> },
-    { value: 'webhook', label: 'Webhook', icon: <Webhook className="h-4 w-4" /> },
-    { value: 'olx', label: 'Grupo OLX', icon: <Building2 className="h-4 w-4" /> },
-    { value: 'whatsapp-integration', label: 'WhatsApp', icon: <MessageCircle className="h-4 w-4" /> },
     { value: 'permissions', label: 'Permissões', icon: <Shield className="h-4 w-4" />, permission: 'settings.manage' },
     { value: 'whitelabel', label: 'White Label', icon: <Building2 className="h-4 w-4" /> },
   ];
@@ -125,39 +102,9 @@ const SettingsPage = () => {
       fetchProfile();
       fetchLeadStatuses();
       fetchWhatsAppTemplates();
-      fetchAccountId();
-      fetchProperties();
     }
   }, [user]);
 
-  const fetchProperties = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("properties")
-        .select("id, title, type, city")
-        .order("title");
-      
-      if (error) throw error;
-      setProperties(data || []);
-    } catch (error) {
-      console.error("Erro ao buscar imóveis:", error);
-    }
-  };
-
-  const fetchAccountId = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("account_id")
-        .eq("user_id", user!.id)
-        .single();
-      
-      if (error) throw error;
-      setAccountId(data.account_id);
-    } catch (error) {
-      console.error("Erro ao buscar account_id:", error);
-    }
-  };
 
   const fetchProfile = async () => {
     try {
@@ -777,213 +724,6 @@ const SettingsPage = () => {
       case 'distribution':
         return <DistributionRulesManager />;
 
-      case 'webhook':
-        return (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Webhook className="h-5 w-5" />
-                Configuração do Webhook
-              </CardTitle>
-              <CardDescription>
-                Receba leads automaticamente através de integrações externas
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* URL do Webhook */}
-              <div className="space-y-3">
-                <Label className="text-base font-semibold">URL do Webhook</Label>
-                <div className="flex gap-2">
-                  <Input
-                    value={`https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/webhook-leads?account_id=${accountId}`}
-                    readOnly
-                    className="font-mono text-sm"
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => {
-                      navigator.clipboard.writeText(
-                        `https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/webhook-leads?account_id=${accountId}`
-                      );
-                      setCopiedUrl(true);
-                      setTimeout(() => setCopiedUrl(false), 2000);
-                      toast({
-                        title: "Copiado!",
-                        description: "URL do webhook copiada para a área de transferência",
-                      });
-                    }}
-                  >
-                    {copiedUrl ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </div>
-
-              {/* Método e Headers */}
-              <div className="space-y-3">
-                <Label className="text-base font-semibold">Método HTTP</Label>
-                <Badge variant="secondary" className="font-mono">POST</Badge>
-              </div>
-
-              {/* Exemplo de Payload */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-base font-semibold">Exemplo de Payload (JSON)</Label>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      const payload = JSON.stringify({
-                        name: "João Silva",
-                        phone: "11999999999",
-                        email: "joao@email.com",
-                        interesse: "Apartamento 3 quartos",
-                        origem: "Site",
-                        campanha: "Campanha Verão",
-                        anuncio: "Anúncio Principal",
-                        property_id: "uuid-do-imovel (opcional)"
-                      }, null, 2);
-                      navigator.clipboard.writeText(payload);
-                      setCopiedPayload(true);
-                      setTimeout(() => setCopiedPayload(false), 2000);
-                      toast({
-                        title: "Copiado!",
-                        description: "Exemplo de payload copiado",
-                      });
-                    }}
-                  >
-                    {copiedPayload ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
-                    Copiar
-                  </Button>
-                </div>
-                <pre className="bg-muted p-4 rounded-lg text-sm font-mono overflow-x-auto">
-{`{
-  "name": "João Silva",
-  "phone": "11999999999",
-  "email": "joao@email.com",
-  "interesse": "Apartamento 3 quartos",
-  "origem": "Site",
-  "campanha": "Campanha Verão",
-  "anuncio": "Anúncio Principal",
-  "property_id": "uuid-do-imovel (opcional)"
-}`}
-                </pre>
-              </div>
-
-              {/* Campos Obrigatórios */}
-              <div className="space-y-3">
-                <Label className="text-base font-semibold">Campos Obrigatórios</Label>
-                <div className="flex flex-wrap gap-2">
-                  <Badge>name</Badge>
-                  <Badge>phone</Badge>
-                </div>
-              </div>
-
-              {/* Lista de Imóveis */}
-              {properties.length > 0 && (
-                <div className="space-y-3">
-                  <Label className="text-base font-semibold">IDs dos Imóveis Disponíveis</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Use o campo <code className="bg-muted px-1 rounded">property_id</code> para vincular o lead a um imóvel específico
-                  </p>
-                  <div className="max-h-48 overflow-y-auto border rounded-lg">
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted sticky top-0">
-                        <tr>
-                          <th className="text-left p-2">Imóvel</th>
-                          <th className="text-left p-2">ID</th>
-                          <th className="w-10 p-2"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {properties.map(property => (
-                          <tr key={property.id} className="border-t">
-                            <td className="p-2">
-                              <div className="font-medium">{property.title}</div>
-                              <div className="text-xs text-muted-foreground">{property.type} • {property.city}</div>
-                            </td>
-                            <td className="p-2 font-mono text-xs">{property.id.slice(0, 8)}...</td>
-                            <td className="p-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 w-6 p-0"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(property.id);
-                                  setCopiedPropertyId(property.id);
-                                  setTimeout(() => setCopiedPropertyId(null), 2000);
-                                  toast({
-                                    title: "ID copiado!",
-                                    description: `ID do imóvel "${property.title}" copiado`,
-                                  });
-                                }}
-                              >
-                                {copiedPropertyId === property.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Teste */}
-              <div className="space-y-3 pt-4 border-t">
-                <Label className="text-base font-semibold">Testar Webhook</Label>
-                <p className="text-sm text-muted-foreground">
-                  Clique no botão abaixo para enviar um lead de teste
-                </p>
-                <Button
-                  variant="outline"
-                  disabled={testingWebhook}
-                  onClick={async () => {
-                    setTestingWebhook(true);
-                    try {
-                      const response = await fetch(
-                        `https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/webhook-leads?account_id=${accountId}`,
-                        {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            name: "Lead de Teste",
-                            phone: "11999999999",
-                            email: "teste@webhook.com",
-                            interesse: "Teste de integração",
-                            origem: "Webhook Test"
-                          })
-                        }
-                      );
-                      
-                      if (response.ok) {
-                        toast({
-                          title: "✅ Teste enviado!",
-                          description: "Lead de teste criado com sucesso. Verifique na página de Leads.",
-                        });
-                      } else {
-                        throw new Error('Falha no teste');
-                      }
-                    } catch (error) {
-                      toast({
-                        variant: "destructive",
-                        title: "Erro no teste",
-                        description: "Não foi possível enviar o lead de teste",
-                      });
-                    } finally {
-                      setTestingWebhook(false);
-                    }
-                  }}
-                >
-                  {testingWebhook ? "Enviando..." : "Enviar Lead de Teste"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        );
-
-      case 'olx':
-        return <OlxIntegrationSettings accountId={accountId} />;
 
       case 'qualification':
         return <MetaFormScoringManager />;
@@ -997,11 +737,9 @@ const SettingsPage = () => {
       case 'whitelabel':
         return <WhiteLabelSettings />;
 
-      case 'whatsapp-integration':
-        return <WhatsAppIntegrationSettings />;
-
       case 'import':
         return <DataImporter />;
+
 
       default:
         return null;
