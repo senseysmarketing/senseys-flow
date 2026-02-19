@@ -1,43 +1,61 @@
 
-## Ajuste Visual das Variáveis de Formulário Meta no Modal de Templates
+## Correção: Verificação de Origem OLX na Saudação Automática
 
-### Problema
+### Causa Raiz do Bug
 
-As variáveis de formulário Meta (ex: `{form_qual_valor_você_considera_investir_no_imóvel?}`) são muito longas para caber em um grid de 2 colunas ou numa linha de `flex-wrap`. O resultado é o que aparece no print: badges sobrepostos, cortados e ilegíveis.
+O `olx-webhook` normaliza o payload e encaminha para `webhook-leads` via HTTP interno. Dentro do `webhook-leads`, na hora de verificar se deve ou não disparar a saudação do WhatsApp (linhas 641-663), o código verifica apenas a chave `webhook` do `trigger_sources`:
+
+```typescript
+const webhookEnabled = sources.webhook !== false
+if (automationRule.template_id && webhookEnabled) { ... }
+```
+
+O problema: o lead vindo do OLX tem `origem: 'Grupo OLX'` no banco, mas o `webhook-leads` não sabe que foi o OLX quem originou a chamada — ele só vê que veio por uma chamada HTTP e verifica a chave `webhook`. A chave `olx` nunca é verificada.
 
 ### Solução
 
-Dois locais no arquivo `src/components/whatsapp/WhatsAppTemplatesModal.tsx` precisam ser ajustados:
+Duas mudanças coordenadas:
 
-**1. List View — seção "Variáveis Disponíveis" (linhas 448-459)**
+**1. `supabase/functions/olx-webhook/index.ts`**
 
-Trocar `grid grid-cols-2` (que quebra com nomes longos) por `grid grid-cols-1`, onde cada variável Meta ocupa uma linha inteira. O Badge com o código fica à esquerda e o label à direita, com `truncate` no label para não exceder o espaço:
+Adicionar um campo `_source: 'olx'` ao payload que é encaminhado para `webhook-leads`, sinalizando a origem real:
 
-```
-Antes: grid grid-cols-2 → dois por linha → overflow e sobreposição
-Depois: grid grid-cols-1 → um por linha → limpo e legível
-```
-
-**2. Form View — editor de template (linhas 324-337)**
-
-No painel de inserção de variáveis do editor, os badges de formulário ficam em `flex flex-wrap gap-2`, o que também causa sobreposição. Trocar para uma lista vertical (`flex flex-col gap-1`) com cada item mostrando o código e o label lado a lado.
-
-### Resultado Visual Esperado
-
-```
-Mostrar mais variáveis (4 de formulário Meta)  ▼
-┌─────────────────────────────────────────────────────┐
-│ {form_qual_valor_você...}   Qual valor considera... │
-│ {form_para_entendermos...}  Para entendermos...     │
-│ {form_qual_seu_momento...}  Qual seu momento...     │
-│ {form_qual_o_valor_max...}  Qual o valor máximo...  │
-└─────────────────────────────────────────────────────┘
+```typescript
+body: JSON.stringify({
+  ...normalizedPayload,
+  _source: 'olx',   // ← novo campo sinalizador
+}),
 ```
 
-### Arquivo Modificado
+**2. `supabase/functions/webhook-leads/index.ts`**
 
-**`src/components/whatsapp/WhatsAppTemplatesModal.tsx`** — dois blocos:
+Na seção de verificação de `trigger_sources` (linhas 640-663), detectar se a chamada veio do OLX via `body._source === 'olx'` e verificar a chave `olx` em vez de `webhook`:
 
-1. **Linhas 448-459** (list view, variáveis expandidas): trocar `grid grid-cols-2 gap-x-4 gap-y-1` por `flex flex-col gap-1.5` e deixar o Badge com `max-w-full` e `truncate` para não vazar.
+```typescript
+// Determinar a origem real da chamada
+const callSource = body._source === 'olx' ? 'olx' : 'webhook'
 
-2. **Linhas 324-337** (form view, editor): trocar `flex flex-wrap gap-2` por `flex flex-col gap-1.5`, exibindo cada variável de formulário como uma linha com badge + label.
+const sources = automationRule.trigger_sources || { webhook: true }
+const sourceEnabled = typeof sources === 'object' && sources !== null
+  ? (sources as Record<string, boolean>)[callSource] !== false
+  : true
+
+if (automationRule.template_id && sourceEnabled) { ... }
+```
+
+### O Mesmo Bug Existe nas Regras Condicionais?
+
+Sim, parcialmente. Nas regras condicionais com `condition_type: 'origin'`, a comparação já usa `leadData.origem` que para o OLX é `'Grupo OLX'` — isso funciona corretamente. O bug existe apenas no fallback para a regra padrão de automação.
+
+### Arquivos a Modificar
+
+1. **`supabase/functions/olx-webhook/index.ts`** — linha 181: adicionar `_source: 'olx'` ao payload encaminhado.
+
+2. **`supabase/functions/webhook-leads/index.ts`** — linhas 650-663: trocar verificação de `webhookEnabled` para verificar a chave correta com base em `body._source`.
+
+### Impacto
+
+- Se OLX desmarcado → saudação não é enviada para leads do OLX ✓
+- Se OLX marcado → saudação é enviada normalmente ✓
+- Leads de webhook padrão → comportamento inalterado ✓
+- Regras condicionais → inalteradas ✓
