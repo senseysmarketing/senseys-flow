@@ -1,115 +1,43 @@
 
-## Variáveis de Formulário Meta nos Templates + Condição por Resposta de Formulário nas Regras
+## Ajuste Visual das Variáveis de Formulário Meta no Modal de Templates
 
-### Contexto e Objetivo
+### Problema
 
-O usuário quer duas melhorias relacionadas:
+As variáveis de formulário Meta (ex: `{form_qual_valor_você_considera_investir_no_imóvel?}`) são muito longas para caber em um grid de 2 colunas ou numa linha de `flex-wrap`. O resultado é o que aparece no print: badges sobrepostos, cortados e ilegíveis.
 
-1. **No modal "Gerenciar Templates"**: Adicionar um botão "Mostrar mais variáveis" que, ao clicar, busca e exibe as perguntas dos formulários Meta cadastrados (ex: `{resposta_quando_pretende_comprar}`) — apenas se existirem.
+### Solução
 
-2. **Nas Regras Condicionais de Saudação**: Adicionar um novo tipo de condição "Resposta de Formulário Meta", onde o usuário seleciona uma pergunta e define qual resposta deve acionar aquela regra.
+Dois locais no arquivo `src/components/whatsapp/WhatsAppTemplatesModal.tsx` precisam ser ajustados:
 
----
+**1. List View — seção "Variáveis Disponíveis" (linhas 448-459)**
 
-### Parte 1 — Variáveis Dinâmicas de Formulários Meta nos Templates
+Trocar `grid grid-cols-2` (que quebra com nomes longos) por `grid grid-cols-1`, onde cada variável Meta ocupa uma linha inteira. O Badge com o código fica à esquerda e o label à direita, com `truncate` no label para não exceder o espaço:
 
-#### Como funciona
-
-A tabela `meta_form_scoring_rules` já contém todas as perguntas configuradas (`question_name`, `question_label`) da conta. Essas perguntas podem virar variáveis de template no formato `{form_pergunta}`.
-
-**Exemplo**: A pergunta `quando_pretende_comprar?` vira a variável `{form_quando_pretende_comprar}`.
-
-Durante o envio da mensagem (edge function `process-whatsapp-queue`), a variável seria substituída pelo valor real da resposta que o lead deu naquele formulário (tabela `lead_form_field_values`).
-
-#### Mudanças no `WhatsAppTemplatesModal.tsx`
-
-- Buscar perguntas distintas de `meta_form_scoring_rules` da conta (agrupadas por `question_name` e `question_label`).
-- Adicionar estado `showMoreVars: boolean` e `formVars: { code, label }[]`.
-- Na seção "Variáveis Disponíveis" da list view: adicionar botão "Mostrar mais variáveis" que só aparece se `formVars.length > 0`. Ao clicar, expande um grid com as variáveis de formulário.
-- Na form view (editor de template): as variáveis de formulário também aparecem (colapsadas por padrão) para inserção via clique.
-
-#### Mudanças na Edge Function `process-whatsapp-queue`
-
-Ao processar o template antes do envio, após substituir as variáveis padrão (`{nome}`, `{email}`, etc.), identificar variáveis com prefixo `{form_*}`, buscar o valor correspondente em `lead_form_field_values` para o lead e substituir.
-
----
-
-### Parte 2 — Novo Tipo de Condição: Resposta de Formulário Meta
-
-#### Necessidade de migração DB
-
-A tabela `whatsapp_greeting_rules` precisa de duas novas colunas:
-- `condition_form_question TEXT` — nome da pergunta (ex: `quando_pretende_comprar?`)
-- `condition_form_answer TEXT` — valor esperado da resposta (ex: `Imediatamente (até 30 dias)`)
-
-#### Mudanças no `GreetingRuleModal.tsx`
-
-Adicionar novo tipo de condição: **🗂️ Resposta de Formulário Meta**.
-
-Quando selecionado:
-1. Primeiro select: lista as perguntas distintas disponíveis na conta (de `meta_form_scoring_rules`).
-2. Segundo select: ao escolher a pergunta, lista os valores de resposta já conhecidos para aquela pergunta (também de `meta_form_scoring_rules`).
-
-O usuário seleciona pergunta + resposta, e qualquer lead cujo formulário contenha aquela resposta receberá essa saudação personalizada.
-
-#### Mudanças na Edge Function `notify-new-lead`
-
-Ao avaliar as regras condicionais:
-- Para regras com `condition_type = 'form_answer'`:
-  - Buscar `lead_form_field_values` do lead para encontrar a resposta à pergunta `condition_form_question`.
-  - Normalizar a resposta (lowercase, remove interrogações, substitui underscores por espaços — seguindo o padrão já existente).
-  - Comparar com `condition_form_answer` normalizado.
-  - Se houver match → usar esse template.
-
----
-
-### Resumo dos Arquivos a Modificar
-
-1. **`supabase/migrations/nova_migration.sql`** — Adicionar colunas `condition_form_question` e `condition_form_answer` na tabela `whatsapp_greeting_rules`.
-
-2. **`src/components/whatsapp/WhatsAppTemplatesModal.tsx`**:
-   - Buscar perguntas de formulários Meta da conta.
-   - Mostrar botão "Mostrar mais variáveis" (só se existirem perguntas).
-   - Expandir variáveis dinâmicas de formulário ao clicar.
-   - Disponibilizar essas variáveis para inserção no editor de template.
-
-3. **`src/components/whatsapp/GreetingRuleModal.tsx`**:
-   - Adicionar novo `condition_type = 'form_answer'` ao enum `CONDITION_TYPES`.
-   - Adicionar campos `condition_form_question` e `condition_form_answer` ao estado do formulário.
-   - Buscar perguntas da conta em `meta_form_scoring_rules`.
-   - Renderizar dois selects em cascata (pergunta → resposta) quando `form_answer` for selecionado.
-   - Incluir as novas colunas no payload de save.
-
-4. **`supabase/functions/notify-new-lead/index.ts`** — Adicionar avaliação de `condition_type = 'form_answer'` usando `lead_form_field_values`.
-
-5. **`supabase/functions/process-whatsapp-queue/index.ts`** — Adicionar substituição de variáveis `{form_*}` buscando os dados de `lead_form_field_values` do lead.
-
-6. **`src/integrations/supabase/types.ts`** — Atualizar o tipo da tabela `whatsapp_greeting_rules` com as novas colunas.
-
----
-
-### Fluxo Completo (exemplo real)
-
-```text
-Lead chega via Meta Ads, respondeu:
-  "Quando pretende comprar?" → "Imediatamente (até 30 dias)"
-
-Sistema avalia regras condicionais por prioridade:
-  Regra 1: condition_type = 'form_answer'
-           condition_form_question = 'quando_pretende_comprar?'
-           condition_form_answer   = 'imediatamente (até 30 dias)'
-           template_id = "Saudação Urgente"  ✓ MATCH
-
-  → Envia: "Olá {nome}! Vi que você quer comprar imediatamente, 
-             vou te ligar em breve para conversarmos!"
+```
+Antes: grid grid-cols-2 → dois por linha → overflow e sobreposição
+Depois: grid grid-cols-1 → um por linha → limpo e legível
 ```
 
-```text
-Template com variável de formulário:
-  "Olá {nome}! Sua resposta foi: {form_quando_pretende_comprar?}. 
-   Vou entrar em contato para explicar nossas condições!"
+**2. Form View — editor de template (linhas 324-337)**
 
-Enviado ao lead que respondeu "Até 3 meses":
-  "Olá João! Sua resposta foi: Até 3 meses. 
-   Vou entrar em contato para explicar nossas condições!"
+No painel de inserção de variáveis do editor, os badges de formulário ficam em `flex flex-wrap gap-2`, o que também causa sobreposição. Trocar para uma lista vertical (`flex flex-col gap-1`) com cada item mostrando o código e o label lado a lado.
+
+### Resultado Visual Esperado
+
 ```
+Mostrar mais variáveis (4 de formulário Meta)  ▼
+┌─────────────────────────────────────────────────────┐
+│ {form_qual_valor_você...}   Qual valor considera... │
+│ {form_para_entendermos...}  Para entendermos...     │
+│ {form_qual_seu_momento...}  Qual seu momento...     │
+│ {form_qual_o_valor_max...}  Qual o valor máximo...  │
+└─────────────────────────────────────────────────────┘
+```
+
+### Arquivo Modificado
+
+**`src/components/whatsapp/WhatsAppTemplatesModal.tsx`** — dois blocos:
+
+1. **Linhas 448-459** (list view, variáveis expandidas): trocar `grid grid-cols-2 gap-x-4 gap-y-1` por `flex flex-col gap-1.5` e deixar o Badge com `max-w-full` e `truncate` para não vazar.
+
+2. **Linhas 324-337** (form view, editor): trocar `flex flex-wrap gap-2` por `flex flex-col gap-1.5`, exibindo cada variável de formulário como uma linha com badge + label.
