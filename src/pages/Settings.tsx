@@ -27,6 +27,7 @@ import MetaEventMappingManager from "@/components/MetaEventMappingManager";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import DataImporter from "@/components/DataImporter";
 import { WhatsAppIntegrationSettings } from "@/components/whatsapp/WhatsAppIntegrationSettings";
+import { OlxIntegrationSettings } from "@/components/OlxIntegrationSettings";
 
 interface Profile {
   id: string;
@@ -58,7 +59,7 @@ interface Property {
   city: string | null;
 }
 
-type TabValue = 'profile' | 'team' | 'notifications' | 'statuses' | 'whatsapp' | 'followup' | 'distribution' | 'webhook' | 'whatsapp-integration' | 'qualification' | 'metacapi' | 'permissions' | 'whitelabel' | 'import';
+type TabValue = 'profile' | 'team' | 'notifications' | 'statuses' | 'whatsapp' | 'followup' | 'distribution' | 'webhook' | 'olx' | 'whatsapp-integration' | 'qualification' | 'metacapi' | 'permissions' | 'whitelabel' | 'import';
 
 interface NavItem {
   value: TabValue;
@@ -74,7 +75,7 @@ const SettingsPage = () => {
   const [searchParams] = useSearchParams();
   const initialTab = useMemo(() => {
     const param = searchParams.get('tab');
-    const validTabs: TabValue[] = ['profile','team','notifications','statuses','whatsapp','followup','distribution','webhook','whatsapp-integration','qualification','metacapi','permissions','whitelabel','import'];
+    const validTabs: TabValue[] = ['profile','team','notifications','statuses','whatsapp','followup','distribution','webhook','olx','whatsapp-integration','qualification','metacapi','permissions','whitelabel','import'];
     return validTabs.includes(param as TabValue) ? (param as TabValue) : 'profile';
   }, []);
   const [activeTab, setActiveTab] = useState<TabValue>(initialTab);
@@ -111,6 +112,7 @@ const SettingsPage = () => {
     { value: 'team', label: 'Equipe', icon: <Users className="h-4 w-4" /> },
     { value: 'notifications', label: 'Notificações', icon: <Bell className="h-4 w-4" /> },
     { value: 'webhook', label: 'Webhook', icon: <Webhook className="h-4 w-4" /> },
+    { value: 'olx', label: 'Grupo OLX', icon: <Building2 className="h-4 w-4" /> },
     { value: 'whatsapp-integration', label: 'WhatsApp', icon: <MessageCircle className="h-4 w-4" /> },
     { value: 'permissions', label: 'Permissões', icon: <Shield className="h-4 w-4" />, permission: 'settings.manage' },
     { value: 'whitelabel', label: 'White Label', icon: <Building2 className="h-4 w-4" /> },
@@ -979,6 +981,9 @@ const SettingsPage = () => {
             </CardContent>
           </Card>
         );
+
+      case 'olx':
+        return <OlxIntegrationSettings accountId={accountId} />;
 
       case 'qualification':
         return <MetaFormScoringManager />;
