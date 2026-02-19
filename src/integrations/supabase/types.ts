@@ -1642,6 +1642,88 @@ export type Database = {
           },
         ]
       }
+      whatsapp_greeting_rules: {
+        Row: {
+          account_id: string
+          condition_campaign: string | null
+          condition_origin: string | null
+          condition_price_max: number | null
+          condition_price_min: number | null
+          condition_property_id: string | null
+          condition_property_type: string | null
+          condition_transaction_type: string | null
+          condition_type: string
+          created_at: string | null
+          delay_seconds: number | null
+          id: string
+          is_active: boolean | null
+          name: string
+          priority: number
+          template_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          account_id: string
+          condition_campaign?: string | null
+          condition_origin?: string | null
+          condition_price_max?: number | null
+          condition_price_min?: number | null
+          condition_property_id?: string | null
+          condition_property_type?: string | null
+          condition_transaction_type?: string | null
+          condition_type: string
+          created_at?: string | null
+          delay_seconds?: number | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          priority?: number
+          template_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          account_id?: string
+          condition_campaign?: string | null
+          condition_origin?: string | null
+          condition_price_max?: number | null
+          condition_price_min?: number | null
+          condition_property_id?: string | null
+          condition_property_type?: string | null
+          condition_transaction_type?: string | null
+          condition_type?: string
+          created_at?: string | null
+          delay_seconds?: number | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          priority?: number
+          template_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_greeting_rules_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_greeting_rules_condition_property_id_fkey"
+            columns: ["condition_property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_greeting_rules_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_message_log: {
         Row: {
           account_id: string | null

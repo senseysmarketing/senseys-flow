@@ -7,12 +7,13 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { MessageCircle, Wifi, WifiOff, QrCode, RefreshCw, Loader2, Clock, Zap, AlertCircle, Settings2, Plus, Trash2, RotateCcw } from 'lucide-react';
+import { MessageCircle, Wifi, WifiOff, QrCode, RefreshCw, Loader2, Clock, Zap, AlertCircle, Settings2, Plus, Trash2, RotateCcw, GitBranch, Edit2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from '@/hooks/use-toast';
 import { WhatsAppTemplatesModal } from './WhatsAppTemplatesModal';
+import { GreetingRuleModal } from './GreetingRuleModal';
 
 interface WhatsAppSession {
   id: string;
@@ -33,6 +34,7 @@ interface TriggerSources {
   manual?: boolean;
   meta?: boolean;
   webhook?: boolean;
+  olx?: boolean;
 }
 
 interface AutomationRule {
@@ -55,6 +57,23 @@ interface FollowUpStep {
   is_active: boolean;
 }
 
+interface GreetingRule {
+  id: string;
+  name: string;
+  priority: number;
+  is_active: boolean;
+  template_id: string | null;
+  delay_seconds: number;
+  condition_type: string;
+  condition_property_id: string | null;
+  condition_price_min: number | null;
+  condition_price_max: number | null;
+  condition_property_type: string | null;
+  condition_transaction_type: string | null;
+  condition_campaign: string | null;
+  condition_origin: string | null;
+}
+
 const DELAY_OPTIONS = [
   { value: 60, label: '1 hora' },
   { value: 120, label: '2 horas' },
@@ -65,11 +84,39 @@ const DELAY_OPTIONS = [
   { value: 4320, label: '72 horas' },
 ];
 
+const CONDITION_TYPE_LABELS: Record<string, string> = {
+  property: '🏠 Imóvel específico',
+  price_range: '💰 Faixa de valor',
+  property_type: '🏗️ Tipo de imóvel',
+  transaction_type: '🔑 Tipo de transação',
+  campaign: '📣 Campanha',
+  origin: '📍 Origem',
+};
+
+const formatConditionSummary = (rule: GreetingRule): string => {
+  switch (rule.condition_type) {
+    case 'price_range': {
+      const min = rule.condition_price_min ? `R$${(rule.condition_price_min/1000).toFixed(0)}k` : '';
+      const max = rule.condition_price_max ? `R$${(rule.condition_price_max/1000).toFixed(0)}k` : '';
+      return min && max ? `${min} – ${max}` : min || max || '';
+    }
+    case 'property_type': return rule.condition_property_type || '';
+    case 'transaction_type': return rule.condition_transaction_type === 'sale' ? 'Venda' : rule.condition_transaction_type === 'rent' ? 'Aluguel' : '';
+    case 'campaign': return rule.condition_campaign || '';
+    case 'origin': {
+      const labels: Record<string, string> = { manual: 'Manual', meta: 'Meta Ads', webhook: 'Webhook', olx: 'Grupo OLX' };
+      return labels[rule.condition_origin || ''] || rule.condition_origin || '';
+    }
+    default: return '';
+  }
+};
+
 export function WhatsAppIntegrationSettings() {
   const { user } = useAuth();
   const [session, setSession] = useState<WhatsAppSession | null>(null);
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
   const [automationRules, setAutomationRules] = useState<AutomationRule[]>([]);
+  const [greetingRules, setGreetingRules] = useState<GreetingRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
@@ -80,6 +127,8 @@ export function WhatsAppIntegrationSettings() {
   const [pendingAutoCreate, setPendingAutoCreate] = useState(false);
   const [followUpSteps, setFollowUpSteps] = useState<FollowUpStep[]>([]);
   const [reconfiguring, setReconfiguring] = useState(false);
+  const [showGreetingRuleModal, setShowGreetingRuleModal] = useState(false);
+  const [editingRule, setEditingRule] = useState<GreetingRule | null>(null);
 
   const fetchSession = useCallback(async () => {
     if (!user) return;
@@ -92,14 +141,11 @@ export function WhatsAppIntegrationSettings() {
     if (!error && data) {
       setSession(data);
       
-      // Sempre verificar status real na Evolution API quando mostrar como conectado
       if (data.status === 'connected') {
         try {
           const response = await supabase.functions.invoke('whatsapp-connect?action=status');
           
-          // Handle auth errors gracefully - try session refresh
           if (response.error) {
-            console.log('Error checking WhatsApp status, trying session refresh:', response.error);
             const { error: refreshError } = await supabase.auth.refreshSession();
             if (!refreshError) {
               const retryResponse = await supabase.functions.invoke('whatsapp-connect?action=status');
@@ -111,23 +157,14 @@ export function WhatsAppIntegrationSettings() {
                 }
               }
             } else {
-              toast({
-                variant: 'destructive',
-                title: 'Sessão expirada',
-                description: 'Faça login novamente para gerenciar o WhatsApp.',
-              });
+              toast({ variant: 'destructive', title: 'Sessão expirada', description: 'Faça login novamente para gerenciar o WhatsApp.' });
             }
             return;
           }
           
-          // Se API diz desconectado mas banco dizia conectado, atualizar UI e alertar
           if (response.data && !response.data.connected) {
             setSession(prev => prev ? { ...prev, status: 'disconnected', connected_at: null } : null);
-            toast({
-              variant: 'destructive',
-              title: 'WhatsApp Desconectado',
-              description: 'A conexão com o WhatsApp foi perdida. Reconecte para continuar enviando mensagens.',
-            });
+            toast({ variant: 'destructive', title: 'WhatsApp Desconectado', description: 'A conexão com o WhatsApp foi perdida. Reconecte para continuar enviando mensagens.' });
           } else if (response.data?.phoneNumber && !data.phone_number) {
             setSession(prev => prev ? { ...prev, phone_number: response.data.phoneNumber } : null);
           }
@@ -146,7 +183,6 @@ export function WhatsAppIntegrationSettings() {
       .select('id, name, template')
       .eq('is_active', true)
       .order('position');
-    
     setTemplates(data || []);
   }, []);
 
@@ -162,87 +198,71 @@ export function WhatsAppIntegrationSettings() {
     })));
   }, []);
 
+  const fetchGreetingRules = useCallback(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase.from('whatsapp_greeting_rules' as any) as any)
+      .select('*')
+      .order('priority', { ascending: true });
+    setGreetingRules((data || []) as GreetingRule[]);
+  }, []);
+
   const fetchFollowUpSteps = useCallback(async () => {
-    const { data } = await supabase
-      .from('whatsapp_followup_steps' as any)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase.from('whatsapp_followup_steps' as any) as any)
       .select('*')
       .order('position');
-    
-    setFollowUpSteps((data || []) as unknown as FollowUpStep[]);
+    setFollowUpSteps((data || []) as FollowUpStep[]);
   }, []);
 
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      await Promise.all([fetchSession(), fetchTemplates(), fetchAutomationRules(), fetchFollowUpSteps()]);
+      await Promise.all([fetchSession(), fetchTemplates(), fetchAutomationRules(), fetchGreetingRules(), fetchFollowUpSteps()]);
       setLoading(false);
     };
 
     if (user) {
       loadData();
     }
-  }, [user, fetchSession, fetchTemplates, fetchAutomationRules, fetchFollowUpSteps]);
+  }, [user, fetchSession, fetchTemplates, fetchAutomationRules, fetchGreetingRules, fetchFollowUpSteps]);
 
-  // Poll for status updates when connecting
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
     
     if (pollingActive && showQRModal) {
       interval = setInterval(async () => {
         const response = await supabase.functions.invoke('whatsapp-connect?action=status');
-        
-        if (response.error) {
-          console.log('Polling error:', response.error);
-          return;
-        }
+        if (response.error) return;
         
         if (response.data?.connected || response.data?.status === 'connected') {
           setPollingActive(false);
           setShowQRModal(false);
           fetchSession();
-          toast({
-            title: 'WhatsApp Conectado!',
-            description: 'Seu WhatsApp foi conectado com sucesso.',
-          });
+          toast({ title: 'WhatsApp Conectado!', description: 'Seu WhatsApp foi conectado com sucesso.' });
         }
       }, 3000);
     }
 
-    return () => {
-      if (interval) clearInterval(interval);
-    };
+    return () => { if (interval) clearInterval(interval); };
   }, [pollingActive, showQRModal, fetchSession]);
 
   const handleConnect = async () => {
     setConnecting(true);
     try {
-      // Create instance
       const createResponse = await supabase.functions.invoke('whatsapp-connect?action=create-instance');
-      
-      if (createResponse.error) {
-        throw new Error(createResponse.error.message);
-      }
+      if (createResponse.error) throw new Error(createResponse.error.message);
 
       if (createResponse.data?.status === 'connected') {
-        toast({
-          title: 'Já Conectado',
-          description: 'Seu WhatsApp já está conectado.',
-        });
+        toast({ title: 'Já Conectado', description: 'Seu WhatsApp já está conectado.' });
         fetchSession();
         return;
       }
 
-      // Get QR code
       setShowQRModal(true);
       await refreshQRCode();
       setPollingActive(true);
     } catch (error: any) {
-      console.error('Error connecting:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Erro',
-        description: error.message || 'Não foi possível conectar ao WhatsApp.',
-      });
+      toast({ variant: 'destructive', title: 'Erro', description: error.message || 'Não foi possível conectar ao WhatsApp.' });
     } finally {
       setConnecting(false);
     }
@@ -259,24 +279,12 @@ export function WhatsAppIntegrationSettings() {
         setShowQRModal(false);
         setPollingActive(false);
         fetchSession();
-        toast({
-          title: 'WhatsApp Conectado!',
-          description: 'Seu WhatsApp foi conectado com sucesso.',
-        });
+        toast({ title: 'WhatsApp Conectado!', description: 'Seu WhatsApp foi conectado com sucesso.' });
       } else {
-        toast({
-          variant: 'destructive',
-          title: 'Erro',
-          description: 'Não foi possível gerar o QR Code. Tente novamente.',
-        });
+        toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível gerar o QR Code. Tente novamente.' });
       }
     } catch (error: any) {
-      console.error('Error getting QR code:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Erro',
-        description: 'Não foi possível gerar o QR Code.',
-      });
+      toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível gerar o QR Code.' });
     } finally {
       setQrLoading(false);
     }
@@ -286,38 +294,16 @@ export function WhatsAppIntegrationSettings() {
     try {
       await supabase.functions.invoke('whatsapp-connect?action=disconnect');
       setSession(null);
-      toast({
-        title: 'Desconectado',
-        description: 'WhatsApp desconectado com sucesso.',
-      });
+      toast({ title: 'Desconectado', description: 'WhatsApp desconectado com sucesso.' });
     } catch (error: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro',
-        description: 'Não foi possível desconectar.',
-      });
+      toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível desconectar.' });
     }
   };
 
   const handleAutomationToggle = async (ruleId: string, isActive: boolean) => {
-    try {
-      await supabase
-        .from('whatsapp_automation_rules')
-        .update({ is_active: isActive })
-        .eq('id', ruleId);
-      
-      fetchAutomationRules();
-      toast({
-        title: 'Atualizado',
-        description: `Automação ${isActive ? 'ativada' : 'desativada'}.`,
-      });
-    } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro',
-        description: 'Não foi possível atualizar a automação.',
-      });
-    }
+    await supabase.from('whatsapp_automation_rules').update({ is_active: isActive }).eq('id', ruleId);
+    fetchAutomationRules();
+    toast({ title: 'Atualizado', description: `Automação ${isActive ? 'ativada' : 'desativada'}.` });
   };
 
   const createNewLeadRule = async (overrideTemplates?: WhatsAppTemplate[]) => {
@@ -330,7 +316,6 @@ export function WhatsAppIntegrationSettings() {
 
     try {
       const { data: accountData } = await supabase.rpc('get_user_account_id');
-      
       await supabase.from('whatsapp_automation_rules').insert({
         account_id: accountData,
         name: 'Saudação para Novos Leads',
@@ -339,70 +324,77 @@ export function WhatsAppIntegrationSettings() {
         is_active: true,
         delay_seconds: 0,
       });
-
       fetchAutomationRules();
-      toast({
-        title: 'Automação Criada',
-        description: 'Regra de saudação automática criada com sucesso.',
-      });
+      toast({ title: 'Automação Criada', description: 'Regra de saudação automática criada com sucesso.' });
     } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro',
-        description: 'Não foi possível criar a automação.',
-      });
+      toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível criar a automação.' });
     }
   };
 
   const updateRuleTemplate = async (ruleId: string, templateId: string) => {
-    try {
-      await supabase
-        .from('whatsapp_automation_rules')
-        .update({ template_id: templateId })
-        .eq('id', ruleId);
-      
-      fetchAutomationRules();
-    } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro',
-        description: 'Não foi possível atualizar o template.',
-      });
-    }
+    await supabase.from('whatsapp_automation_rules').update({ template_id: templateId }).eq('id', ruleId);
+    fetchAutomationRules();
   };
 
   const updateRuleDelay = async (ruleId: string, delaySeconds: number) => {
-    try {
-      await supabase
-        .from('whatsapp_automation_rules')
-        .update({ delay_seconds: delaySeconds })
-        .eq('id', ruleId);
-      
-      fetchAutomationRules();
-    } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro',
-        description: 'Não foi possível atualizar o delay.',
-      });
-    }
+    await supabase.from('whatsapp_automation_rules').update({ delay_seconds: delaySeconds }).eq('id', ruleId);
+    fetchAutomationRules();
   };
 
   const updateRuleSources = async (ruleId: string, sources: TriggerSources) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.from('whatsapp_automation_rules') as any).update({ trigger_sources: sources }).eq('id', ruleId);
+    fetchAutomationRules();
+  };
+
+  const toggleGreetingRule = async (ruleId: string, isActive: boolean) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.from('whatsapp_greeting_rules' as any) as any).update({ is_active: isActive }).eq('id', ruleId);
+    fetchGreetingRules();
+  };
+
+  const deleteGreetingRule = async (ruleId: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.from('whatsapp_greeting_rules' as any) as any).delete().eq('id', ruleId);
+    fetchGreetingRules();
+    toast({ title: 'Regra removida' });
+  };
+
+  const handleForceReconfigure = async () => {
+    setReconfiguring(true);
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await supabase
-        .from('whatsapp_automation_rules')
-        .update({ trigger_sources: sources } as any)
-        .eq('id', ruleId);
-      
-      fetchAutomationRules();
-    } catch {
-      toast({
-        variant: 'destructive',
-        title: 'Erro',
-        description: 'Não foi possível atualizar as fontes.',
-      });
+      const { data: profile } = await supabase.from('profiles').select('account_id').single();
+      if (profile?.account_id) {
+        const response = await supabase.functions.invoke(`whatsapp-connect?action=force-reconfigure&account_id=${profile.account_id}`);
+        if (response.data?.success) {
+          toast({ title: 'Webhook reconfigurado!', description: 'As mensagens devem começar a chegar em instantes.' });
+        } else {
+          toast({ variant: 'destructive', title: 'Erro ao reconfigurar', description: response.data?.error || 'Não foi possível reconfigurar o webhook.' });
+        }
+      }
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Erro', description: error.message || 'Falha ao reconfigurar webhook.' });
+    } finally {
+      setReconfiguring(false);
+    }
+  };
+
+  const handleRestartInstance = async () => {
+    setReconfiguring(true);
+    try {
+      const { data: profile } = await supabase.from('profiles').select('account_id').single();
+      if (profile?.account_id) {
+        const response = await supabase.functions.invoke(`whatsapp-connect?action=restart-instance&account_id=${profile.account_id}`);
+        if (response.data?.success) {
+          toast({ title: 'Instância reiniciada!', description: 'O webhook foi reconfigurado. Mensagens devem chegar em instantes.' });
+        } else {
+          toast({ variant: 'destructive', title: 'Erro', description: response.data?.error || 'Falha ao reiniciar instância.' });
+        }
+      }
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Erro', description: error.message || 'Falha ao reiniciar instância.' });
+    } finally {
+      setReconfiguring(false);
     }
   };
 
@@ -414,84 +406,12 @@ export function WhatsAppIntegrationSettings() {
     );
   }
 
-  const handleForceReconfigure = async () => {
-    setReconfiguring(true);
-    try {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('account_id')
-        .single();
-      
-      if (profile?.account_id) {
-        const response = await supabase.functions.invoke(
-          `whatsapp-connect?action=force-reconfigure&account_id=${profile.account_id}`
-        );
-        if (response.data?.success) {
-          toast({
-            title: 'Webhook reconfigurado!',
-            description: 'As mensagens devem começar a chegar em instantes.',
-          });
-        } else {
-          toast({
-            variant: 'destructive',
-            title: 'Erro ao reconfigurar',
-            description: response.data?.error || 'Não foi possível reconfigurar o webhook.',
-          });
-        }
-      }
-    } catch (error: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro',
-        description: error.message || 'Falha ao reconfigurar webhook.',
-      });
-    } finally {
-      setReconfiguring(false);
-    }
-  };
-
-  const handleRestartInstance = async () => {
-    setReconfiguring(true);
-    try {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('account_id')
-        .single();
-      
-      if (profile?.account_id) {
-        const response = await supabase.functions.invoke(
-          `whatsapp-connect?action=restart-instance&account_id=${profile.account_id}`
-        );
-        if (response.data?.success) {
-          toast({
-            title: 'Instância reiniciada!',
-            description: 'O webhook foi reconfigurado. Mensagens devem chegar em instantes.',
-          });
-        } else {
-          toast({
-            variant: 'destructive',
-            title: 'Erro',
-            description: response.data?.error || 'Falha ao reiniciar instância.',
-          });
-        }
-      }
-    } catch (error: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro',
-        description: error.message || 'Falha ao reiniciar instância.',
-      });
-    } finally {
-      setReconfiguring(false);
-    }
-  };
-
   const isConnected = session?.status === 'connected';
   const newLeadRule = automationRules.find(r => r.trigger_type === 'new_lead');
 
   return (
     <div className="space-y-6">
-      {/* Connection Card */}
+      {/* ─── SEÇÃO 1: Conexão ─── */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -502,7 +422,7 @@ export function WhatsAppIntegrationSettings() {
               <div>
                 <CardTitle className="text-lg">Conexão WhatsApp</CardTitle>
                 <CardDescription>
-                  {isConnected 
+                  {isConnected
                     ? 'Seu WhatsApp está conectado e pronto para enviar mensagens'
                     : 'Conecte seu WhatsApp para enviar mensagens diretamente do CRM'}
                 </CardDescription>
@@ -520,89 +440,62 @@ export function WhatsAppIntegrationSettings() {
               <div className="flex flex-col text-sm text-muted-foreground">
                 {session?.phone_number && <span>Número: {session.phone_number}</span>}
                 {session?.connected_at && (
-                  <span>
-                    Conectado desde: {new Date(session.connected_at).toLocaleDateString('pt-BR')}
-                  </span>
+                  <span>Conectado desde: {new Date(session.connected_at).toLocaleDateString('pt-BR')}</span>
                 )}
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={handleForceReconfigure}
-                  disabled={reconfiguring}
-                >
-                  {reconfiguring ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <RotateCcw className="h-4 w-4 mr-2" />
-                  )}
+                <Button variant="outline" size="sm" onClick={handleForceReconfigure} disabled={reconfiguring}>
+                  {reconfiguring ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
                   Reconfigurar Webhook
                 </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={handleRestartInstance}
-                  disabled={reconfiguring}
-                >
-                  {reconfiguring ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                  )}
+                <Button variant="outline" size="sm" onClick={handleRestartInstance} disabled={reconfiguring}>
+                  {reconfiguring ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
                   Reiniciar Instância
                 </Button>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button variant="outline" size="sm">
-                      <WifiOff className="h-4 w-4 mr-2" />
-                      Desconectar
+                      <WifiOff className="h-4 w-4 mr-2" />Desconectar
                     </Button>
                   </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Desconectar WhatsApp?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Ao desconectar, as mensagens automáticas serão pausadas e você precisará escanear o QR Code novamente para reconectar.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDisconnect}>Desconectar</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Desconectar WhatsApp?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Ao desconectar, as mensagens automáticas serão pausadas e você precisará escanear o QR Code novamente para reconectar.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleDisconnect}>Desconectar</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
                 </AlertDialog>
               </div>
             </div>
           ) : (
             <Button onClick={handleConnect} disabled={connecting}>
-              {connecting ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <QrCode className="h-4 w-4 mr-2" />
-              )}
+              {connecting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <QrCode className="h-4 w-4 mr-2" />}
               Conectar WhatsApp
             </Button>
           )}
         </CardContent>
       </Card>
 
-      {/* Automations Card */}
+      {/* ─── SEÇÃO 2: Saudação Automática ─── */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Zap className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <CardTitle className="text-lg">Automações</CardTitle>
-                <CardDescription>Configure mensagens automáticas para seus leads</CardDescription>
-              </div>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <Zap className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <CardTitle className="text-lg">Saudação Automática</CardTitle>
+              <CardDescription>Mensagem enviada imediatamente quando um novo lead chegar</CardDescription>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-5">
           {!isConnected && (
             <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-sm text-amber-600 dark:text-amber-400">
               <AlertCircle className="h-4 w-4" />
@@ -610,275 +503,322 @@ export function WhatsAppIntegrationSettings() {
             </div>
           )}
 
-          {/* New Lead Greeting Rule */}
           {newLeadRule ? (
-            <div className="p-4 border rounded-lg space-y-4">
-              <div className="flex items-center justify-between">
+            <>
+              {/* Toggle global */}
+              <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
                 <div className="flex items-center gap-3">
                   <Switch
                     checked={newLeadRule.is_active}
                     onCheckedChange={(checked) => handleAutomationToggle(newLeadRule.id, checked)}
                     disabled={!isConnected}
                   />
-                  <div>
-                    <Label className="font-medium">Saudação Automática</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Enviar mensagem quando novo lead entrar
-                    </p>
-                  </div>
+                  <Label className="cursor-pointer font-medium">
+                    {newLeadRule.is_active ? 'Saudação ativada' : 'Saudação desativada'}
+                  </Label>
                 </div>
               </div>
 
               {newLeadRule.is_active && (
-                <div className="space-y-4 pl-12">
-                  <div className="grid gap-4 sm:grid-cols-2">
+                <>
+                  {/* Default template + delay */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="h-px flex-1 bg-border" />
+                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-2">Template Padrão (fallback)</span>
+                      <div className="h-px flex-1 bg-border" />
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Template de Mensagem</Label>
+                        <Select value={newLeadRule.template_id || ''} onValueChange={(value) => updateRuleTemplate(newLeadRule.id, value)}>
+                          <SelectTrigger><SelectValue placeholder="Selecione um template" /></SelectTrigger>
+                          <SelectContent>
+                            {templates.map((t) => (
+                              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setShowTemplatesModal(true)}>
+                          <Settings2 className="h-3 w-3 mr-1" />Personalizar Templates
+                        </Button>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Delay de envio</Label>
+                        <Select value={String(newLeadRule.delay_seconds)} onValueChange={(value) => updateRuleDelay(newLeadRule.id, parseInt(value))}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="0">Imediato</SelectItem>
+                            <SelectItem value="30">30 segundos</SelectItem>
+                            <SelectItem value="60">1 minuto</SelectItem>
+                            <SelectItem value="300">5 minutos</SelectItem>
+                            <SelectItem value="600">10 minutos</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Sources */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="h-px flex-1 bg-border" />
+                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-2">Enviar para leads de</span>
+                      <div className="h-px flex-1 bg-border" />
+                    </div>
+                    <div className="flex flex-wrap gap-4">
+                      {[
+                        { key: 'manual', label: 'Cadastro Manual' },
+                        { key: 'meta', label: 'Meta Ads' },
+                        { key: 'webhook', label: 'Webhook' },
+                        { key: 'olx', label: 'Grupo OLX' },
+                      ].map(({ key, label }) => (
+                        <div key={key} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`source-${key}`}
+                            checked={(newLeadRule.trigger_sources as Record<string, boolean> | null)?.[key] !== false}
+                            onCheckedChange={(checked) => updateRuleSources(newLeadRule.id, {
+                              ...newLeadRule.trigger_sources,
+                              [key]: !!checked,
+                            })}
+                          />
+                          <Label htmlFor={`source-${key}`} className="font-normal cursor-pointer">{label}</Label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Conditional Rules */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="h-px flex-1 bg-border" />
+                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-2">Regras Condicionais</span>
+                      <div className="h-px flex-1 bg-border" />
+                    </div>
+
+                    <div className="space-y-2 mb-3">
+                      {greetingRules.length === 0 ? (
+                        <div className="text-center py-4 text-sm text-muted-foreground border border-dashed rounded-lg">
+                          <GitBranch className="h-5 w-5 mx-auto mb-2 opacity-40" />
+                          Nenhuma regra condicional criada.<br />
+                          <span className="text-xs">Quando nenhuma regra casar, o template padrão acima será usado.</span>
+                        </div>
+                      ) : (
+                        greetingRules.map((rule) => {
+                          const templateName = templates.find(t => t.id === rule.template_id)?.name;
+                          const summary = formatConditionSummary(rule);
+                          return (
+                            <div key={rule.id} className="flex items-center gap-2 p-2.5 border rounded-lg bg-muted/20">
+                              <Switch
+                                checked={rule.is_active}
+                                onCheckedChange={(v) => toggleGreetingRule(rule.id, v)}
+                                disabled={!isConnected}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <Badge variant="outline" className="text-xs h-5 px-1.5 font-normal">
+                                    #{rule.priority}
+                                  </Badge>
+                                  <span className="text-xs font-medium text-muted-foreground">
+                                    {CONDITION_TYPE_LABELS[rule.condition_type]}
+                                  </span>
+                                  {summary && (
+                                    <span className="text-xs text-foreground truncate">{summary}</span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground truncate mt-0.5">
+                                  {rule.name} {templateName ? `→ ${templateName}` : ''}
+                                </p>
+                              </div>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => { setEditingRule(rule); setShowGreetingRuleModal(true); }}>
+                                <Edit2 className="h-3.5 w-3.5" />
+                              </Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive">
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Remover regra?</AlertDialogTitle>
+                                    <AlertDialogDescription>Esta regra de saudação será removida permanentemente.</AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => deleteGreetingRule(rule.id)}>Remover</AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => { setEditingRule(null); setShowGreetingRuleModal(true); }}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Adicionar Regra Condicional
+                    </Button>
+
+                    <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      As regras são avaliadas em ordem de prioridade. O template padrão é usado quando nenhuma regra casar.
+                    </p>
+                  </div>
+                </>
+              )}
+            </>
+          ) : (
+            <Button variant="outline" onClick={() => createNewLeadRule()} className="w-full">
+              <Zap className="h-4 w-4 mr-2" />
+              Configurar Saudação Automática
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ─── SEÇÃO 3: Follow-up Automático ─── */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <RotateCcw className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <CardTitle className="text-lg">Follow-up Automático</CardTitle>
+              <CardDescription>Mensagens de acompanhamento para leads que não responderam</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!isConnected && (
+            <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-sm text-amber-600 dark:text-amber-400">
+              <AlertCircle className="h-4 w-4" />
+              Conecte seu WhatsApp para ativar os follow-ups
+            </div>
+          )}
+
+          {!newLeadRule && (
+            <div className="flex items-center gap-2 p-3 bg-muted/50 border border-dashed rounded-lg text-sm text-muted-foreground">
+              <AlertCircle className="h-4 w-4" />
+              Configure a saudação automática antes de ativar o follow-up
+            </div>
+          )}
+
+          <div className="space-y-0">
+            {followUpSteps.map((step, index) => (
+              <div key={step.id} className={`space-y-3 ${index > 0 ? 'border-t pt-3' : ''} ${index < followUpSteps.length - 1 ? 'pb-3' : ''}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Switch
+                      checked={step.is_active}
+                      onCheckedChange={async (checked) => {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        await (supabase.from('whatsapp_followup_steps' as any) as any).update({ is_active: checked }).eq('id', step.id);
+                        fetchFollowUpSteps();
+                      }}
+                      disabled={!isConnected}
+                    />
+                    <Label className="font-medium">Etapa {step.position + 1}</Label>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-destructive hover:text-destructive"
+                    onClick={async () => {
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      await (supabase.from('whatsapp_followup_steps' as any) as any).delete().eq('id', step.id);
+                      fetchFollowUpSteps();
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                {step.is_active && (
+                  <div className="grid gap-4 sm:grid-cols-2 pl-12">
                     <div className="space-y-2">
                       <Label>Template de Mensagem</Label>
                       <Select
-                        value={newLeadRule.template_id || ''}
-                        onValueChange={(value) => updateRuleTemplate(newLeadRule.id, value)}
+                        value={step.template_id}
+                        onValueChange={async (value) => {
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          await (supabase.from('whatsapp_followup_steps' as any) as any).update({ template_id: value }).eq('id', step.id);
+                          fetchFollowUpSteps();
+                        }}
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione um template" />
-                        </SelectTrigger>
+                        <SelectTrigger><SelectValue placeholder="Selecione um template" /></SelectTrigger>
                         <SelectContent>
                           {templates.map((t) => (
                             <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                      <Button
-                        variant="link"
-                        size="sm"
-                        className="h-auto p-0 text-xs"
-                        onClick={() => setShowTemplatesModal(true)}
-                      >
-                        <Settings2 className="h-3 w-3 mr-1" />
-                        Personalizar Templates
+                      <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setShowTemplatesModal(true)}>
+                        <Settings2 className="h-3 w-3 mr-1" />Personalizar Templates
                       </Button>
                     </div>
-
                     <div className="space-y-2">
-                      <Label>Delay</Label>
+                      <Label>Delay após etapa anterior</Label>
                       <Select
-                        value={String(newLeadRule.delay_seconds)}
-                        onValueChange={(value) => updateRuleDelay(newLeadRule.id, parseInt(value))}
+                        value={String(step.delay_minutes)}
+                        onValueChange={async (value) => {
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          await (supabase.from('whatsapp_followup_steps' as any) as any).update({ delay_minutes: parseInt(value) }).eq('id', step.id);
+                          fetchFollowUpSteps();
+                        }}
                       >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="0">Imediato</SelectItem>
-                          <SelectItem value="30">30 segundos</SelectItem>
-                          <SelectItem value="60">1 minuto</SelectItem>
-                          <SelectItem value="300">5 minutos</SelectItem>
-                          <SelectItem value="600">10 minutos</SelectItem>
+                          {DELAY_OPTIONS.map(opt => (
+                            <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
+                )}
+              </div>
+            ))}
 
-                  <div className="space-y-3 pt-2 border-t">
-                    <Label>Enviar para leads de:</Label>
-                    <div className="flex flex-wrap gap-4">
-                      <div className="flex items-center gap-2">
-                        <Checkbox 
-                          id="source-manual"
-                          checked={newLeadRule.trigger_sources?.manual !== false}
-                          onCheckedChange={(checked) => updateRuleSources(newLeadRule.id, {
-                            manual: !!checked,
-                            meta: newLeadRule.trigger_sources?.meta !== false,
-                            webhook: newLeadRule.trigger_sources?.webhook !== false,
-                          })}
-                        />
-                        <Label htmlFor="source-manual" className="font-normal cursor-pointer">Cadastro Manual</Label>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Checkbox 
-                          id="source-meta"
-                          checked={newLeadRule.trigger_sources?.meta !== false}
-                          onCheckedChange={(checked) => updateRuleSources(newLeadRule.id, {
-                            manual: newLeadRule.trigger_sources?.manual !== false,
-                            meta: !!checked,
-                            webhook: newLeadRule.trigger_sources?.webhook !== false,
-                          })}
-                        />
-                        <Label htmlFor="source-meta" className="font-normal cursor-pointer">Meta Ads</Label>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Checkbox 
-                          id="source-webhook"
-                          checked={newLeadRule.trigger_sources?.webhook !== false}
-                          onCheckedChange={(checked) => updateRuleSources(newLeadRule.id, {
-                            manual: newLeadRule.trigger_sources?.manual !== false,
-                            meta: newLeadRule.trigger_sources?.meta !== false,
-                            webhook: !!checked,
-                          })}
-                        />
-                        <Label htmlFor="source-webhook" className="font-normal cursor-pointer">Webhook</Label>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <Button 
-              variant="outline" 
-              onClick={() => createNewLeadRule()}
+            <Button
+              variant="outline"
+              size="sm"
               className="w-full"
+              disabled={templates.length === 0 || !newLeadRule}
+              onClick={async () => {
+                if (templates.length === 0) { setShowTemplatesModal(true); return; }
+                const { data: accountData } = await supabase.rpc('get_user_account_id');
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                await (supabase.from('whatsapp_followup_steps' as any) as any).insert({
+                  account_id: accountData,
+                  name: `Follow-up ${followUpSteps.length + 1}`,
+                  template_id: templates[0].id,
+                  delay_minutes: followUpSteps.length === 0 ? 60 : followUpSteps.length === 1 ? 1440 : 4320,
+                  position: followUpSteps.length,
+                  is_active: true,
+                });
+                fetchFollowUpSteps();
+              }}
             >
-              <Zap className="h-4 w-4 mr-2" />
-              Configurar Saudação Automática
+              <Plus className="h-4 w-4 mr-2" />
+              Adicionar Etapa de Follow-up
             </Button>
-          )}
 
-          {/* Follow-up Section - only show when greeting rule exists */}
-          {newLeadRule && newLeadRule.is_active && (
-            <div className="p-4 border rounded-lg space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <RotateCcw className="h-5 w-5 text-primary" />
-                  <div>
-                    <Label className="font-medium">Follow-up Automático</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Enviar mensagens de acompanhamento para leads que não responderam
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-0">
-                {followUpSteps.map((step, index) => (
-                  <div key={step.id} className={`space-y-3 ${index > 0 ? 'border-t pt-3' : ''} ${index < followUpSteps.length - 1 ? 'pb-3' : ''}`}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Switch
-                          checked={step.is_active}
-                          onCheckedChange={async (checked) => {
-                            await supabase
-                              .from('whatsapp_followup_steps' as any)
-                              .update({ is_active: checked } as any)
-                              .eq('id', step.id);
-                            fetchFollowUpSteps();
-                          }}
-                          disabled={!isConnected}
-                        />
-                        <Label className="font-medium">Etapa {step.position + 1}</Label>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={async () => {
-                          await supabase
-                            .from('whatsapp_followup_steps' as any)
-                            .delete()
-                            .eq('id', step.id);
-                          fetchFollowUpSteps();
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    {step.is_active && (
-                      <div className="grid gap-4 sm:grid-cols-2 pl-12">
-                        <div className="space-y-2">
-                          <Label>Template de Mensagem</Label>
-                          <Select
-                            value={step.template_id}
-                            onValueChange={async (value) => {
-                              await supabase
-                                .from('whatsapp_followup_steps' as any)
-                                .update({ template_id: value } as any)
-                                .eq('id', step.id);
-                              fetchFollowUpSteps();
-                            }}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione um template" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {templates.map((t) => (
-                                <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            variant="link"
-                            size="sm"
-                            className="h-auto p-0 text-xs"
-                            onClick={() => setShowTemplatesModal(true)}
-                          >
-                            <Settings2 className="h-3 w-3 mr-1" />
-                            Personalizar Templates
-                          </Button>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Delay</Label>
-                          <Select
-                            value={String(step.delay_minutes)}
-                            onValueChange={async (value) => {
-                              await supabase
-                                .from('whatsapp_followup_steps' as any)
-                                .update({ delay_minutes: parseInt(value) } as any)
-                                .eq('id', step.id);
-                              fetchFollowUpSteps();
-                            }}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {DELAY_OPTIONS.map(opt => (
-                                <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  disabled={templates.length === 0}
-                  onClick={async () => {
-                    if (templates.length === 0) {
-                      setShowTemplatesModal(true);
-                      return;
-                    }
-                    const { data: accountData } = await supabase.rpc('get_user_account_id');
-                    await supabase.from('whatsapp_followup_steps' as any).insert({
-                      account_id: accountData,
-                      name: `Follow-up ${followUpSteps.length + 1}`,
-                      template_id: templates[0].id,
-                      delay_minutes: followUpSteps.length === 0 ? 60 : followUpSteps.length === 1 ? 1440 : 4320,
-                      position: followUpSteps.length,
-                      is_active: true,
-                    } as any);
-                    fetchFollowUpSteps();
-                  }}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Adicionar Etapa de Follow-up
-                </Button>
-
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" />
-                  Follow-ups são cancelados automaticamente quando o lead responde
-                </p>
-              </div>
-            </div>
-          )}
-
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" />
+              Follow-ups são cancelados automaticamente quando o lead responde
+            </p>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Info Card */}
+      {/* ─── SEÇÃO 4: Como Funciona ─── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
@@ -888,107 +828,86 @@ export function WhatsAppIntegrationSettings() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-start gap-3">
-            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">1</div>
+            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">1</div>
             <div>
-              <p className="font-medium">Conecte seu WhatsApp</p>
-              <p className="text-sm text-muted-foreground">Escaneie o QR Code com seu celular</p>
+              <p className="text-sm font-medium">Novo lead chega</p>
+              <p className="text-xs text-muted-foreground">Via cadastro manual, Meta Ads, Webhook ou Grupo OLX</p>
             </div>
           </div>
           <div className="flex items-start gap-3">
-            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">2</div>
+            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">2</div>
             <div>
-              <p className="font-medium">Configure as automações</p>
-              <p className="text-sm text-muted-foreground">Defina quais mensagens enviar e quando</p>
+              <p className="text-sm font-medium">Regras condicionais avaliadas</p>
+              <p className="text-xs text-muted-foreground">Sistema verifica se alguma regra condicional (por imóvel, valor, tipo...) se aplica</p>
             </div>
           </div>
           <div className="flex items-start gap-3">
-            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">3</div>
+            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">3</div>
             <div>
-              <p className="font-medium">Pronto!</p>
-              <p className="text-sm text-muted-foreground">Novos leads receberão mensagens automaticamente</p>
+              <p className="text-sm font-medium">Saudação enviada</p>
+              <p className="text-xs text-muted-foreground">Template da regra condicional, ou o template padrão se nenhuma regra casar</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">4</div>
+            <div>
+              <p className="text-sm font-medium">Follow-up automático (opcional)</p>
+              <p className="text-xs text-muted-foreground">Se o lead não responder, as etapas de follow-up são disparadas automaticamente</p>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* QR Code Modal */}
-      <Dialog open={showQRModal} onOpenChange={(open) => {
-        setShowQRModal(open);
-        if (!open) setPollingActive(false);
-      }}>
-        <DialogContent className="sm:max-w-md">
+      {/* QR Modal */}
+      <Dialog open={showQRModal} onOpenChange={setShowQRModal}>
+        <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Conectar WhatsApp</DialogTitle>
+            <DialogTitle>Escanear QR Code</DialogTitle>
             <DialogDescription>
-              Escaneie o QR Code com seu celular para conectar
+              Abra o WhatsApp no celular, vá em Dispositivos Conectados e escaneie o QR Code
             </DialogDescription>
           </DialogHeader>
-          
-          <div className="space-y-4">
-            <div className="text-sm text-muted-foreground space-y-2">
-              <p>1. Abra o WhatsApp no seu celular</p>
-              <p>2. Vá em <strong>Configurações &gt; Aparelhos conectados</strong></p>
-              <p>3. Toque em <strong>Conectar um aparelho</strong></p>
-              <p>4. Escaneie o código abaixo</p>
-            </div>
-
-            <div className="flex items-center justify-center p-4 bg-card rounded-lg border">
-              {qrLoading ? (
-                <div className="w-64 h-64 flex items-center justify-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                </div>
-              ) : qrCode ? (
-                <img 
-                  src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`}
-                  alt="QR Code"
-                  className="w-64 h-64"
-                />
-              ) : (
-                <div className="w-64 h-64 flex items-center justify-center text-muted-foreground">
-                  QR Code não disponível
-                </div>
-              )}
-            </div>
-
-            <Button 
-              variant="outline" 
-              onClick={refreshQRCode} 
-              disabled={qrLoading}
-              className="w-full"
-            >
-              {qrLoading ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              Gerar Novo QR Code
+          <div className="flex flex-col items-center gap-4">
+            {qrLoading ? (
+              <div className="w-64 h-64 flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : qrCode ? (
+              <img src={qrCode} alt="QR Code WhatsApp" className="w-64 h-64 rounded-lg border" />
+            ) : null}
+            <Button variant="outline" onClick={refreshQRCode} disabled={qrLoading} size="sm">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Gerar novo QR Code
             </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              O QR Code expira em alguns minutos. Gere um novo se necessário.
+            </p>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Templates Management Modal */}
+      {/* Templates Modal */}
       <WhatsAppTemplatesModal
         open={showTemplatesModal}
-        onOpenChange={(open) => {
-          setShowTemplatesModal(open);
-          if (!open && pendingAutoCreate) {
+        onOpenChange={setShowTemplatesModal}
+        onTemplatesChange={() => {
+          fetchTemplates();
+          if (pendingAutoCreate) {
             setPendingAutoCreate(false);
-            // Recarregar templates e criar regra automaticamente
-            (async () => {
-              const { data } = await supabase
-                .from('whatsapp_templates')
-                .select('id, name, template')
-                .eq('is_active', true)
-                .order('position')
-                .limit(1);
-              if (data && data.length > 0) {
-                createNewLeadRule(data);
-              }
-            })();
+            supabase.from('whatsapp_templates').select('id, name, template').eq('is_active', true).order('position').then(({ data }) => {
+              if (data && data.length > 0) createNewLeadRule(data as WhatsAppTemplate[]);
+            });
           }
         }}
-        onTemplatesChange={fetchTemplates}
+      />
+
+      {/* Greeting Rule Modal */}
+      <GreetingRuleModal
+        open={showGreetingRuleModal}
+        onClose={() => { setShowGreetingRuleModal(false); setEditingRule(null); }}
+        onSaved={fetchGreetingRules}
+        templates={templates}
+        editRule={editingRule}
       />
     </div>
   );

@@ -115,12 +115,37 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
   const [adInvestment, setAdInvestment] = useState(0);
   const [formCount, setFormCount] = useState(0);
   const [funnelStages, setFunnelStages] = useState<FunnelStage[]>([]);
+  const [propertyGreetingRule, setPropertyGreetingRule] = useState<{ id: string; name: string; template_id: string | null; is_active: boolean } | null>(null);
+  const [showGreetingRuleModal, setShowGreetingRuleModal] = useState(false);
+  const [whatsappTemplates, setWhatsappTemplates] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
     if (property && isOpen) {
       fetchPropertyData();
+      fetchGreetingRuleForProperty();
+      fetchWhatsappTemplates();
     }
   }, [property, isOpen]);
+
+  const fetchGreetingRuleForProperty = async () => {
+    if (!property) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase.from('whatsapp_greeting_rules' as any) as any)
+      .select('id, name, template_id, is_active')
+      .eq('condition_type', 'property')
+      .eq('condition_property_id', property.id)
+      .maybeSingle();
+    setPropertyGreetingRule(data || null);
+  };
+
+  const fetchWhatsappTemplates = async () => {
+    const { data } = await supabase
+      .from('whatsapp_templates')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('position');
+    setWhatsappTemplates(data || []);
+  };
 
   const handleStatusChange = async (newStatus: string) => {
     if (!property) return;
