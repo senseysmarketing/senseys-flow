@@ -1,67 +1,115 @@
 
-## Ajuste nos Alertas de Falha de WhatsApp no Modal do Lead
+## Variáveis de Formulário Meta nos Templates + Condição por Resposta de Formulário nas Regras
 
-### Problema Identificado
+### Contexto e Objetivo
 
-O hook `useLeadWhatsAppFailure` (em `src/hooks/use-whatsapp-failures.tsx`) apenas verifica se existe um registro com `status = 'failed'` na `whatsapp_message_queue`, sem considerar se o WhatsApp está conectado ou não.
+O usuário quer duas melhorias relacionadas:
 
-Quando o WhatsApp foi conectado alguma vez e depois desconectado, as mensagens que falharam no período desconectado continuam aparecendo com o alerta genérico "Falha no envio", quando na verdade o correto seria mostrar que o WhatsApp está desconectado.
+1. **No modal "Gerenciar Templates"**: Adicionar um botão "Mostrar mais variáveis" que, ao clicar, busca e exibe as perguntas dos formulários Meta cadastrados (ex: `{resposta_quando_pretende_comprar}`) — apenas se existirem.
 
-### Lógica Desejada
+2. **Nas Regras Condicionais de Saudação**: Adicionar um novo tipo de condição "Resposta de Formulário Meta", onde o usuário seleciona uma pergunta e define qual resposta deve acionar aquela regra.
 
-| Situação | Alerta no modal do lead |
-|---|---|
-| WhatsApp **conectado** + erro no envio | "Falha no envio de WhatsApp" com o detalhe do erro (ex: número não existe) |
-| WhatsApp **desconectado** + havia mensagem falhou | "WhatsApp desconectado" — sem mencionar falha de envio |
-| WhatsApp nunca conectado / sem falhas | Nenhum alerta |
+---
 
-### Solução
+### Parte 1 — Variáveis Dinâmicas de Formulários Meta nos Templates
 
-**1. Atualizar o hook `useLeadWhatsAppFailure`** para também verificar o status atual da sessão WhatsApp da conta do lead. O hook precisará:
-- Buscar o status da sessão WhatsApp da conta (`whatsapp_sessions` onde `status = 'connected'`)
-- Buscar a falha na `whatsapp_message_queue`
-- Retornar um objeto com: `{ failure, isDisconnected, loading }`
+#### Como funciona
 
-**2. Atualizar o `LeadDetailModal.tsx`** para renderizar o alerta correto com base no novo retorno do hook:
-- Se `isDisconnected` → mostrar aviso de "WhatsApp desconectado" (em azul/cinza, não âmbar)
-- Se `failure` e não `isDisconnected` → mostrar o alerta de falha atual (âmbar)
-- Se nenhum → não mostrar nada
+A tabela `meta_form_scoring_rules` já contém todas as perguntas configuradas (`question_name`, `question_label`) da conta. Essas perguntas podem virar variáveis de template no formato `{form_pergunta}`.
 
-Para saber o `account_id` do lead no hook, a query buscará o `account_id` via `leads` ou passará diretamente como parâmetro. A solução mais limpa é passar o `account_id` como parâmetro opcional no hook, já que `LeadDetailModal` tem acesso ao `useAccount`.
+**Exemplo**: A pergunta `quando_pretende_comprar?` vira a variável `{form_quando_pretende_comprar}`.
 
-### Arquivos a modificar
+Durante o envio da mensagem (edge function `process-whatsapp-queue`), a variável seria substituída pelo valor real da resposta que o lead deu naquele formulário (tabela `lead_form_field_values`).
 
-**`src/hooks/use-whatsapp-failures.tsx`**:
-- Adicionar parâmetro `accountId?: string` ao `useLeadWhatsAppFailure`
-- Adicionar estado `isDisconnected: boolean`
-- Buscar em paralelo a sessão WhatsApp e a falha da fila
-- Se não houver sessão conectada **e** houver falha → `isDisconnected = true, failure = null`
-- Se houver sessão conectada **e** houver falha → `isDisconnected = false, failure = <mensagem>`
-- Se não houver falha → retornar ambos `null/false`
+#### Mudanças no `WhatsAppTemplatesModal.tsx`
 
-**`src/components/LeadDetailModal.tsx`**:
-- Passar `account` do `useAccount()` para o hook
-- Ajustar o bloco do alerta (linhas ~313-329) para dois casos:
-  - `isDisconnected` → alerta informativo "WhatsApp desconectado" (ícone WifiOff, cor azul/cinza)
-  - `failure` → alerta âmbar atual de "Falha no envio de WhatsApp"
+- Buscar perguntas distintas de `meta_form_scoring_rules` da conta (agrupadas por `question_name` e `question_label`).
+- Adicionar estado `showMoreVars: boolean` e `formVars: { code, label }[]`.
+- Na seção "Variáveis Disponíveis" da list view: adicionar botão "Mostrar mais variáveis" que só aparece se `formVars.length > 0`. Ao clicar, expande um grid com as variáveis de formulário.
+- Na form view (editor de template): as variáveis de formulário também aparecem (colapsadas por padrão) para inserção via clique.
 
-### Comportamento esperado para o caso da conta "ASF" / André:
-- WhatsApp desconectado → modal do lead mostra: "WhatsApp desconectado — Conecte o WhatsApp nas configurações para enviar mensagens"
-- Sem o aviso de "Falha no envio" confuso
+#### Mudanças na Edge Function `process-whatsapp-queue`
 
-### Consideração para os cards do Kanban e tabela
+Ao processar o template antes do envio, após substituir as variáveis padrão (`{nome}`, `{email}`, etc.), identificar variáveis com prefixo `{form_*}`, buscar o valor correspondente em `lead_form_field_values` para o lead e substituir.
 
-Os hooks `useWhatsAppFailures` (plural, para múltiplos leads) também poderiam passar pela mesma lógica, mas seria muito custoso checar a sessão para cada lead. A abordagem mais eficiente é:
-- No nível da página (`Leads.tsx`), verificar uma vez se o WhatsApp está conectado
-- Passar um prop `whatsappConnected: boolean` para os cards
-- No card: se desconectado, não mostrar o ícone de erro (ou mostrar ícone de desconectado diferente)
+---
 
-Isso será feito de forma simples: adicionar um hook `useWhatsAppConnected` (leve, apenas verifica `whatsapp_sessions`) no `Leads.tsx` e passar o resultado aos cards existentes via prop.
+### Parte 2 — Novo Tipo de Condição: Resposta de Formulário Meta
 
-### Resumo dos arquivos modificados
+#### Necessidade de migração DB
 
-1. **`src/hooks/use-whatsapp-failures.tsx`** — adicionar `accountId` e lógica de `isDisconnected`; adicionar export de `useWhatsAppConnected`
-2. **`src/components/LeadDetailModal.tsx`** — usar `useAccount`, passar `accountId`, renderizar alertas distintos
-3. **`src/pages/Leads.tsx`** — verificar conexão uma vez e passar para os cards
-4. **`src/components/LeadKanbanCard.tsx`** — receber `whatsappConnected` e suprimir ícone de erro quando desconectado (ou trocar por ícone diferente)
-5. **`src/components/leads/LeadMobileCard.tsx`** — mesmo ajuste do Kanban
+A tabela `whatsapp_greeting_rules` precisa de duas novas colunas:
+- `condition_form_question TEXT` — nome da pergunta (ex: `quando_pretende_comprar?`)
+- `condition_form_answer TEXT` — valor esperado da resposta (ex: `Imediatamente (até 30 dias)`)
+
+#### Mudanças no `GreetingRuleModal.tsx`
+
+Adicionar novo tipo de condição: **🗂️ Resposta de Formulário Meta**.
+
+Quando selecionado:
+1. Primeiro select: lista as perguntas distintas disponíveis na conta (de `meta_form_scoring_rules`).
+2. Segundo select: ao escolher a pergunta, lista os valores de resposta já conhecidos para aquela pergunta (também de `meta_form_scoring_rules`).
+
+O usuário seleciona pergunta + resposta, e qualquer lead cujo formulário contenha aquela resposta receberá essa saudação personalizada.
+
+#### Mudanças na Edge Function `notify-new-lead`
+
+Ao avaliar as regras condicionais:
+- Para regras com `condition_type = 'form_answer'`:
+  - Buscar `lead_form_field_values` do lead para encontrar a resposta à pergunta `condition_form_question`.
+  - Normalizar a resposta (lowercase, remove interrogações, substitui underscores por espaços — seguindo o padrão já existente).
+  - Comparar com `condition_form_answer` normalizado.
+  - Se houver match → usar esse template.
+
+---
+
+### Resumo dos Arquivos a Modificar
+
+1. **`supabase/migrations/nova_migration.sql`** — Adicionar colunas `condition_form_question` e `condition_form_answer` na tabela `whatsapp_greeting_rules`.
+
+2. **`src/components/whatsapp/WhatsAppTemplatesModal.tsx`**:
+   - Buscar perguntas de formulários Meta da conta.
+   - Mostrar botão "Mostrar mais variáveis" (só se existirem perguntas).
+   - Expandir variáveis dinâmicas de formulário ao clicar.
+   - Disponibilizar essas variáveis para inserção no editor de template.
+
+3. **`src/components/whatsapp/GreetingRuleModal.tsx`**:
+   - Adicionar novo `condition_type = 'form_answer'` ao enum `CONDITION_TYPES`.
+   - Adicionar campos `condition_form_question` e `condition_form_answer` ao estado do formulário.
+   - Buscar perguntas da conta em `meta_form_scoring_rules`.
+   - Renderizar dois selects em cascata (pergunta → resposta) quando `form_answer` for selecionado.
+   - Incluir as novas colunas no payload de save.
+
+4. **`supabase/functions/notify-new-lead/index.ts`** — Adicionar avaliação de `condition_type = 'form_answer'` usando `lead_form_field_values`.
+
+5. **`supabase/functions/process-whatsapp-queue/index.ts`** — Adicionar substituição de variáveis `{form_*}` buscando os dados de `lead_form_field_values` do lead.
+
+6. **`src/integrations/supabase/types.ts`** — Atualizar o tipo da tabela `whatsapp_greeting_rules` com as novas colunas.
+
+---
+
+### Fluxo Completo (exemplo real)
+
+```text
+Lead chega via Meta Ads, respondeu:
+  "Quando pretende comprar?" → "Imediatamente (até 30 dias)"
+
+Sistema avalia regras condicionais por prioridade:
+  Regra 1: condition_type = 'form_answer'
+           condition_form_question = 'quando_pretende_comprar?'
+           condition_form_answer   = 'imediatamente (até 30 dias)'
+           template_id = "Saudação Urgente"  ✓ MATCH
+
+  → Envia: "Olá {nome}! Vi que você quer comprar imediatamente, 
+             vou te ligar em breve para conversarmos!"
+```
+
+```text
+Template com variável de formulário:
+  "Olá {nome}! Sua resposta foi: {form_quando_pretende_comprar?}. 
+   Vou entrar em contato para explicar nossas condições!"
+
+Enviado ao lead que respondeu "Até 3 meses":
+  "Olá João! Sua resposta foi: Até 3 meses. 
+   Vou entrar em contato para explicar nossas condições!"
+```
