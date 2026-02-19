@@ -1,66 +1,113 @@
 
-## Corrigir exibição do histórico completo no modal de chat (caso @lid)
+## Integração Grupo OLX — Recebimento de Leads via Webhook
 
-### Diagnóstico
+### Visão Geral
 
-No banco de dados existem 6 mensagens da conversa da Raquel Rosselli, mas apenas 2 aparecem no modal:
+O Grupo OLX (que engloba OLX, VivaReal, ZAP Imóveis) envia leads com um JSON próprio, diferente do formato padrão do CRM. A solução usa a arquitetura "hub-and-spoke" já descrita nos documentos do projeto: uma Edge Function dedicada (`olx-webhook`) que recebe o payload OLX, normaliza os dados e os encaminha para o `webhook-leads` interno existente — reaproveitando toda a lógica de distribuição, qualificação, notificação e automação WhatsApp que já existe.
 
-| Timestamp | Conteúdo | remote_jid | Aparece? |
-|-----------|----------|-----------|----------|
-| 17:41 | Saudação automática (enviada) | `5512996165317@s.whatsapp.net` | ✅ Sim |
-| 17:42 | **"Me interessei sim. Aceita financiamento."** (resposta dela) | `276175070957762@lid` | ❌ Não |
-| 18:13 | "Olá Raquel, ótima tarde." (Thiago) | `276175070957762@lid` | ❌ Não |
-| 18:13 | "Aceita sim, gostaria de fazer uma simulação..." (Thiago) | `276175070957762@lid` | ❌ Não |
-| 18:13 | "Prazer, Belisa." (Thiago) | `276175070957762@lid` | ❌ Não |
-| 19:42 | Follow-up indevido (enviado) | `5512996165317@s.whatsapp.net` | ✅ Sim |
+Na tela de Configurações, uma nova aba "Grupo OLX" aparecerá ao lado de "Webhook" com a URL exclusiva do portal e instruções de configuração.
 
-**Causa raiz:** O `useMessages` busca mensagens via `ilike('remote_jid', '%96165317%')` (sufixo do número de telefone). As mensagens @lid têm `remote_jid = 276175070957762@lid` que não contém o sufixo `96165317`, então nunca são encontradas.
+---
 
-### Solução
+### Mapeamento de Campos OLX → CRM
 
-**Dupla estratégia de busca por `lead_id`:**
+| Campo OLX | Campo CRM | Observação |
+|---|---|---|
+| `name` | `name` | Nome do lead |
+| `ddd` + `phone` | `phone` | Concatenados: `ddd + phone` |
+| `email` | `email` | Email |
+| `message` | `observacoes` | Mensagem/interesse |
+| `clientListingId` | Busca imóvel por `reference_code` | Vincula propriedade automaticamente |
+| `temperature` (Baixa/Média/Alta) | `temperature` (cold/warm/hot) | Mapeamento de temperatura |
+| `leadOrigin` | `origem` | "Grupo OLX" |
+| `transactionType` | `interesse` | "SELL" → "Compra" / "RENT" → "Aluguel" |
+| `extraData.leadType` | `campanha` | Tipo de contato (chat, formulário, etc.) |
+| `originLeadId` | `meta_lead_id` | ID externo do lead para rastreio de duplicatas |
 
-O campo `lead_id` já está preenchido corretamente em TODAS as 6 mensagens (graças à correção aplicada anteriormente). A solução é enriquecer a query do `useMessages` para buscar também por `lead_id`, unindo os resultados e removendo duplicatas.
+---
+
+### Componentes a criar/modificar
+
+**1. Nova Edge Function: `supabase/functions/olx-webhook/index.ts`**
+
+- Rota pública que o Grupo OLX chamará: `POST /olx-webhook?account_id=<uuid>`
+- Valida que o payload contém o campo `leadOrigin` (fingerprint OLX)
+- Normaliza todos os campos conforme a tabela acima
+- Tenta vincular a propriedade pelo `clientListingId` como `reference_code` via busca no banco
+- Mapeia temperatura: "Alta" → `hot`, "Média" → `warm`, "Baixa" → `cold`
+- Detecta duplicatas pelo `originLeadId` (salvo em `meta_lead_id`) antes de encaminhar
+- Invoca `webhook-leads` internamente com o payload normalizado já no formato CRM padrão
+
+**2. Nova aba em Configurações: `src/components/OlxIntegrationSettings.tsx`**
+
+Componente visual para a aba, exibindo:
+- URL do webhook OLX (com `account_id` já incluído), campo somente leitura com botão copiar
+- Instruções passo a passo de como configurar no painel do Grupo OLX / VivaReal / ZAP
+- Tabela de mapeamento de campos (o que cada campo do OLX vira no CRM)
+- Informações sobre vinculação automática de imóveis (usando `clientListingId` como código de referência)
+- Status de ativação: badge "Ativo" (sempre ativo quando account_id configurado)
+- Botão de "Simular Lead" para testes com payload de exemplo no formato OLX
+
+**3. Atualização de `src/pages/Settings.tsx`**
+
+- Adicionar `'olx'` ao tipo `TabValue`
+- Adicionar aba "Grupo OLX" com ícone `Building2` (ou similar) na lista `navItems`, **ao lado do Webhook**
+- Adicionar `case 'olx'` no `renderContent()` retornando `<OlxIntegrationSettings />`
+- Atualizar `validTabs` no `useMemo`
+
+---
+
+### Fluxo de funcionamento
+
+```text
+Grupo OLX / VivaReal / ZAP
+        |
+        | POST /olx-webhook?account_id=xxx
+        | Payload no formato OLX
+        v
+[olx-webhook Edge Function]
+        |
+        |-- Valida account_id
+        |-- Detecta duplicata via originLeadId
+        |-- Normaliza campos OLX → CRM
+        |-- Busca imóvel por clientListingId = reference_code
+        |-- Chama webhook-leads internamente
+        v
+[webhook-leads Edge Function] (já existente)
+        |
+        |-- Aplica regras de distribuição
+        |-- Envia notificações
+        |-- Agenda automação WhatsApp
+        v
+Lead criado no CRM com origem "Grupo OLX"
+```
+
+---
 
 ### Detalhes técnicos
 
-**Arquivo: `src/hooks/use-conversations.tsx`** — função `fetchMessagesFromDB`
+**Autenticação do OLX:** O Grupo OLX não envia header de autenticação — a URL com `account_id` serve como token de roteamento (padrão já usado pelo webhook genérico). A função valida apenas que o `account_id` existe e que o payload tem o formato OLX.
 
-A query atual:
-```typescript
-.ilike('remote_jid', `%${phoneSuffix}%`)
-```
+**Vinculação de imóveis:** O campo `clientListingId` do OLX é o código do anúncio **do anunciante** (i.e., o código de referência que o corretor cadastrou no portal, que deve ser o mesmo `reference_code` cadastrado no imóvel no CRM). A Edge Function buscará por esse código na tabela `properties` do account.
 
-Nova lógica — duas queries paralelas, resultados unidos e ordenados:
-1. Query existente por `phoneSuffix` no `remote_jid` (mantida para compatibilidade)
-2. Nova query por `lead_id` quando disponível
+**Normalização de temperatura:**
+- `"Alta"` → `hot`
+- `"Média"` → `warm`
+- `"Baixa"` ou ausente → `cold`
 
-O hook `useMessages` receberá um parâmetro adicional opcional `leadId` para habilitar a segunda busca.
+**Normalização de leadType para campanha:**
+- `CONTACT_CHAT` → "Chat"
+- `CONTACT_FORM` → "Formulário"
+- `CLICK_WHATSAPP` → "WhatsApp"
+- `CLICK_SCHEDULE` → "Agendamento"
+- `PHONE_VIEW` → "Visualização de Telefone"
+- `VISIT_REQUEST` → "Solicitação de Visita"
 
-**Arquivo: `src/components/leads/WhatsAppChatModal.tsx`**
+---
 
-Passar o `leadId` para o `useMessages` através do `conversation.lead_id`.
+### Arquivos a criar/modificar
 
-**Realtime também corrigido:** O handler de Realtime atual também verifica apenas o `phoneSuffix`. Precisamos adicionar uma verificação adicional: se `newMsg.lead_id === leadId`, incluir a mensagem independente do JID.
-
-### Arquivos a modificar
-
-1. **`src/hooks/use-conversations.tsx`**
-   - `useMessages`: adicionar parâmetro opcional `leadId?: string | null`
-   - `fetchMessagesFromDB`: executar query adicional por `lead_id` quando disponível, unir e desduplicar resultados por `id`
-   - Handler de Realtime INSERT: também aceitar mensagem se `newMsg.lead_id === leadId`
-
-2. **`src/components/leads/WhatsAppChatModal.tsx`**
-   - Passar `leadId` para `useMessages` via segundo argumento
-
-### Resultado esperado
-
-Com essas mudanças, ao abrir o chat da Raquel, os 6 itens aparecerão em ordem cronológica:
-1. 14:41 - Saudação automática ✅
-2. 14:42 - "Me interessei sim. Aceita financiamento." (resposta dela, em cinza à esquerda) ✅
-3. 15:13 - "Olá Raquel, ótima tarde." (Thiago) ✅
-4. 15:13 - "Aceita sim, gostaria de fazer uma simulação..." ✅
-5. 15:13 - "Prazer, Belisa." ✅
-6. 16:42 - Follow-up indevido ✅
-
-Novas mensagens (inclusive vindas via @lid) também aparecerão em tempo real corretamente.
+1. **Criar** `supabase/functions/olx-webhook/index.ts` — nova Edge Function adaptadora
+2. **Criar** `src/components/OlxIntegrationSettings.tsx` — componente de configuração UI
+3. **Modificar** `src/pages/Settings.tsx` — adicionar aba "Grupo OLX"
+4. **Modificar** `supabase/config.toml` — registrar nova função com `verify_jwt = false`
