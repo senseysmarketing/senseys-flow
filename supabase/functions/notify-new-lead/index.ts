@@ -1,6 +1,11 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// Normalize text for comparison (lowercase, remove ?, underscores -> spaces)
+function normalizeText(s: string): string {
+  return s.toLowerCase().replace(/\?/g, '').replace(/_/g, ' ').trim();
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",

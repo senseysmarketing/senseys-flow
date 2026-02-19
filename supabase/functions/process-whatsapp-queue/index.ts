@@ -196,6 +196,35 @@ Deno.serve(async (req) => {
           }
         }
 
+        // Replace {form_*} variables from lead_form_field_values
+        if (msg.lead_id && message.includes('{form_')) {
+          const formVarMatches = message.match(/\{form_[^}]+\}/gi)
+          if (formVarMatches) {
+            const { data: formFields } = await supabase
+              .from('lead_form_field_values')
+              .select('field_name, field_value')
+              .eq('lead_id', msg.lead_id)
+
+            if (formFields && formFields.length > 0) {
+              for (const match of formVarMatches) {
+                // Extract the field name from {form_<name>}
+                const fieldName = match.slice(6, -1) // remove {form_ and }
+                // Find matching field (normalize: lowercase, remove ?/underscores)
+                const found = formFields.find(f => {
+                  const normalize = (s: string) => s.toLowerCase().replace(/\?/g, '').replace(/_/g, ' ').trim()
+                  return normalize(f.field_name) === normalize(fieldName)
+                })
+                message = message.replace(new RegExp(match.replace(/[{}?]/g, (c) => `\\${c}`), 'gi'), found?.field_value || '')
+              }
+            } else {
+              // No form fields found, clear all form_ variables
+              for (const match of formVarMatches) {
+                message = message.replace(new RegExp(match.replace(/[{}?]/g, (c) => `\\${c}`), 'gi'), '')
+              }
+            }
+          }
+        }
+
         // Format phone number properly
         let phone = msg.phone || lead?.phone || ''
         const formattedPhone = formatPhoneForEvolution(phone)

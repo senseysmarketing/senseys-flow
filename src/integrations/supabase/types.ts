@@ -1646,6 +1646,8 @@ export type Database = {
         Row: {
           account_id: string
           condition_campaign: string | null
+          condition_form_answer: string | null
+          condition_form_question: string | null
           condition_origin: string | null
           condition_price_max: number | null
           condition_price_min: number | null
@@ -1665,6 +1667,8 @@ export type Database = {
         Insert: {
           account_id: string
           condition_campaign?: string | null
+          condition_form_answer?: string | null
+          condition_form_question?: string | null
           condition_origin?: string | null
           condition_price_max?: number | null
           condition_price_min?: number | null
@@ -1684,6 +1688,8 @@ export type Database = {
         Update: {
           account_id?: string
           condition_campaign?: string | null
+          condition_form_answer?: string | null
+          condition_form_question?: string | null
           condition_origin?: string | null
           condition_price_max?: number | null
           condition_price_min?: number | null

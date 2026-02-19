@@ -19,6 +19,11 @@ interface Property {
   reference_code: string | null;
 }
 
+interface FormQuestion {
+  question_name: string;
+  question_label: string | null;
+}
+
 interface GreetingRule {
   id?: string;
   name: string;
@@ -34,6 +39,8 @@ interface GreetingRule {
   condition_transaction_type: string | null;
   condition_campaign: string | null;
   condition_origin: string | null;
+  condition_form_question?: string | null;
+  condition_form_answer?: string | null;
 }
 
 interface GreetingRuleModalProps {
@@ -41,7 +48,6 @@ interface GreetingRuleModalProps {
   onClose: () => void;
   onSaved: () => void;
   templates: WhatsAppTemplate[];
-  // Pre-fill for property-specific rules
   prefillPropertyId?: string;
   editRule?: GreetingRule | null;
 }
@@ -53,6 +59,7 @@ const CONDITION_TYPES = [
   { value: 'transaction_type', label: '🔑 Tipo de Transação' },
   { value: 'campaign', label: '📣 Campanha / Formulário' },
   { value: 'origin', label: '📍 Origem do Lead' },
+  { value: 'form_answer', label: '🗂️ Resposta de Formulário Meta' },
 ];
 
 const PROPERTY_TYPES = [
@@ -86,6 +93,8 @@ const DELAY_OPTIONS = [
 export function GreetingRuleModal({ open, onClose, onSaved, templates, prefillPropertyId, editRule }: GreetingRuleModalProps) {
   const [saving, setSaving] = useState(false);
   const [properties, setProperties] = useState<Property[]>([]);
+  const [formQuestions, setFormQuestions] = useState<FormQuestion[]>([]);
+  const [formAnswers, setFormAnswers] = useState<string[]>([]);
   const [form, setForm] = useState<GreetingRule>({
     name: '',
     priority: 0,
@@ -100,6 +109,8 @@ export function GreetingRuleModal({ open, onClose, onSaved, templates, prefillPr
     condition_transaction_type: null,
     condition_campaign: null,
     condition_origin: null,
+    condition_form_question: null,
+    condition_form_answer: null,
   });
 
   useEffect(() => {
@@ -121,11 +132,30 @@ export function GreetingRuleModal({ open, onClose, onSaved, templates, prefillPr
           condition_transaction_type: null,
           condition_campaign: null,
           condition_origin: null,
+          condition_form_question: null,
+          condition_form_answer: null,
         });
       }
       fetchProperties();
+      fetchFormQuestions();
     }
   }, [open, prefillPropertyId, editRule]);
+
+  // When the selected question changes, fetch available answers
+  useEffect(() => {
+    if (form.condition_form_question) {
+      fetchFormAnswers(form.condition_form_question);
+    } else {
+      setFormAnswers([]);
+    }
+  }, [form.condition_form_question]);
+
+  // If editing a rule with form_answer condition, pre-load answers
+  useEffect(() => {
+    if (open && editRule?.condition_form_question) {
+      fetchFormAnswers(editRule.condition_form_question);
+    }
+  }, [open, editRule]);
 
   const fetchProperties = async () => {
     const { data } = await supabase
@@ -133,6 +163,36 @@ export function GreetingRuleModal({ open, onClose, onSaved, templates, prefillPr
       .select('id, title, reference_code')
       .order('title');
     setProperties(data || []);
+  };
+
+  const fetchFormQuestions = async () => {
+    const { data } = await supabase
+      .from('meta_form_scoring_rules')
+      .select('question_name, question_label');
+    
+    if (!data) return;
+
+    // Deduplicate by question_name
+    const seen = new Set<string>();
+    const questions: FormQuestion[] = [];
+    for (const row of data) {
+      if (!seen.has(row.question_name)) {
+        seen.add(row.question_name);
+        questions.push({ question_name: row.question_name, question_label: row.question_label });
+      }
+    }
+    setFormQuestions(questions);
+  };
+
+  const fetchFormAnswers = async (questionName: string) => {
+    const { data } = await supabase
+      .from('meta_form_scoring_rules')
+      .select('answer_value')
+      .eq('question_name', questionName);
+    
+    if (!data) return;
+    const answers = [...new Set(data.map(r => r.answer_value))];
+    setFormAnswers(answers);
   };
 
   const setField = <K extends keyof GreetingRule>(key: K, value: GreetingRule[K]) => {
@@ -150,7 +210,10 @@ export function GreetingRuleModal({ open, onClose, onSaved, templates, prefillPr
       condition_transaction_type: null,
       condition_campaign: null,
       condition_origin: null,
+      condition_form_question: null,
+      condition_form_answer: null,
     }));
+    setFormAnswers([]);
   };
 
   const handleSave = async () => {
@@ -160,6 +223,10 @@ export function GreetingRuleModal({ open, onClose, onSaved, templates, prefillPr
     }
     if (!form.template_id) {
       toast({ variant: 'destructive', title: 'Template obrigatório', description: 'Selecione um template de mensagem.' });
+      return;
+    }
+    if (form.condition_type === 'form_answer' && (!form.condition_form_question || !form.condition_form_answer)) {
+      toast({ variant: 'destructive', title: 'Campos obrigatórios', description: 'Selecione a pergunta e a resposta do formulário.' });
       return;
     }
 
@@ -182,6 +249,8 @@ export function GreetingRuleModal({ open, onClose, onSaved, templates, prefillPr
         condition_transaction_type: form.condition_type === 'transaction_type' ? form.condition_transaction_type : null,
         condition_campaign: form.condition_type === 'campaign' ? form.condition_campaign : null,
         condition_origin: form.condition_type === 'origin' ? form.condition_origin : null,
+        condition_form_question: form.condition_type === 'form_answer' ? form.condition_form_question : null,
+        condition_form_answer: form.condition_type === 'form_answer' ? form.condition_form_answer : null,
       };
 
       if (editRule?.id) {
@@ -206,7 +275,7 @@ export function GreetingRuleModal({ open, onClose, onSaved, templates, prefillPr
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{editRule ? 'Editar Regra de Saudação' : 'Nova Regra de Saudação'}</DialogTitle>
         </DialogHeader>
@@ -333,6 +402,64 @@ export function GreetingRuleModal({ open, onClose, onSaved, templates, prefillPr
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {/* Form Answer condition - cascading selects */}
+          {form.condition_type === 'form_answer' && (
+            <div className="space-y-3">
+              {formQuestions.length === 0 ? (
+                <p className="text-sm text-muted-foreground bg-muted/50 rounded-md p-3">
+                  Nenhuma pergunta de formulário Meta configurada. Configure as regras de qualificação em Configurações → Qualificação.
+                </p>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label>Pergunta do formulário</Label>
+                    <Select
+                      value={form.condition_form_question || ''}
+                      onValueChange={v => {
+                        setField('condition_form_question', v);
+                        setField('condition_form_answer', null);
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a pergunta" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {formQuestions.map(q => (
+                          <SelectItem key={q.question_name} value={q.question_name}>
+                            {q.question_label || q.question_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {form.condition_form_question && (
+                    <div className="space-y-2">
+                      <Label>Resposta esperada</Label>
+                      {formAnswers.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Carregando respostas...</p>
+                      ) : (
+                        <Select
+                          value={form.condition_form_answer || ''}
+                          onValueChange={v => setField('condition_form_answer', v)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione a resposta" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {formAnswers.map(a => (
+                              <SelectItem key={a} value={a}>{a}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
 

@@ -603,6 +603,27 @@ serve(async (req) => {
                 matchedRule = rule
               }
               break
+            case 'form_answer':
+              if (rule.condition_form_question && rule.condition_form_answer) {
+                const { data: formFieldValues } = await supabase
+                  .from('lead_form_field_values')
+                  .select('field_name, field_value')
+                  .eq('lead_id', lead.id)
+
+                if (formFieldValues && formFieldValues.length > 0) {
+                  const normalize = (s: string) => s.toLowerCase().replace(/\?/g, '').replace(/_/g, ' ').trim()
+                  const targetQuestion = normalize(rule.condition_form_question)
+                  const targetAnswer = normalize(rule.condition_form_answer)
+
+                  const found = formFieldValues.find(fv =>
+                    normalize(fv.field_name) === targetQuestion &&
+                    fv.field_value !== null &&
+                    normalize(fv.field_value) === targetAnswer
+                  )
+                  if (found) matchedRule = rule
+                }
+              }
+              break
           }
           if (matchedRule) break
         }
