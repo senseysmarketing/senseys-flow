@@ -7,12 +7,13 @@ import { AvatarFallbackColored } from "@/components/ui/avatar-fallback-colored";
 import TemperatureBadge from "@/components/TemperatureBadge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { GreetingRuleModal } from "@/components/whatsapp/GreetingRuleModal";
 import { 
   Building2, MapPin, Bed, Bath, Car, Ruler, DollarSign, 
   Users, TrendingUp, Clock, Phone, ChevronRight,
   Home, CalendarDays, Edit2, Trash2, CheckCircle, XCircle,
   BookmarkCheck, Key, Flame, Snowflake, ThermometerSun, Target,
-  BarChart3, HandCoins
+  BarChart3, HandCoins, MessageCircle, Plus, Pencil
 } from "lucide-react";
 import { format, differenceInDays, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -718,6 +719,63 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
               </div>
             )}
 
+            {/* WhatsApp Greeting Rule */}
+            <div className="bg-card rounded-lg border p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold flex items-center gap-2">
+                  <MessageCircle className="h-4 w-4 text-green-500" />
+                  Saudação WhatsApp
+                </h3>
+                {propertyGreetingRule ? (
+                  <Badge variant="outline" className="text-green-600 border-green-500 bg-green-500/10 text-xs">
+                    Ativa
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-muted-foreground text-xs">
+                    Padrão
+                  </Badge>
+                )}
+              </div>
+
+              {propertyGreetingRule ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium">{propertyGreetingRule.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {whatsappTemplates.find(t => t.id === propertyGreetingRule.template_id)?.name || 'Template não encontrado'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowGreetingRuleModal(true)}
+                        className="h-8 w-8 p-0"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Nenhuma regra específica configurada para este imóvel. A saudação padrão será usada para novos leads.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full gap-2"
+                    onClick={() => setShowGreetingRuleModal(true)}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Configurar saudação específica
+                  </Button>
+                </div>
+              )}
+            </div>
+
             {/* Leads */}
             <div className="bg-card rounded-lg border p-4">
               <h3 className="font-semibold mb-3 flex items-center gap-2">
@@ -796,6 +854,33 @@ export function PropertyDetailModal({ property, isOpen, onClose, onOpenLead, onE
           </div>
         </ScrollArea>
       </DialogContent>
+
+      {/* GreetingRuleModal for this specific property */}
+      {property && (
+        <GreetingRuleModal
+          open={showGreetingRuleModal}
+          onClose={() => setShowGreetingRuleModal(false)}
+          onSaved={() => {
+            setShowGreetingRuleModal(false);
+            fetchGreetingRuleForProperty();
+          }}
+          templates={whatsappTemplates}
+          prefillPropertyId={property.id}
+          editRule={propertyGreetingRule ? {
+            ...propertyGreetingRule,
+            priority: 0,
+            delay_seconds: 60,
+            condition_type: 'property',
+            condition_property_id: property.id,
+            condition_price_min: null,
+            condition_price_max: null,
+            condition_property_type: null,
+            condition_transaction_type: null,
+            condition_campaign: null,
+            condition_origin: null,
+          } : null}
+        />
+      )}
     </Dialog>
   );
 }

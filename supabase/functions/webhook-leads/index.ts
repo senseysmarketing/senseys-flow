@@ -530,65 +530,145 @@ serve(async (req) => {
       }
     }
 
-    // Check for WhatsApp automation rule (new_lead) for webhook source
+    // Check for WhatsApp greeting (conditional rules first, then default automation rule)
     try {
-      const { data: automationRule } = await supabase
-        .from('whatsapp_automation_rules')
-        .select('*')
+      // Check if WhatsApp is connected
+      const { data: whatsappSession } = await supabase
+        .from('whatsapp_sessions')
+        .select('status')
         .eq('account_id', accountId)
-        .eq('trigger_type', 'new_lead')
-        .eq('is_active', true)
+        .eq('status', 'connected')
         .single()
 
-      if (automationRule) {
-        // Check if webhook source is enabled
-        const sources = automationRule.trigger_sources || { webhook: true }
-        const webhookEnabled = typeof sources === 'object' && sources !== null 
-          ? (sources as Record<string, boolean>).webhook !== false 
-          : true
+      if (whatsappSession) {
+        // Fetch all active greeting rules ordered by priority
+        const { data: greetingRules } = await supabase
+          .from('whatsapp_greeting_rules' as any)
+          .select('*')
+          .eq('account_id', accountId)
+          .eq('is_active', true)
+          .order('priority', { ascending: true })
 
-        if (automationRule.template_id && webhookEnabled) {
-          // Check if WhatsApp is connected
-          const { data: whatsappSession } = await supabase
-            .from('whatsapp_sessions')
-            .select('status')
+        // Fetch property info if linked (for price/type matching)
+        let propertyInfo: { sale_price: number | null; rent_price: number | null; type: string | null; transaction_type: string | null } | null = null
+        if (validPropertyId) {
+          const { data: prop } = await supabase
+            .from('properties')
+            .select('sale_price, rent_price, type, transaction_type')
+            .eq('id', validPropertyId)
+            .single()
+          propertyInfo = prop
+        }
+
+        // Evaluate conditional rules in priority order
+        let matchedRule: any = null
+        const leadOriginNormalized = (leadData.origem || '').toLowerCase()
+
+        for (const rule of (greetingRules || [])) {
+          switch (rule.condition_type) {
+            case 'property':
+              if (validPropertyId && rule.condition_property_id === validPropertyId) {
+                matchedRule = rule
+              }
+              break
+            case 'price_range': {
+              const price = propertyInfo?.sale_price || propertyInfo?.rent_price
+              if (price) {
+                const minOk = !rule.condition_price_min || price >= rule.condition_price_min
+                const maxOk = !rule.condition_price_max || price <= rule.condition_price_max
+                if (minOk && maxOk) matchedRule = rule
+              }
+              break
+            }
+            case 'property_type':
+              if (propertyInfo?.type && rule.condition_property_type &&
+                  propertyInfo.type.toLowerCase() === rule.condition_property_type.toLowerCase()) {
+                matchedRule = rule
+              }
+              break
+            case 'transaction_type':
+              if (propertyInfo?.transaction_type && rule.condition_transaction_type &&
+                  propertyInfo.transaction_type.toLowerCase() === rule.condition_transaction_type.toLowerCase()) {
+                matchedRule = rule
+              }
+              break
+            case 'campaign':
+              if (rule.condition_campaign && leadData.campanha &&
+                  leadData.campanha.toLowerCase().includes(rule.condition_campaign.toLowerCase())) {
+                matchedRule = rule
+              }
+              break
+            case 'origin':
+              if (rule.condition_origin && leadOriginNormalized.includes(rule.condition_origin.toLowerCase())) {
+                matchedRule = rule
+              }
+              break
+          }
+          if (matchedRule) break
+        }
+
+        // If a conditional rule matched, use it; otherwise fall back to default automation rule
+        let templateId: string | null = null
+        let delaySeconds = 0
+        let ruleId: string | null = null
+
+        if (matchedRule && matchedRule.template_id) {
+          templateId = matchedRule.template_id
+          delaySeconds = matchedRule.delay_seconds || 0
+          console.log(`Conditional greeting rule matched: ${matchedRule.name} (type: ${matchedRule.condition_type})`)
+        } else {
+          // Fallback: default whatsapp_automation_rules
+          const { data: automationRule } = await supabase
+            .from('whatsapp_automation_rules')
+            .select('*')
             .eq('account_id', accountId)
-            .eq('status', 'connected')
+            .eq('trigger_type', 'new_lead')
+            .eq('is_active', true)
             .single()
 
-          if (whatsappSession) {
-            const scheduledFor = new Date(Date.now() + ((automationRule.delay_seconds || 0) * 1000))
-            
-            // Get template to compose message
-            const { data: template } = await supabase
-              .from('whatsapp_templates')
-              .select('template')
-              .eq('id', automationRule.template_id)
-              .single()
-            
-            if (template) {
-              // Replace variables in template
-              let message = template.template
-                .replace(/{nome}/gi, lead.name || '')
-                .replace(/{telefone}/gi, lead.phone || '')
-                .replace(/{email}/gi, lead.email || '')
-              
-              await supabase.from('whatsapp_message_queue').insert({
-                account_id: accountId,
-                lead_id: lead.id,
-                phone: lead.phone,
-                message: message,
-                template_id: automationRule.template_id,
-                automation_rule_id: automationRule.id,
-                scheduled_for: scheduledFor.toISOString(),
-                status: 'pending'
-              })
-              
-              console.log(`WhatsApp greeting scheduled for webhook lead ${lead.id} at ${scheduledFor.toISOString()}`)
-              
-              // Trigger queue processing immediately
-              supabase.functions.invoke('process-whatsapp-queue').catch(() => {})
+          if (automationRule) {
+            const sources = automationRule.trigger_sources || { webhook: true }
+            const webhookEnabled = typeof sources === 'object' && sources !== null
+              ? (sources as Record<string, boolean>).webhook !== false
+              : true
+
+            if (automationRule.template_id && webhookEnabled) {
+              templateId = automationRule.template_id
+              delaySeconds = automationRule.delay_seconds || 0
+              ruleId = automationRule.id
+              console.log(`Fallback to default automation rule: ${automationRule.name}`)
             }
+          }
+        }
+
+        if (templateId) {
+          const { data: template } = await supabase
+            .from('whatsapp_templates')
+            .select('template')
+            .eq('id', templateId)
+            .single()
+
+          if (template) {
+            const scheduledFor = new Date(Date.now() + (delaySeconds * 1000))
+            let message = template.template
+              .replace(/{nome}/gi, lead.name || '')
+              .replace(/{telefone}/gi, lead.phone || '')
+              .replace(/{email}/gi, lead.email || '')
+              .replace(/{imovel}/gi, propertyName || '')
+
+            await supabase.from('whatsapp_message_queue').insert({
+              account_id: accountId,
+              lead_id: lead.id,
+              phone: lead.phone,
+              message: message,
+              template_id: templateId,
+              automation_rule_id: ruleId,
+              scheduled_for: scheduledFor.toISOString(),
+              status: 'pending'
+            })
+
+            console.log(`WhatsApp greeting scheduled for lead ${lead.id} at ${scheduledFor.toISOString()} (rule: ${matchedRule?.name || 'default'})`)
+            supabase.functions.invoke('process-whatsapp-queue').catch(() => {})
           }
         }
       }
