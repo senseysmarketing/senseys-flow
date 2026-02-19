@@ -1,96 +1,68 @@
 
-## Exibir clientListingId quando imóvel não for encontrado no CRM
+## Reorganizar Configurações: criar item "Integrações" no menu lateral
 
-### Problema atual
+### O que será feito
 
-Quando o Grupo OLX envia um lead com `clientListingId` (ex: `a40171`) e esse código não existe como `reference_code` de nenhum imóvel cadastrado no CRM, a informação é simplesmente descartada — o lead é criado sem nenhuma referência ao anúncio de origem.
+Atualmente as abas Webhook, Grupo OLX e WhatsApp ficam misturadas com Perfil, Equipe, Notificações, etc. na mesma barra horizontal de Configurações.
 
-O usuário não tem como saber de qual imóvel veio o lead.
+A proposta é criar uma **nova entrada "Integrações"** no menu lateral da sidebar (entre "Configurações" e "Sair"), que leva para uma rota `/integrations` dedicada, com as três abas: Webhook, Grupo OLX e WhatsApp.
 
-### Solução
+As abas de integrações são removidas de Configurações, deixando-a mais limpa.
 
-Usar o campo **`anuncio`** (já existente na tabela `leads` e exibido no modal de detalhes) para armazenar o `clientListingId` quando nenhum imóvel for vinculado automaticamente.
+### Estrutura proposta
 
-Comportamento:
-- Se `clientListingId` casa com um `reference_code` → vincula o `property_id` (comportamento atual, mantido)
-- Se `clientListingId` existe mas **não casa** com nenhum imóvel → salva `"Cód. OLX: a40171"` no campo `anuncio`
-- Se `clientListingId` não existe → nenhuma mudança
-
-Dessa forma, o modal de detalhes do lead exibirá automaticamente o código na seção "Anúncio" da aba "Origem do Lead", sem nenhuma alteração no frontend.
-
-### Onde o código aparecerá
-
-O campo `anuncio` já é exibido no `LeadDetailModal.tsx` (linha 406-414) na seção "Origem do Lead":
-
+```text
+Sidebar (parte de baixo):
+├── [Painel Agência] (só para super admins)
+├── Integrações          ← NOVO  (/integrations)
+│   └── Webhook | Grupo OLX | WhatsApp
+├── Configurações        (/settings)
+│   └── Perfil | Equipe | Notificações | Permissões | White Label
+└── Sair
 ```
-┌─────────────────────────────────────┐
-│  Origem do Lead                     │
-│  ┌──────────────┐  ┌─────────────┐  │
-│  │ Origem       │  │ Campanha    │  │
-│  │ Grupo OLX   │  │ Chat        │  │
-│  └──────────────┘  └─────────────┘  │
-│  ┌──────────────────────────────┐   │
-│  │ 🔗 Anúncio                  │   │
-│  │ Cód. OLX: a40171           │   │  ← novo
-│  └──────────────────────────────┘   │
-└─────────────────────────────────────┘
-```
-
-### Arquivo a modificar
-
-**Apenas 1 arquivo:** `supabase/functions/olx-webhook/index.ts`
-
-Na lógica de normalização do payload (linhas 133-164), quando `clientListingId` existe mas nenhum imóvel é encontrado, adicionar o `anuncio` com o código:
-
-```typescript
-// Código atual (linhas 133-149)
-let propertyId: string | null = null;
-if (body.clientListingId) {
-  const { data: matchedProperty } = await supabase
-    .from('properties')
-    .select('id')
-    .eq('account_id', accountId)
-    .eq('reference_code', body.clientListingId)
-    .single();
-
-  if (matchedProperty) {
-    propertyId = matchedProperty.id;
-  } else {
-    // <-- NADA ACONTECIA AQUI
-  }
-}
-```
-
-```typescript
-// Código novo
-let propertyId: string | null = null;
-let anuncioCode: string | null = null;  // <-- novo
-if (body.clientListingId) {
-  const { data: matchedProperty } = await supabase
-    .from('properties')
-    .select('id')
-    .eq('account_id', accountId)
-    .eq('reference_code', body.clientListingId)
-    .single();
-
-  if (matchedProperty) {
-    propertyId = matchedProperty.id;
-  } else {
-    anuncioCode = `Cód. OLX: ${body.clientListingId}`;  // <-- novo
-  }
-}
-
-// No normalizedPayload:
-const normalizedPayload = {
-  ...
-  anuncio: anuncioCode,  // <-- novo campo
-  property_id: propertyId || undefined,
-};
-```
-
-O `webhook-leads` já aceita e persiste o campo `anuncio` (linha 354 do `webhook-leads/index.ts`): `anuncio: body.anuncio || null`.
 
 ### Arquivos a modificar
 
-1. **`supabase/functions/olx-webhook/index.ts`** — adicionar fallback do `clientListingId` no campo `anuncio` quando imóvel não for encontrado
-2. **`src/components/OlxIntegrationSettings.tsx`** — atualizar a linha da tabela de mapeamento de `clientListingId` para refletir o novo comportamento (vincula imóvel OU salva código como anúncio)
+**1. `src/App.tsx`**
+- Adicionar nova rota `/integrations` apontando para um novo componente `<Integrations />`
+
+**2. `src/pages/Integrations.tsx`** ← NOVO ARQUIVO
+- Nova página com apenas as 3 abas: Webhook, Grupo OLX e WhatsApp
+- Reutiliza os componentes já existentes: `WhatsAppIntegrationSettings`, `OlxIntegrationSettings` e o conteúdo atual da aba Webhook (que será extraído do `Settings.tsx` para um novo componente `WebhookSettings.tsx`)
+- Lê o `?tab=` da URL para navegação direta (ex: `/integrations?tab=olx`)
+
+**3. `src/components/WebhookSettings.tsx`** ← NOVO ARQUIVO
+- Extrai o conteúdo da aba Webhook do `Settings.tsx` para um componente reutilizável
+- Toda a lógica de URL, payload de teste e lista de imóveis vai para cá
+
+**4. `src/components/AppSidebar.tsx`**
+- Adicionar item "Integrações" com ícone `Plug` ou `Link2` na seção `bottomItems`, acima de "Configurações"
+- Usar o mesmo estilo visual dos demais itens
+
+**5. `src/components/BottomNav.tsx`** (navegação mobile)
+- Verificar se precisa de ajuste para incluir o acesso a Integrações no mobile
+
+**6. `src/pages/Settings.tsx`**
+- Remover as abas `webhook`, `olx` e `whatsapp-integration` do `navItems`
+- Remover os `case` correspondentes do `renderContent()`
+- Remover imports que deixarem de ser usados (`OlxIntegrationSettings`, `WhatsAppIntegrationSettings`)
+- Remover do tipo `TabValue` os três valores removidos
+
+### Visual da nova página Integrações
+
+```text
+┌──────────────────────────────────────────┐
+│  ⚡ Integrações                           │
+│  Gerencie as conexões com portais e      │
+│  plataformas externas                    │
+│                                          │
+│  [🔗 Webhook] [🏢 Grupo OLX] [💬 WhatsApp]│
+│  ─────────────────────────────────────── │
+│  (conteúdo da aba selecionada)           │
+└──────────────────────────────────────────┘
+```
+
+### Sem quebras de compatibilidade
+
+- Links diretos como `/settings?tab=webhook` deixarão de funcionar — mas como essa URL não é exposta ao usuário final em nenhum lugar do código (apenas navegação pela UI), não há impacto real
+- Os componentes `WhatsAppIntegrationSettings` e `OlxIntegrationSettings` não mudam, apenas são movidos para uma nova página pai
