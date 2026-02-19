@@ -322,17 +322,22 @@ export function WhatsAppTemplatesModal({ open, onOpenChange, onTemplatesChange }
                       )}
                     </Button>
                     {showMoreVars && (
-                      <div className="flex flex-wrap gap-2 mt-2 p-2 bg-muted/40 rounded-md border border-dashed">
+                      <div className="flex flex-col gap-1.5 mt-2 p-2 bg-muted/40 rounded-md border border-dashed">
                         {formVars.map((v) => (
-                          <Badge
+                          <div
                             key={v.code}
-                            variant="outline"
-                            className="cursor-pointer hover:bg-accent transition-colors border-primary/40 text-primary"
+                            className="flex items-center gap-2 cursor-pointer hover:bg-accent rounded px-1 py-0.5 transition-colors"
                             onClick={() => insertVariable(v.code)}
                             title={v.label}
                           >
-                            {v.code}
-                          </Badge>
+                            <Badge
+                              variant="outline"
+                              className="border-primary/40 text-primary font-mono text-xs shrink-0 max-w-[220px] truncate"
+                            >
+                              {v.code}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground truncate">{v.label}</span>
+                          </div>
                         ))}
                       </div>
                     )}
@@ -446,10 +451,10 @@ export function WhatsAppTemplatesModal({ open, onOpenChange, onTemplatesChange }
                         )}
                       </Button>
                       {showMoreVars && (
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 pt-2 border-t border-dashed">
+                        <div className="flex flex-col gap-1.5 mt-2 pt-2 border-t border-dashed">
                           {formVars.map((v) => (
                             <div key={v.code} className="flex items-center gap-2 text-xs">
-                              <Badge variant="outline" className="font-mono text-xs border-primary/40 text-primary">
+                              <Badge variant="outline" className="font-mono text-xs border-primary/40 text-primary shrink-0 max-w-[220px] truncate">
                                 {v.code}
                               </Badge>
                               <span className="text-muted-foreground truncate">{v.label}</span>
