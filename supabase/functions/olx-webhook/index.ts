@@ -178,7 +178,7 @@ serve(async (req) => {
         'apikey': supabaseServiceKey,
         'Authorization': `Bearer ${supabaseServiceKey}`,
       },
-      body: JSON.stringify(normalizedPayload),
+      body: JSON.stringify({ ...normalizedPayload, _source: 'olx' }),
     });
 
     const result = await internalResponse.json();

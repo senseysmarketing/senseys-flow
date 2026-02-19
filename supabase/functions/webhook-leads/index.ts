@@ -648,12 +648,14 @@ serve(async (req) => {
             .single()
 
           if (automationRule) {
+            // Detect the real call source: 'olx' if forwarded by olx-webhook, otherwise 'webhook'
+            const callSource = (body as Record<string, unknown>)._source === 'olx' ? 'olx' : 'webhook'
             const sources = automationRule.trigger_sources || { webhook: true }
-            const webhookEnabled = typeof sources === 'object' && sources !== null
-              ? (sources as Record<string, boolean>).webhook !== false
+            const sourceEnabled = typeof sources === 'object' && sources !== null
+              ? (sources as Record<string, boolean>)[callSource] !== false
               : true
 
-            if (automationRule.template_id && webhookEnabled) {
+            if (automationRule.template_id && sourceEnabled) {
               templateId = automationRule.template_id
               delaySeconds = automationRule.delay_seconds || 0
               ruleId = automationRule.id
