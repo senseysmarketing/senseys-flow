@@ -1,53 +1,67 @@
 
-## Corrigir scroll vertical no modal "Gerenciar Templates de Mensagem"
+## Ajuste nos Alertas de Falha de WhatsApp no Modal do Lead
 
-### Diagnóstico
+### Problema Identificado
 
-No arquivo `src/components/whatsapp/WhatsAppTemplatesModal.tsx`, a view de lista (List View) possui esta estrutura:
+O hook `useLeadWhatsAppFailure` (em `src/hooks/use-whatsapp-failures.tsx`) apenas verifica se existe um registro com `status = 'failed'` na `whatsapp_message_queue`, sem considerar se o WhatsApp está conectado ou não.
 
-```
-<div className="space-y-4">           ← sem altura máxima
-  <Button> Novo Template </Button>
-  <ScrollArea className="max-h-[300px]">  ← scroll apenas neste bloco
-    lista de cards
-  </ScrollArea>
-  <div> Variáveis Disponíveis </div>  ← fora do scroll
-</div>
-```
+Quando o WhatsApp foi conectado alguma vez e depois desconectado, as mensagens que falharam no período desconectado continuam aparecendo com o alerta genérico "Falha no envio", quando na verdade o correto seria mostrar que o WhatsApp está desconectado.
 
-O scroll está aplicado apenas na lista de cards (limitado a 300px), enquanto o botão "Novo Template" e a seção "Variáveis Disponíveis" ficam **fora** do scroll. Com muitos templates, o modal cresce sem limite vertical, ficando parcialmente fora da tela.
+### Lógica Desejada
+
+| Situação | Alerta no modal do lead |
+|---|---|
+| WhatsApp **conectado** + erro no envio | "Falha no envio de WhatsApp" com o detalhe do erro (ex: número não existe) |
+| WhatsApp **desconectado** + havia mensagem falhou | "WhatsApp desconectado" — sem mencionar falha de envio |
+| WhatsApp nunca conectado / sem falhas | Nenhum alerta |
 
 ### Solução
 
-Dois ajustes simultâneos:
+**1. Atualizar o hook `useLeadWhatsAppFailure`** para também verificar o status atual da sessão WhatsApp da conta do lead. O hook precisará:
+- Buscar o status da sessão WhatsApp da conta (`whatsapp_sessions` onde `status = 'connected'`)
+- Buscar a falha na `whatsapp_message_queue`
+- Retornar um objeto com: `{ failure, isDisconnected, loading }`
 
-**1. Dar altura máxima ao dialog inteiro:**
-No `DialogContent`, adicionar `max-h-[90vh] flex flex-col` para garantir que o modal nunca ultrapasse a altura da tela.
+**2. Atualizar o `LeadDetailModal.tsx`** para renderizar o alerta correto com base no novo retorno do hook:
+- Se `isDisconnected` → mostrar aviso de "WhatsApp desconectado" (em azul/cinza, não âmbar)
+- Se `failure` e não `isDisconnected` → mostrar o alerta de falha atual (âmbar)
+- Se nenhum → não mostrar nada
 
-**2. Envolver TODO o conteúdo da List View num único `ScrollArea`:**
-Remover o `ScrollArea` interno que envolve apenas os cards e colocar um único `ScrollArea` envolvendo botão + lista + variáveis, com `max-h-[65vh]` ou equivalente.
+Para saber o `account_id` do lead no hook, a query buscará o `account_id` via `leads` ou passará diretamente como parâmetro. A solução mais limpa é passar o `account_id` como parâmetro opcional no hook, já que `LeadDetailModal` tem acesso ao `useAccount`.
 
-Estrutura final:
+### Arquivos a modificar
 
-```
-<DialogContent className="!max-w-2xl max-h-[90vh] flex flex-col">
-  <DialogHeader> ... </DialogHeader>
+**`src/hooks/use-whatsapp-failures.tsx`**:
+- Adicionar parâmetro `accountId?: string` ao `useLeadWhatsAppFailure`
+- Adicionar estado `isDisconnected: boolean`
+- Buscar em paralelo a sessão WhatsApp e a falha da fila
+- Se não houver sessão conectada **e** houver falha → `isDisconnected = true, failure = null`
+- Se houver sessão conectada **e** houver falha → `isDisconnected = false, failure = <mensagem>`
+- Se não houver falha → retornar ambos `null/false`
 
-  <!-- List View -->
-  <ScrollArea className="flex-1 overflow-auto">
-    <div className="space-y-4 pr-1">
-      <Button> Novo Template </Button>
-      <div className="space-y-2">
-        {templates.map(...)}
-      </div>
-      <div> Variáveis Disponíveis </div>
-    </div>
-  </ScrollArea>
-```
+**`src/components/LeadDetailModal.tsx`**:
+- Passar `account` do `useAccount()` para o hook
+- Ajustar o bloco do alerta (linhas ~313-329) para dois casos:
+  - `isDisconnected` → alerta informativo "WhatsApp desconectado" (ícone WifiOff, cor azul/cinza)
+  - `failure` → alerta âmbar atual de "Falha no envio de WhatsApp"
 
-### Arquivo a modificar
+### Comportamento esperado para o caso da conta "ASF" / André:
+- WhatsApp desconectado → modal do lead mostra: "WhatsApp desconectado — Conecte o WhatsApp nas configurações para enviar mensagens"
+- Sem o aviso de "Falha no envio" confuso
 
-- **`src/components/whatsapp/WhatsAppTemplatesModal.tsx`** — apenas a List View (linhas ~293-360):
-  - Adicionar `max-h-[90vh] flex flex-col` ao `DialogContent`
-  - Substituir a estrutura atual por um único `ScrollArea` envolvendo todo o conteúdo da lista
-  - Remover o `ScrollArea` interno que limitava apenas os cards a 300px
+### Consideração para os cards do Kanban e tabela
+
+Os hooks `useWhatsAppFailures` (plural, para múltiplos leads) também poderiam passar pela mesma lógica, mas seria muito custoso checar a sessão para cada lead. A abordagem mais eficiente é:
+- No nível da página (`Leads.tsx`), verificar uma vez se o WhatsApp está conectado
+- Passar um prop `whatsappConnected: boolean` para os cards
+- No card: se desconectado, não mostrar o ícone de erro (ou mostrar ícone de desconectado diferente)
+
+Isso será feito de forma simples: adicionar um hook `useWhatsAppConnected` (leve, apenas verifica `whatsapp_sessions`) no `Leads.tsx` e passar o resultado aos cards existentes via prop.
+
+### Resumo dos arquivos modificados
+
+1. **`src/hooks/use-whatsapp-failures.tsx`** — adicionar `accountId` e lógica de `isDisconnected`; adicionar export de `useWhatsAppConnected`
+2. **`src/components/LeadDetailModal.tsx`** — usar `useAccount`, passar `accountId`, renderizar alertas distintos
+3. **`src/pages/Leads.tsx`** — verificar conexão uma vez e passar para os cards
+4. **`src/components/LeadKanbanCard.tsx`** — receber `whatsappConnected` e suprimir ícone de erro quando desconectado (ou trocar por ícone diferente)
+5. **`src/components/leads/LeadMobileCard.tsx`** — mesmo ajuste do Kanban
