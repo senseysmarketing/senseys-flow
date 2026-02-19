@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { Home, Users, Building2, MessageSquare, Settings } from "lucide-react";
+import { Home, Users, Building2, MessageSquare, Settings, Plug } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePermissions } from "@/hooks/use-permissions";
 import { cn } from "@/lib/utils";
@@ -9,6 +9,7 @@ const allNavItems = [
   { to: "/leads", icon: Users, label: "Leads" },
   { to: "/conversations", icon: MessageSquare, label: "Conversas", permission: "conversations.view" },
   { to: "/properties", icon: Building2, label: "Imóveis" },
+  { to: "/integrations", icon: Plug, label: "Integrações" },
   { to: "/settings", icon: Settings, label: "Config" },
 ];
 

@@ -8,7 +8,8 @@ import {
   Building2,
   Sparkles,
   Shield,
-  MessageSquare
+  MessageSquare,
+  Plug
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { 
@@ -64,6 +65,11 @@ const menuItems = [
 ];
 
 const bottomItems = [
+  {
+    title: "Integrações",
+    url: "/integrations",
+    icon: Plug,
+  },
   {
     title: "Configurações",
     url: "/settings",

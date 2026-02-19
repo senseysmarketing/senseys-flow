@@ -19,6 +19,7 @@ import Settings from "./pages/Settings";
 import AgencyAdmin from "./pages/AgencyAdmin";
 import SupportCallback from "./pages/SupportCallback";
 import Conversations from "./pages/Conversations";
+import Integrations from "./pages/Integrations";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -44,6 +45,7 @@ const App = () => (
                   <Route path="/reports" element={<Layout><Reports /></Layout>} />
                   <Route path="/settings" element={<Layout><Settings /></Layout>} />
                   <Route path="/conversations" element={<Layout fullHeight><Conversations /></Layout>} />
+                  <Route path="/integrations" element={<Layout><Integrations /></Layout>} />
                   <Route path="/agency-admin" element={<Layout><AgencyAdmin /></Layout>} />
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<Layout><NotFound /></Layout>} />
