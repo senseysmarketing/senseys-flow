@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Pencil, Trash2, Info, ArrowLeft, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Info, ArrowLeft, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 
@@ -23,6 +23,11 @@ interface Template {
   name: string;
   template: string;
   position: number;
+}
+
+interface FormVar {
+  code: string;
+  label: string;
 }
 
 const TEMPLATE_VARIABLES = [
@@ -41,6 +46,8 @@ export function WhatsAppTemplatesModal({ open, onOpenChange, onTemplatesChange }
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Template | null>(null);
+  const [formVars, setFormVars] = useState<FormVar[]>([]);
+  const [showMoreVars, setShowMoreVars] = useState(false);
   
   // Form state
   const [formName, setFormName] = useState('');
@@ -60,9 +67,35 @@ export function WhatsAppTemplatesModal({ open, onOpenChange, onTemplatesChange }
     setLoading(false);
   };
 
+  const fetchFormVars = async () => {
+    // Get distinct question_name + question_label from meta_form_scoring_rules via meta_form_configs
+    const { data } = await supabase
+      .from('meta_form_scoring_rules')
+      .select('question_name, question_label');
+    
+    if (!data || data.length === 0) return;
+
+    // Deduplicate by question_name
+    const seen = new Set<string>();
+    const vars: FormVar[] = [];
+    for (const row of data) {
+      if (!seen.has(row.question_name)) {
+        seen.add(row.question_name);
+        const label = row.question_label || row.question_name;
+        // Generate variable code: {form_<question_name>} keeping the name as-is
+        vars.push({
+          code: `{form_${row.question_name}}`,
+          label,
+        });
+      }
+    }
+    setFormVars(vars);
+  };
+
   useEffect(() => {
     if (open) {
       fetchTemplates();
+      fetchFormVars();
     }
   }, [open]);
 
@@ -71,6 +104,7 @@ export function WhatsAppTemplatesModal({ open, onOpenChange, onTemplatesChange }
     setFormTemplate('');
     setEditingTemplate(null);
     setIsCreating(false);
+    setShowMoreVars(false);
   };
 
   const handleClose = () => {
@@ -83,6 +117,7 @@ export function WhatsAppTemplatesModal({ open, onOpenChange, onTemplatesChange }
     setFormTemplate('');
     setEditingTemplate(null);
     setIsCreating(true);
+    setShowMoreVars(false);
   };
 
   const startEdit = (template: Template) => {
@@ -90,6 +125,7 @@ export function WhatsAppTemplatesModal({ open, onOpenChange, onTemplatesChange }
     setFormTemplate(template.template);
     setEditingTemplate(template);
     setIsCreating(true);
+    setShowMoreVars(false);
   };
 
   const insertVariable = (code: string) => {
@@ -126,7 +162,6 @@ export function WhatsAppTemplatesModal({ open, onOpenChange, onTemplatesChange }
       const { data: accountData } = await supabase.rpc('get_user_account_id');
       
       if (editingTemplate) {
-        // Update existing
         await supabase
           .from('whatsapp_templates')
           .update({ 
@@ -138,7 +173,6 @@ export function WhatsAppTemplatesModal({ open, onOpenChange, onTemplatesChange }
         
         toast({ title: 'Template atualizado!' });
       } else {
-        // Create new
         const maxPosition = templates.length > 0 
           ? Math.max(...templates.map(t => t.position)) + 1 
           : 0;
@@ -194,6 +228,10 @@ export function WhatsAppTemplatesModal({ open, onOpenChange, onTemplatesChange }
     let preview = text;
     TEMPLATE_VARIABLES.forEach(v => {
       preview = preview.replace(new RegExp(v.code.replace(/[{}]/g, '\\$&'), 'g'), v.example);
+    });
+    // Replace form vars with placeholder example
+    formVars.forEach(v => {
+      preview = preview.replace(new RegExp(v.code.replace(/[{}?]/g, (c) => `\\${c}`), 'g'), `[${v.label}]`);
     });
     return preview;
   };
@@ -266,6 +304,40 @@ export function WhatsAppTemplatesModal({ open, onOpenChange, onTemplatesChange }
                     </Badge>
                   ))}
                 </div>
+
+                {/* Form vars in editor - collapsible */}
+                {formVars.length > 0 && (
+                  <div className="mt-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => setShowMoreVars(!showMoreVars)}
+                    >
+                      {showMoreVars ? (
+                        <><ChevronUp className="h-3 w-3 mr-1" />Ocultar variáveis de formulário</>
+                      ) : (
+                        <><ChevronDown className="h-3 w-3 mr-1" />Mostrar variáveis de formulário Meta ({formVars.length})</>
+                      )}
+                    </Button>
+                    {showMoreVars && (
+                      <div className="flex flex-wrap gap-2 mt-2 p-2 bg-muted/40 rounded-md border border-dashed">
+                        {formVars.map((v) => (
+                          <Badge
+                            key={v.code}
+                            variant="outline"
+                            className="cursor-pointer hover:bg-accent transition-colors border-primary/40 text-primary"
+                            onClick={() => insertVariable(v.code)}
+                            title={v.label}
+                          >
+                            {v.code}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {formTemplate && (
@@ -356,6 +428,37 @@ export function WhatsAppTemplatesModal({ open, onOpenChange, onTemplatesChange }
                       </div>
                     ))}
                   </div>
+
+                  {/* Form vars section in list view */}
+                  {formVars.length > 0 && (
+                    <div className="mt-3">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-0 text-xs text-muted-foreground hover:text-foreground gap-1"
+                        onClick={() => setShowMoreVars(!showMoreVars)}
+                      >
+                        {showMoreVars ? (
+                          <><ChevronUp className="h-3 w-3" />Ocultar variáveis de formulário</>
+                        ) : (
+                          <><ChevronDown className="h-3 w-3" />Mostrar mais variáveis ({formVars.length} de formulário Meta)</>
+                        )}
+                      </Button>
+                      {showMoreVars && (
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 pt-2 border-t border-dashed">
+                          {formVars.map((v) => (
+                            <div key={v.code} className="flex items-center gap-2 text-xs">
+                              <Badge variant="outline" className="font-mono text-xs border-primary/40 text-primary">
+                                {v.code}
+                              </Badge>
+                              <span className="text-muted-foreground truncate">{v.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </ScrollArea>
