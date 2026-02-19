@@ -19,7 +19,7 @@ const FIELD_MAPPINGS = [
   { olxField: "ddd + phone", crmField: "phone", description: "Concatenação do DDD com número" },
   { olxField: "email", crmField: "email", description: "E-mail do consumidor" },
   { olxField: "message", crmField: "observacoes", description: "Mensagem/interesse do lead" },
-  { olxField: "clientListingId", crmField: "property_id (via reference_code)", description: "Vinculação automática de imóvel" },
+  { olxField: "clientListingId", crmField: "property_id ou anuncio", description: "Vincula imóvel pelo código de referência; se não encontrar, salva o código no campo Anúncio" },
   { olxField: "temperature", crmField: "temperature", description: "Alta→hot / Média→warm / Baixa→cold" },
   { olxField: "leadOrigin", crmField: "origem", description: "Sempre \"Grupo OLX\"" },
   { olxField: "transactionType", crmField: "interesse", description: "SELL→Compra / RENT→Aluguel" },
