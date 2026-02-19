@@ -42,7 +42,8 @@ import LeadMobileCard from "@/components/leads/LeadMobileCard";
 import { LeadsSettingsSheet } from "@/components/leads/LeadsSettingsSheet";
 import { LeadsHeroStats } from "@/components/leads/LeadsHeroStats";
 import DisqualifyLeadModal from "@/components/leads/DisqualifyLeadModal";
-import { useWhatsAppFailures } from "@/hooks/use-whatsapp-failures";
+import { useWhatsAppFailures, useWhatsAppConnected } from "@/hooks/use-whatsapp-failures";
+import { useAccount } from "@/hooks/use-account";
 
 interface Lead {
   id: string;
@@ -81,6 +82,7 @@ interface LeadStatus {
 
 const Leads = () => {
   const { user } = useAuth();
+  const { account } = useAccount();
   const { hasPermission, isOwner } = usePermissions();
   const isMobile = useIsMobile();
   const canAssignLeads = hasPermission('leads.assign') || isOwner;
@@ -115,6 +117,8 @@ const Leads = () => {
   // Track WhatsApp failures for visible leads
   const leadIds = useMemo(() => leads.map(l => l.id), [leads]);
   const whatsappFailures = useWhatsAppFailures(leadIds);
+  // Check if WhatsApp is connected once for this account (to contextualize failures)
+  const whatsappConnected = useWhatsAppConnected(account?.id ?? undefined);
 
   // Silent refresh when new leads arrive (notifications are handled globally in Layout.tsx)
   useLeadNotifications(notificationsEnabled ? () => {
@@ -1189,7 +1193,7 @@ const Leads = () => {
                                   const l = leads.find(x => x.id === id);
                                   if (l) requestDeleteLead(l);
                                 }}
-                                whatsappError={whatsappFailures.get(lead.id) || null}
+                                whatsappError={whatsappConnected ? (whatsappFailures.get(lead.id) || null) : null}
                               />
                             ))
                           )}
@@ -1283,7 +1287,7 @@ const Leads = () => {
                                               if (l) requestDeleteLead(l);
                                             }}
                                             isDragging={snapshot.isDragging}
-                                            whatsappError={whatsappFailures.get(lead.id) || null}
+                                            whatsappError={whatsappConnected ? (whatsappFailures.get(lead.id) || null) : null}
                                           />
                                         </div>
                                       );

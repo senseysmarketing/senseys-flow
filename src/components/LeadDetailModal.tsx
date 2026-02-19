@@ -36,8 +36,9 @@ import { toast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useLeadWhatsAppFailure } from "@/hooks/use-whatsapp-failures";
+import { useAccount } from "@/hooks/use-account";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { MessageSquareWarning } from "lucide-react";
+import { MessageSquareWarning, WifiOff } from "lucide-react";
 
 interface Lead {
   id: string;
@@ -86,11 +87,12 @@ interface DuplicateLeadInfo {
 }
 
 const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalProps) => {
+  const { account } = useAccount();
   const [brokerName, setBrokerName] = useState<string | null>(null);
   const [propertyInfo, setPropertyInfo] = useState<{ title: string; city?: string } | null>(null);
   const [disqualificationData, setDisqualificationData] = useState<{ reasons: string[]; notes: string | null } | null>(null);
   const [duplicateLeadInfo, setDuplicateLeadInfo] = useState<DuplicateLeadInfo | null>(null);
-  const { failure: whatsappFailure } = useLeadWhatsAppFailure(lead?.id);
+  const { failure: whatsappFailure, isDisconnected: whatsappDisconnected } = useLeadWhatsAppFailure(lead?.id, account?.id ?? undefined);
 
   useEffect(() => {
     if (lead?.assigned_broker_id) {
@@ -310,8 +312,24 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
             </>
           )}
 
-          {/* Alerta de falha no WhatsApp */}
-          {whatsappFailure && (
+          {/* Alerta de WhatsApp desconectado */}
+          {whatsappDisconnected && (
+            <>
+              <Alert className="border-muted-foreground/20 bg-muted/50 text-foreground [&>svg]:text-muted-foreground">
+                <WifiOff className="h-5 w-5" />
+                <AlertTitle className="font-semibold">
+                  WhatsApp desconectado
+                </AlertTitle>
+                <AlertDescription className="text-muted-foreground">
+                  O número do WhatsApp está desconectado. Conecte o WhatsApp nas configurações para enviar mensagens.
+                </AlertDescription>
+              </Alert>
+              <Separator />
+            </>
+          )}
+
+          {/* Alerta de falha no WhatsApp (apenas quando conectado) */}
+          {whatsappFailure && !whatsappDisconnected && (
             <>
               <Alert variant="destructive" className="border-amber-500/30 bg-amber-500/10 text-foreground [&>svg]:text-amber-500">
                 <MessageSquareWarning className="h-5 w-5" />
