@@ -1,113 +1,96 @@
 
-## Integração Grupo OLX — Recebimento de Leads via Webhook
+## Exibir clientListingId quando imóvel não for encontrado no CRM
 
-### Visão Geral
+### Problema atual
 
-O Grupo OLX (que engloba OLX, VivaReal, ZAP Imóveis) envia leads com um JSON próprio, diferente do formato padrão do CRM. A solução usa a arquitetura "hub-and-spoke" já descrita nos documentos do projeto: uma Edge Function dedicada (`olx-webhook`) que recebe o payload OLX, normaliza os dados e os encaminha para o `webhook-leads` interno existente — reaproveitando toda a lógica de distribuição, qualificação, notificação e automação WhatsApp que já existe.
+Quando o Grupo OLX envia um lead com `clientListingId` (ex: `a40171`) e esse código não existe como `reference_code` de nenhum imóvel cadastrado no CRM, a informação é simplesmente descartada — o lead é criado sem nenhuma referência ao anúncio de origem.
 
-Na tela de Configurações, uma nova aba "Grupo OLX" aparecerá ao lado de "Webhook" com a URL exclusiva do portal e instruções de configuração.
+O usuário não tem como saber de qual imóvel veio o lead.
 
----
+### Solução
 
-### Mapeamento de Campos OLX → CRM
+Usar o campo **`anuncio`** (já existente na tabela `leads` e exibido no modal de detalhes) para armazenar o `clientListingId` quando nenhum imóvel for vinculado automaticamente.
 
-| Campo OLX | Campo CRM | Observação |
-|---|---|---|
-| `name` | `name` | Nome do lead |
-| `ddd` + `phone` | `phone` | Concatenados: `ddd + phone` |
-| `email` | `email` | Email |
-| `message` | `observacoes` | Mensagem/interesse |
-| `clientListingId` | Busca imóvel por `reference_code` | Vincula propriedade automaticamente |
-| `temperature` (Baixa/Média/Alta) | `temperature` (cold/warm/hot) | Mapeamento de temperatura |
-| `leadOrigin` | `origem` | "Grupo OLX" |
-| `transactionType` | `interesse` | "SELL" → "Compra" / "RENT" → "Aluguel" |
-| `extraData.leadType` | `campanha` | Tipo de contato (chat, formulário, etc.) |
-| `originLeadId` | `meta_lead_id` | ID externo do lead para rastreio de duplicatas |
+Comportamento:
+- Se `clientListingId` casa com um `reference_code` → vincula o `property_id` (comportamento atual, mantido)
+- Se `clientListingId` existe mas **não casa** com nenhum imóvel → salva `"Cód. OLX: a40171"` no campo `anuncio`
+- Se `clientListingId` não existe → nenhuma mudança
 
----
+Dessa forma, o modal de detalhes do lead exibirá automaticamente o código na seção "Anúncio" da aba "Origem do Lead", sem nenhuma alteração no frontend.
 
-### Componentes a criar/modificar
+### Onde o código aparecerá
 
-**1. Nova Edge Function: `supabase/functions/olx-webhook/index.ts`**
+O campo `anuncio` já é exibido no `LeadDetailModal.tsx` (linha 406-414) na seção "Origem do Lead":
 
-- Rota pública que o Grupo OLX chamará: `POST /olx-webhook?account_id=<uuid>`
-- Valida que o payload contém o campo `leadOrigin` (fingerprint OLX)
-- Normaliza todos os campos conforme a tabela acima
-- Tenta vincular a propriedade pelo `clientListingId` como `reference_code` via busca no banco
-- Mapeia temperatura: "Alta" → `hot`, "Média" → `warm`, "Baixa" → `cold`
-- Detecta duplicatas pelo `originLeadId` (salvo em `meta_lead_id`) antes de encaminhar
-- Invoca `webhook-leads` internamente com o payload normalizado já no formato CRM padrão
-
-**2. Nova aba em Configurações: `src/components/OlxIntegrationSettings.tsx`**
-
-Componente visual para a aba, exibindo:
-- URL do webhook OLX (com `account_id` já incluído), campo somente leitura com botão copiar
-- Instruções passo a passo de como configurar no painel do Grupo OLX / VivaReal / ZAP
-- Tabela de mapeamento de campos (o que cada campo do OLX vira no CRM)
-- Informações sobre vinculação automática de imóveis (usando `clientListingId` como código de referência)
-- Status de ativação: badge "Ativo" (sempre ativo quando account_id configurado)
-- Botão de "Simular Lead" para testes com payload de exemplo no formato OLX
-
-**3. Atualização de `src/pages/Settings.tsx`**
-
-- Adicionar `'olx'` ao tipo `TabValue`
-- Adicionar aba "Grupo OLX" com ícone `Building2` (ou similar) na lista `navItems`, **ao lado do Webhook**
-- Adicionar `case 'olx'` no `renderContent()` retornando `<OlxIntegrationSettings />`
-- Atualizar `validTabs` no `useMemo`
-
----
-
-### Fluxo de funcionamento
-
-```text
-Grupo OLX / VivaReal / ZAP
-        |
-        | POST /olx-webhook?account_id=xxx
-        | Payload no formato OLX
-        v
-[olx-webhook Edge Function]
-        |
-        |-- Valida account_id
-        |-- Detecta duplicata via originLeadId
-        |-- Normaliza campos OLX → CRM
-        |-- Busca imóvel por clientListingId = reference_code
-        |-- Chama webhook-leads internamente
-        v
-[webhook-leads Edge Function] (já existente)
-        |
-        |-- Aplica regras de distribuição
-        |-- Envia notificações
-        |-- Agenda automação WhatsApp
-        v
-Lead criado no CRM com origem "Grupo OLX"
+```
+┌─────────────────────────────────────┐
+│  Origem do Lead                     │
+│  ┌──────────────┐  ┌─────────────┐  │
+│  │ Origem       │  │ Campanha    │  │
+│  │ Grupo OLX   │  │ Chat        │  │
+│  └──────────────┘  └─────────────┘  │
+│  ┌──────────────────────────────┐   │
+│  │ 🔗 Anúncio                  │   │
+│  │ Cód. OLX: a40171           │   │  ← novo
+│  └──────────────────────────────┘   │
+└─────────────────────────────────────┘
 ```
 
----
+### Arquivo a modificar
 
-### Detalhes técnicos
+**Apenas 1 arquivo:** `supabase/functions/olx-webhook/index.ts`
 
-**Autenticação do OLX:** O Grupo OLX não envia header de autenticação — a URL com `account_id` serve como token de roteamento (padrão já usado pelo webhook genérico). A função valida apenas que o `account_id` existe e que o payload tem o formato OLX.
+Na lógica de normalização do payload (linhas 133-164), quando `clientListingId` existe mas nenhum imóvel é encontrado, adicionar o `anuncio` com o código:
 
-**Vinculação de imóveis:** O campo `clientListingId` do OLX é o código do anúncio **do anunciante** (i.e., o código de referência que o corretor cadastrou no portal, que deve ser o mesmo `reference_code` cadastrado no imóvel no CRM). A Edge Function buscará por esse código na tabela `properties` do account.
+```typescript
+// Código atual (linhas 133-149)
+let propertyId: string | null = null;
+if (body.clientListingId) {
+  const { data: matchedProperty } = await supabase
+    .from('properties')
+    .select('id')
+    .eq('account_id', accountId)
+    .eq('reference_code', body.clientListingId)
+    .single();
 
-**Normalização de temperatura:**
-- `"Alta"` → `hot`
-- `"Média"` → `warm`
-- `"Baixa"` ou ausente → `cold`
+  if (matchedProperty) {
+    propertyId = matchedProperty.id;
+  } else {
+    // <-- NADA ACONTECIA AQUI
+  }
+}
+```
 
-**Normalização de leadType para campanha:**
-- `CONTACT_CHAT` → "Chat"
-- `CONTACT_FORM` → "Formulário"
-- `CLICK_WHATSAPP` → "WhatsApp"
-- `CLICK_SCHEDULE` → "Agendamento"
-- `PHONE_VIEW` → "Visualização de Telefone"
-- `VISIT_REQUEST` → "Solicitação de Visita"
+```typescript
+// Código novo
+let propertyId: string | null = null;
+let anuncioCode: string | null = null;  // <-- novo
+if (body.clientListingId) {
+  const { data: matchedProperty } = await supabase
+    .from('properties')
+    .select('id')
+    .eq('account_id', accountId)
+    .eq('reference_code', body.clientListingId)
+    .single();
 
----
+  if (matchedProperty) {
+    propertyId = matchedProperty.id;
+  } else {
+    anuncioCode = `Cód. OLX: ${body.clientListingId}`;  // <-- novo
+  }
+}
 
-### Arquivos a criar/modificar
+// No normalizedPayload:
+const normalizedPayload = {
+  ...
+  anuncio: anuncioCode,  // <-- novo campo
+  property_id: propertyId || undefined,
+};
+```
 
-1. **Criar** `supabase/functions/olx-webhook/index.ts` — nova Edge Function adaptadora
-2. **Criar** `src/components/OlxIntegrationSettings.tsx` — componente de configuração UI
-3. **Modificar** `src/pages/Settings.tsx` — adicionar aba "Grupo OLX"
-4. **Modificar** `supabase/config.toml` — registrar nova função com `verify_jwt = false`
+O `webhook-leads` já aceita e persiste o campo `anuncio` (linha 354 do `webhook-leads/index.ts`): `anuncio: body.anuncio || null`.
+
+### Arquivos a modificar
+
+1. **`supabase/functions/olx-webhook/index.ts`** — adicionar fallback do `clientListingId` no campo `anuncio` quando imóvel não for encontrado
+2. **`src/components/OlxIntegrationSettings.tsx`** — atualizar a linha da tabela de mapeamento de `clientListingId` para refletir o novo comportamento (vincula imóvel OU salva código como anúncio)
