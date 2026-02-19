@@ -201,7 +201,7 @@ export function WhatsAppTemplatesModal({ open, onOpenChange, onTemplatesChange }
   return (
     <>
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="!max-w-2xl">
+        <DialogContent className="!max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {isCreating && (
@@ -292,13 +292,13 @@ export function WhatsAppTemplatesModal({ open, onOpenChange, onTemplatesChange }
             </div>
           ) : (
             /* List View */
-            <div className="space-y-4">
-              <Button onClick={startCreate} className="w-full">
-                <Plus className="h-4 w-4 mr-2" />
-                Novo Template
-              </Button>
+            <ScrollArea className="flex-1 overflow-auto">
+              <div className="space-y-4 pr-1">
+                <Button onClick={startCreate} className="w-full">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Novo Template
+                </Button>
 
-              <ScrollArea className="max-h-[300px]">
                 <div className="space-y-2">
                   {templates.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground text-sm">
@@ -339,26 +339,26 @@ export function WhatsAppTemplatesModal({ open, onOpenChange, onTemplatesChange }
                     ))
                   )}
                 </div>
-              </ScrollArea>
 
-              {/* Variables Reference */}
-              <div className="border-t pt-4 space-y-2">
-                <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Info className="h-3 w-3" />
-                  Variáveis Disponíveis
-                </Label>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                  {TEMPLATE_VARIABLES.map((v) => (
-                    <div key={v.code} className="flex items-center gap-2 text-xs">
-                      <Badge variant="outline" className="font-mono text-xs">
-                        {v.code}
-                      </Badge>
-                      <span className="text-muted-foreground truncate">{v.label}</span>
-                    </div>
-                  ))}
+                {/* Variables Reference */}
+                <div className="border-t pt-4 space-y-2">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Info className="h-3 w-3" />
+                    Variáveis Disponíveis
+                  </Label>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                    {TEMPLATE_VARIABLES.map((v) => (
+                      <div key={v.code} className="flex items-center gap-2 text-xs">
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {v.code}
+                        </Badge>
+                        <span className="text-muted-foreground truncate">{v.label}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
+            </ScrollArea>
           )}
         </DialogContent>
       </Dialog>
