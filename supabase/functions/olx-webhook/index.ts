@@ -132,6 +132,7 @@ serve(async (req) => {
 
     // Try to find property by clientListingId as reference_code
     let propertyId: string | null = null;
+    let anuncioCode: string | null = null;
     if (body.clientListingId) {
       const { data: matchedProperty } = await supabase
         .from('properties')
@@ -144,7 +145,8 @@ serve(async (req) => {
         propertyId = matchedProperty.id;
         console.log('[olx-webhook] Matched property by clientListingId:', propertyId);
       } else {
-        console.log('[olx-webhook] No property found with reference_code:', body.clientListingId);
+        anuncioCode = `Cód. OLX: ${body.clientListingId}`;
+        console.log('[olx-webhook] No property found with reference_code:', body.clientListingId, '— saving as anuncio:', anuncioCode);
       }
     }
 
@@ -160,6 +162,7 @@ serve(async (req) => {
       interesse: mapTransactionType(body.transactionType),
       campanha: mapLeadType(body.extraData?.leadType),
       meta_lead_id: body.originLeadId || null,
+      anuncio: anuncioCode,
       property_id: propertyId || undefined,
     };
 
