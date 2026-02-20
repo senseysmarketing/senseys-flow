@@ -138,23 +138,30 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     // Delete user_roles first (due to FK constraint)
-    await supabaseAdmin
+    const { error: rolesError } = await supabaseAdmin
       .from('user_roles')
       .delete()
       .eq('user_id', targetUserId);
 
+    if (rolesError) {
+      throw new Error('Erro ao remover roles do usuário: ' + rolesError.message);
+    }
+
     // Delete profile (cascades from auth.users won't work here, so do it manually)
-    await supabaseAdmin
+    const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .delete()
       .eq('user_id', targetUserId);
+
+    if (profileError) {
+      throw new Error('Erro ao remover perfil do usuário: ' + profileError.message);
+    }
 
     // Delete the user from auth
     const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(targetUserId);
 
     if (deleteError) {
-      console.error('Error deleting user from auth:', deleteError);
-      // User data already deleted, log but don't fail completely
+      throw new Error('Erro ao remover usuário do auth: ' + deleteError.message);
     }
 
     console.log('Team member deleted successfully:', targetUserId, targetProfile.full_name);

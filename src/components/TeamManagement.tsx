@@ -75,14 +75,16 @@ const TeamManagement = () => {
         console.error("Erro ao buscar roles:", userRolesError);
       }
 
-      // Merge profiles with roles
-      const membersWithRoles = (profiles || []).map(profile => {
-        const userRole = userRoles?.find(ur => ur.user_id === profile.user_id);
-        return {
-          ...profile,
-          role: userRole?.roles as { id: string; name: string } | null
-        };
-      });
+      // Merge profiles with roles — filter out orphan profiles without a role
+      const membersWithRoles = (profiles || [])
+        .map(profile => {
+          const userRole = userRoles?.find(ur => ur.user_id === profile.user_id);
+          return {
+            ...profile,
+            role: userRole?.roles as { id: string; name: string } | null
+          };
+        })
+        .filter(member => member.role !== null);
 
       setTeamMembers(membersWithRoles);
     } catch (error) {
