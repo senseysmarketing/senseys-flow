@@ -137,8 +137,18 @@ export function WhatsAppIntegrationSettings() {
   const [sequenceTarget, setSequenceTarget] = useState<{ automationRuleId?: string; greetingRuleId?: string; label: string } | null>(null);
   const [sequenceCounts, setSequenceCounts] = useState<Record<string, number>>({});
 
+  // Sending schedule (business hours)
+  const [sendingScheduleEnabled, setSendingScheduleEnabled] = useState(false);
+  const [sendingScheduleStartHour, setSendingScheduleStartHour] = useState(8);
+  const [sendingScheduleEndHour, setSendingScheduleEndHour] = useState(18);
+  const [sendingScheduleAllowedDays, setSendingScheduleAllowedDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [scheduleDbId, setScheduleDbId] = useState<string | null>(null);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const DAYS_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
   const fetchSession = useCallback(async () => {
     if (!user) return;
+
 
     const { data, error } = await supabase
       .from('whatsapp_sessions')
@@ -254,17 +264,68 @@ export function WhatsAppIntegrationSettings() {
     setFollowUpSteps((data || []) as FollowUpStep[]);
   }, []);
 
+  const fetchSendingSchedule = useCallback(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase.from('whatsapp_sending_schedule' as any) as any)
+      .select('*')
+      .maybeSingle();
+    if (data) {
+      setScheduleDbId(data.id);
+      setSendingScheduleEnabled(data.is_enabled);
+      setSendingScheduleStartHour(data.start_hour);
+      setSendingScheduleEndHour(data.end_hour);
+      setSendingScheduleAllowedDays(data.allowed_days ?? [1, 2, 3, 4, 5]);
+    }
+  }, []);
+
+  const saveSendingSchedule = async (patch: {
+    is_enabled?: boolean;
+    start_hour?: number;
+    end_hour?: number;
+    allowed_days?: number[];
+  }) => {
+    const payload = {
+      is_enabled: sendingScheduleEnabled,
+      start_hour: sendingScheduleStartHour,
+      end_hour: sendingScheduleEndHour,
+      allowed_days: sendingScheduleAllowedDays,
+      ...patch,
+    };
+    setScheduleSaving(true);
+    try {
+      const { data: accountId } = await supabase.rpc('get_user_account_id');
+      if (scheduleDbId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from('whatsapp_sending_schedule' as any) as any)
+          .update(payload)
+          .eq('id', scheduleDbId);
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: newRow } = await (supabase.from('whatsapp_sending_schedule' as any) as any)
+          .insert({ ...payload, account_id: accountId })
+          .select('id')
+          .single();
+        if (newRow?.id) setScheduleDbId(newRow.id);
+      }
+    } catch {
+      toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível salvar as configurações de horário.' });
+    } finally {
+      setScheduleSaving(false);
+    }
+  };
+
   useEffect(() => {
+
     const loadData = async () => {
       setLoading(true);
-      await Promise.all([fetchSession(), fetchTemplates(), fetchAutomationRules(), fetchGreetingRules(), fetchFollowUpSteps(), fetchSequenceCounts()]);
+      await Promise.all([fetchSession(), fetchTemplates(), fetchAutomationRules(), fetchGreetingRules(), fetchFollowUpSteps(), fetchSequenceCounts(), fetchSendingSchedule()]);
       setLoading(false);
     };
 
     if (user) {
       loadData();
     }
-  }, [user, fetchSession, fetchTemplates, fetchAutomationRules, fetchGreetingRules, fetchFollowUpSteps, fetchSequenceCounts]);
+  }, [user, fetchSession, fetchTemplates, fetchAutomationRules, fetchGreetingRules, fetchFollowUpSteps, fetchSequenceCounts, fetchSendingSchedule]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -533,8 +594,127 @@ export function WhatsAppIntegrationSettings() {
         </Card>
       )}
 
+      {/* ─── HORÁRIO DE ENVIO ─── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-primary" />
+              <CardTitle className="text-base">Horário de Envio</CardTitle>
+            </div>
+            <div className="flex items-center gap-2">
+              {scheduleSaving && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+              <Switch
+                checked={sendingScheduleEnabled}
+                onCheckedChange={(checked) => {
+                  setSendingScheduleEnabled(checked);
+                  saveSendingSchedule({ is_enabled: checked });
+                }}
+              />
+            </div>
+          </div>
+          <CardDescription className="text-xs">
+            Restrinja o envio automático a dias e horários específicos (fuso: São Paulo)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!sendingScheduleEnabled ? (
+            <p className="text-xs text-muted-foreground">
+              Ative para definir uma janela de horário comercial. Mensagens fora do horário serão reagendadas para o próximo momento válido.
+            </p>
+          ) : (
+            <>
+              {/* Time range */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Início</Label>
+                  <Select
+                    value={String(sendingScheduleStartHour)}
+                    onValueChange={(v) => {
+                      const h = parseInt(v);
+                      setSendingScheduleStartHour(h);
+                      saveSendingSchedule({ start_hour: h });
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <SelectItem key={i} value={String(i)}>{String(i).padStart(2, '0')}h</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Fim (exclusivo)</Label>
+                  <Select
+                    value={String(sendingScheduleEndHour)}
+                    onValueChange={(v) => {
+                      const h = parseInt(v);
+                      setSendingScheduleEndHour(h);
+                      saveSendingSchedule({ end_hour: h });
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <SelectItem key={i} value={String(i)}>{String(i).padStart(2, '0')}h</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Days of week */}
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Dias permitidos</Label>
+                <div className="flex flex-wrap gap-2">
+                  {DAYS_LABELS.map((label, idx) => {
+                    const active = sendingScheduleAllowedDays.includes(idx);
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          const next = active
+                            ? sendingScheduleAllowedDays.filter(d => d !== idx)
+                            : [...sendingScheduleAllowedDays, idx].sort((a, b) => a - b);
+                          setSendingScheduleAllowedDays(next);
+                          saveSendingSchedule({ allowed_days: next });
+                        }}
+                        className={cn(
+                          'h-8 w-10 rounded-md text-xs font-medium border transition-colors',
+                          active
+                            ? 'bg-primary text-primary-foreground border-primary'
+                            : 'bg-background text-muted-foreground border-border hover:border-primary/50'
+                        )}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Preview */}
+              {(() => {
+                const days = sendingScheduleAllowedDays.sort((a, b) => a - b);
+                const dayNames = days.map(d => DAYS_LABELS[d]).join(', ');
+                return days.length > 0 ? (
+                  <p className="text-xs text-muted-foreground bg-muted/50 rounded-md px-3 py-2">
+                    📅 Envios de <strong>{dayNames}</strong>, das <strong>{String(sendingScheduleStartHour).padStart(2, '0')}h</strong> às <strong>{String(sendingScheduleEndHour).padStart(2, '0')}h</strong>
+                  </p>
+                ) : (
+                  <p className="text-xs text-destructive">⚠️ Selecione ao menos um dia da semana</p>
+                );
+              })()}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
       {/* ─── GRID 2 COLUNAS: Saudação + Follow-up ─── */}
       <div className="grid gap-4 lg:grid-cols-2">
+
 
         {/* COLUNA ESQUERDA: Saudação Automática */}
         <Card>

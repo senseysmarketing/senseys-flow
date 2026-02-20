@@ -2011,6 +2011,47 @@ export type Database = {
           },
         ]
       }
+      whatsapp_sending_schedule: {
+        Row: {
+          account_id: string
+          allowed_days: number[]
+          created_at: string
+          end_hour: number
+          id: string
+          is_enabled: boolean
+          start_hour: number
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          allowed_days?: number[]
+          created_at?: string
+          end_hour?: number
+          id?: string
+          is_enabled?: boolean
+          start_hour?: number
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          allowed_days?: number[]
+          created_at?: string
+          end_hour?: number
+          id?: string
+          is_enabled?: boolean
+          start_hour?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_sending_schedule_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: true
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_sessions: {
         Row: {
           account_id: string
