@@ -601,6 +601,7 @@ export function WhatsAppIntegrationSettings() {
                         <Button
                           variant="outline"
                           size="sm"
+                          className="h-8 text-xs px-3"
                           onClick={() => {
                             setSequenceTarget({ automationRuleId: newLeadRule.id, label: 'Template Padrão (fallback)' });
                             setShowSequenceModal(true);
@@ -611,20 +612,20 @@ export function WhatsAppIntegrationSettings() {
                         </Button>
                         {sequenceCounts[newLeadRule.id] ? (
                           <>
-                            <Badge className="gap-1 bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30 hover:bg-green-500/20">
+                            <Badge className="gap-1 h-8 rounded-md px-3 text-xs flex items-center bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30 hover:bg-green-500/20">
                               ✓ Sequência ativa ({sequenceCounts[newLeadRule.id]} mensagens)
                             </Badge>
                             <Button
                               variant="outline"
                               size="sm"
-                              className="h-7 text-xs"
+                              className="h-8 text-xs px-3"
                               onClick={() => handleDisableSequence(newLeadRule.id)}
                             >
                               Desativar
                             </Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive">
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
                               </AlertDialogTrigger>
@@ -746,7 +747,7 @@ export function WhatsAppIntegrationSettings() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="h-7 text-xs"
+                                  className="h-8 text-xs px-3"
                                   onClick={() => {
                                     setSequenceTarget({ greetingRuleId: rule.id, label: rule.name });
                                     setShowSequenceModal(true);
@@ -757,20 +758,20 @@ export function WhatsAppIntegrationSettings() {
                                 </Button>
                                 {sequenceCounts[rule.id] ? (
                                   <>
-                                    <Badge className="gap-1 text-xs bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30 hover:bg-green-500/20">
+                                    <Badge className="gap-1 h-8 rounded-md px-3 text-xs flex items-center bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30 hover:bg-green-500/20">
                                       ✓ {sequenceCounts[rule.id]} msgs
                                     </Badge>
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      className="h-7 text-xs"
+                                      className="h-8 text-xs px-3"
                                       onClick={() => handleDisableSequence(undefined, rule.id)}
                                     >
                                       Desativar
                                     </Button>
                                     <AlertDialog>
                                       <AlertDialogTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive">
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
                                           <Trash2 className="h-3 w-3" />
                                         </Button>
                                       </AlertDialogTrigger>
