@@ -1,32 +1,79 @@
 
-## Ajuste Visual: Padronização de Alturas dos Botões na Sequência
+## Correção: Variáveis {form_*} não substituídas em templates do WhatsApp
 
-### Problema Identificado
+### Diagnóstico
 
-Na seção de Saudação Automática (bloco da sequência), há 4 elementos em linha com alturas inconsistentes:
+O problema tem **uma causa raiz** confirmada pelo banco de dados:
 
-| Elemento | Classe atual | Altura real |
-|---|---|---|
-| "Editar/Configurar Sequência" | `size="sm"` sem override | h-9 (36px) |
-| Badge "✓ Sequência ativa" | padrão Badge | ~22px |
-| Botão "Desativar" | `size="sm" className="h-7 text-xs"` | h-7 (28px) |
-| Botão lixeira | `size="icon" className="h-7 w-7"` | h-7 (28px) |
+Quando um lead chega pelo Meta Webhook (`meta-webhook`), os campos do formulário são salvos em **`lead_custom_field_values`** (ligada à tabela `custom_fields`). Mas quando o `process-whatsapp-queue` vai substituir as variáveis `{form_*}`, ele busca em **`lead_form_field_values`** — uma tabela diferente, que está completamente vazia para esses leads.
 
-O padrão de referência (botões "Reconfigurar Webhook", "Reiniciar Instância", "Desconectar") usa `size="sm"` sem override, que resulta em h-9 (36px).
+Evidência real no banco:
+- Lead "Cleide Wanderley" tem em `lead_custom_field_values`:
+  - `field_key: você_está_buscando_imóvel_para_moradia_própria_ou_para_investimento?_` → `value: moradia`
+- `lead_form_field_values` para esse lead: **zero registros**
 
 ### Solução
 
-Padronizar todos os elementos do bloco de sequência para `h-8` (32px) — um meio-termo visual entre os botões principais e o badge, mantendo harmonia sem parecer excessivamente grande:
+A correção mais limpa e segura é **dupla**:
 
-- **"Editar/Configurar Sequência"**: adicionar `className="h-8 text-xs px-3"` para override do `size="sm"` padrão
-- **Badge "✓ Sequência ativa"**: mudar para usar `Button asChild` não — em vez disso, aplicar `className="... h-8 rounded-md px-3 text-xs"` no Badge para forçar a mesma altura
-- **Botão "Desativar"**: mudar de `h-7` para `h-8 text-xs px-3`
-- **Botão lixeira**: mudar de `h-7 w-7` para `h-8 w-8`
+**1. `meta-webhook/index.ts`** — Além de salvar em `lead_custom_field_values`, salvar também em `lead_form_field_values` (linhas 216–225). Isso garante que novos leads que chegarem via Meta já tenham seus dados na tabela correta que o processador da fila consulta.
 
-O mesmo padrão será aplicado tanto no bloco de fallback (newLeadRule, linhas ~601–641) quanto no bloco de regras condicionais (linhas ~754–780).
+**2. `process-whatsapp-queue/index.ts`** — Como fallback para leads já existentes que só têm dados em `lead_custom_field_values`, adicionar uma segunda busca nessa tabela se `lead_form_field_values` não retornar resultado (linhas 200–226).
 
-### Arquivo a modificar
+### Detalhes Técnicos
 
-**`src/components/whatsapp/WhatsAppIntegrationSettings.tsx`** — dois blocos:
-1. Linhas ~601–641: bloco de sequência do fallback rule
-2. Linhas ~754–780: bloco de sequência das regras condicionais
+**No `meta-webhook`**, após o loop de `lead_custom_field_values`, adicionar inserção paralela em `lead_form_field_values`:
+
+```ts
+// NOVO: salvar também em lead_form_field_values para suporte a {form_*} nos templates
+for (const [k, v] of Object.entries(fields)) {
+  if (EXCLUDED_FIELDS.has(k) || !v) continue;
+  await supabase.from("lead_form_field_values").insert({
+    lead_id: newLead.id,
+    field_name: k,
+    field_label: k.replace(/_/g, ' '),
+    field_value: v,
+  });
+}
+```
+
+**No `process-whatsapp-queue`**, se `lead_form_field_values` não retornar campos, buscar em `lead_custom_field_values` como fallback:
+
+```ts
+// Se nao encontrou em lead_form_field_values, buscar em lead_custom_field_values (legado Meta)
+if (!formFields || formFields.length === 0) {
+  const { data: customFields } = await supabase
+    .from('lead_custom_field_values')
+    .select('value, custom_fields(field_key)')
+    .eq('lead_id', msg.lead_id)
+  
+  if (customFields && customFields.length > 0) {
+    // match usando field_key como field_name equivalente
+    for (const match of formVarMatches) {
+      const fieldName = match.slice(6, -1)
+      const normalize = (s: string) => s.toLowerCase().replace(/\?/g, '').replace(/_/g, ' ').trim()
+      const found = customFields.find(f => 
+        normalize((f.custom_fields as any)?.field_key || '') === normalize(fieldName)
+      )
+      message = message.replace(new RegExp(match.replace(/[{}?]/g, c => `\\${c}`), 'gi'), found?.value || '')
+    }
+  } else {
+    // limpar variaveis nao encontradas
+    for (const match of formVarMatches) {
+      message = message.replace(new RegExp(match.replace(/[{}?]/g, c => `\\${c}`), 'gi'), '')
+    }
+  }
+}
+```
+
+### Arquivos a modificar
+
+1. **`supabase/functions/meta-webhook/index.ts`** — Linhas ~216–225: adicionar inserção duplicada em `lead_form_field_values`
+2. **`supabase/functions/process-whatsapp-queue/index.ts`** — Linhas ~208–224: adicionar fallback lookup em `lead_custom_field_values`
+
+### Impacto
+
+- Leads futuros: corrigidos pelo fix no `meta-webhook` (dados salvos em ambas tabelas)
+- Leads existentes (como Cleide): corrigidos pelo fallback no `process-whatsapp-queue`
+- Nenhuma migração de dados necessária
+- Nenhuma tabela existente é alterada
