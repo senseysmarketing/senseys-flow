@@ -217,9 +217,26 @@ Deno.serve(async (req) => {
                 message = message.replace(new RegExp(match.replace(/[{}?]/g, (c) => `\\${c}`), 'gi'), found?.field_value || '')
               }
             } else {
-              // No form fields found, clear all form_ variables
-              for (const match of formVarMatches) {
-                message = message.replace(new RegExp(match.replace(/[{}?]/g, (c) => `\\${c}`), 'gi'), '')
+              // Fallback: buscar em lead_custom_field_values (leads antigos via Meta webhook)
+              const { data: customFields } = await supabase
+                .from('lead_custom_field_values')
+                .select('value, custom_fields(field_key)')
+                .eq('lead_id', msg.lead_id)
+
+              if (customFields && customFields.length > 0) {
+                const normalizeStr = (s: string) => s.toLowerCase().replace(/\?/g, '').replace(/_/g, ' ').trim()
+                for (const match of formVarMatches) {
+                  const fieldName = match.slice(6, -1) // remove {form_ and }
+                  const found = customFields.find(f =>
+                    normalizeStr((f.custom_fields as any)?.field_key || '') === normalizeStr(fieldName)
+                  )
+                  message = message.replace(new RegExp(match.replace(/[{}?]/g, (c) => `\\${c}`), 'gi'), found?.value || '')
+                }
+              } else {
+                // Nenhum campo encontrado, limpar variáveis não resolvidas
+                for (const match of formVarMatches) {
+                  message = message.replace(new RegExp(match.replace(/[{}?]/g, (c) => `\\${c}`), 'gi'), '')
+                }
               }
             }
           }
