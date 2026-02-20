@@ -14,6 +14,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { toast } from '@/hooks/use-toast';
 import { WhatsAppTemplatesModal } from './WhatsAppTemplatesModal';
 import { GreetingRuleModal } from './GreetingRuleModal';
+import { GreetingSequenceModal } from './GreetingSequenceModal';
 
 interface WhatsAppSession {
   id: string;
@@ -129,6 +130,8 @@ export function WhatsAppIntegrationSettings() {
   const [reconfiguring, setReconfiguring] = useState(false);
   const [showGreetingRuleModal, setShowGreetingRuleModal] = useState(false);
   const [editingRule, setEditingRule] = useState<GreetingRule | null>(null);
+  const [showSequenceModal, setShowSequenceModal] = useState(false);
+  const [sequenceTarget, setSequenceTarget] = useState<{ automationRuleId?: string; greetingRuleId?: string; label: string } | null>(null);
 
   const fetchSession = useCallback(async () => {
     if (!user) return;
@@ -557,6 +560,23 @@ export function WhatsAppIntegrationSettings() {
                         </Select>
                       </div>
                     </div>
+                    {/* Sequence button */}
+                    <div className="mt-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSequenceTarget({ automationRuleId: newLeadRule.id, label: 'Template Padrão (fallback)' });
+                          setShowSequenceModal(true);
+                        }}
+                      >
+                        <Edit2 className="h-3.5 w-3.5 mr-2" />
+                        Configurar Sequência de Mensagens
+                      </Button>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Configure 2–5 mensagens enviadas em sequência em vez de uma única mensagem
+                      </p>
+                    </div>
                   </div>
 
                   {/* Sources */}
@@ -630,6 +650,18 @@ export function WhatsAppIntegrationSettings() {
                                   {rule.name} {templateName ? `→ ${templateName}` : ''}
                                 </p>
                               </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 shrink-0"
+                                title="Configurar sequência de mensagens"
+                                onClick={() => {
+                                  setSequenceTarget({ greetingRuleId: rule.id, label: rule.name });
+                                  setShowSequenceModal(true);
+                                }}
+                              >
+                                <Edit2 className="h-3.5 w-3.5 opacity-60" />
+                              </Button>
                               <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => { setEditingRule(rule); setShowGreetingRuleModal(true); }}>
                                 <Edit2 className="h-3.5 w-3.5" />
                               </Button>
@@ -908,6 +940,17 @@ export function WhatsAppIntegrationSettings() {
         onSaved={fetchGreetingRules}
         templates={templates}
         editRule={editingRule}
+      />
+
+      {/* Greeting Sequence Modal */}
+      <GreetingSequenceModal
+        open={showSequenceModal}
+        onClose={() => { setShowSequenceModal(false); setSequenceTarget(null); }}
+        onSaved={() => {}}
+        templates={templates}
+        automationRuleId={sequenceTarget?.automationRuleId}
+        greetingRuleId={sequenceTarget?.greetingRuleId}
+        ruleLabel={sequenceTarget?.label}
       />
     </div>
   );

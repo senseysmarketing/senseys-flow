@@ -665,34 +665,71 @@ serve(async (req) => {
         }
 
         if (templateId) {
-          const { data: template } = await supabase
-            .from('whatsapp_templates')
-            .select('template')
-            .eq('id', templateId)
-            .single()
+          // Check for sequence steps configured for this rule
+          const seqFilter = matchedRule
+            ? { greeting_rule_id: matchedRule.id }
+            : { automation_rule_id: ruleId }
 
-          if (template) {
-            const scheduledFor = new Date(Date.now() + (delaySeconds * 1000))
-            let message = template.template
-              .replace(/{nome}/gi, lead.name || '')
-              .replace(/{telefone}/gi, lead.phone || '')
-              .replace(/{email}/gi, lead.email || '')
-              .replace(/{imovel}/gi, propertyName || '')
+          const seqFilterKey = Object.keys(seqFilter)[0]
+          const seqFilterVal = Object.values(seqFilter)[0]
 
-            await supabase.from('whatsapp_message_queue').insert({
-              account_id: accountId,
-              lead_id: lead.id,
-              phone: lead.phone,
-              message: message,
-              template_id: templateId,
-              automation_rule_id: ruleId,
-              scheduled_for: scheduledFor.toISOString(),
-              status: 'pending'
+          const { data: seqSteps } = await supabase
+            .from('whatsapp_greeting_sequence_steps' as 'whatsapp_followup_steps')
+            .select('*')
+            .eq(seqFilterKey as 'account_id', seqFilterVal as string)
+            .eq('is_active', true)
+            .order('position')
+
+          if (seqSteps && seqSteps.length > 0) {
+            // Enqueue multiple messages in sequence with accumulated delays
+            let accumulatedDelay = delaySeconds
+            const inserts = seqSteps.map((step: { template_id: string; delay_seconds: number }) => {
+              accumulatedDelay += (step.delay_seconds || 0)
+              return {
+                account_id: accountId,
+                lead_id: lead.id,
+                phone: lead.phone,
+                message: '',
+                template_id: step.template_id,
+                automation_rule_id: ruleId,
+                scheduled_for: new Date(Date.now() + accumulatedDelay * 1000).toISOString(),
+                status: 'pending'
+              }
             })
+            await supabase.from('whatsapp_message_queue').insert(inserts)
+            console.log(`WhatsApp greeting SEQUENCE (${seqSteps.length} msgs) scheduled for lead ${lead.id} (rule: ${matchedRule?.name || 'default'})`)
+          } else {
+            // Fallback: single message (existing behaviour)
+            const { data: template } = await supabase
+              .from('whatsapp_templates')
+              .select('template')
+              .eq('id', templateId)
+              .single()
 
-            console.log(`WhatsApp greeting scheduled for lead ${lead.id} at ${scheduledFor.toISOString()} (rule: ${matchedRule?.name || 'default'})`)
-            supabase.functions.invoke('process-whatsapp-queue').catch(() => {})
+            if (template) {
+              const scheduledFor = new Date(Date.now() + (delaySeconds * 1000))
+              const message = template.template
+                .replace(/{nome}/gi, lead.name || '')
+                .replace(/{telefone}/gi, lead.phone || '')
+                .replace(/{email}/gi, lead.email || '')
+                .replace(/{imovel}/gi, propertyName || '')
+
+              await supabase.from('whatsapp_message_queue').insert({
+                account_id: accountId,
+                lead_id: lead.id,
+                phone: lead.phone,
+                message: message,
+                template_id: templateId,
+                automation_rule_id: ruleId,
+                scheduled_for: scheduledFor.toISOString(),
+                status: 'pending'
+              })
+
+              console.log(`WhatsApp greeting scheduled for lead ${lead.id} at ${scheduledFor.toISOString()} (rule: ${matchedRule?.name || 'default'})`)
+            }
           }
+
+          supabase.functions.invoke('process-whatsapp-queue').catch(() => {})
         }
       }
     } catch (e) {
