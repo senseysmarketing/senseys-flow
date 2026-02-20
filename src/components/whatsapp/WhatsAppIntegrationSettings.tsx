@@ -7,8 +7,11 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { MessageCircle, Wifi, WifiOff, QrCode, RefreshCw, Loader2, Clock, Zap, AlertCircle, Settings2, Plus, Trash2, RotateCcw, GitBranch, Edit2 } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { MessageCircle, WifiOff, QrCode, RefreshCw, Loader2, Clock, Zap, AlertCircle, Settings2, Plus, Trash2, RotateCcw, GitBranch, Edit2, MoreVertical, ChevronDown } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
+import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from '@/hooks/use-toast';
@@ -447,557 +450,539 @@ export function WhatsAppIntegrationSettings() {
   const newLeadRule = automationRules.find(r => r.trigger_type === 'new_lead');
 
   return (
-    <div className="space-y-6">
-      {/* ─── SEÇÃO 1: Conexão ─── */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${isConnected ? 'bg-green-500/10' : 'bg-muted'}`}>
-                <MessageCircle className={`h-5 w-5 ${isConnected ? 'text-green-500' : 'text-muted-foreground'}`} />
-              </div>
-              <div>
-                <CardTitle className="text-lg">Conexão WhatsApp</CardTitle>
-                <CardDescription>
-                  {isConnected
-                    ? 'Seu WhatsApp está conectado e pronto para enviar mensagens'
-                    : 'Conecte seu WhatsApp para enviar mensagens diretamente do CRM'}
-                </CardDescription>
-              </div>
-            </div>
-            <Badge variant={isConnected ? 'default' : 'secondary'} className="gap-1">
-              {isConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-              {isConnected ? 'Conectado' : 'Desconectado'}
-            </Badge>
+    <div className="space-y-4">
+      {/* ─── STATUS BAR / CONEXÃO ─── */}
+      {isConnected ? (
+        <div className="flex items-center justify-between px-4 py-2.5 rounded-lg border bg-card">
+          <div className="flex items-center gap-2.5">
+            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            <span className="text-sm font-medium">Conectado</span>
+            {session?.phone_number && (
+              <span className="text-sm text-muted-foreground">· {session.phone_number}</span>
+            )}
+            {session?.connected_at && (
+              <span className="text-xs text-muted-foreground hidden sm:inline">
+                · desde {new Date(session.connected_at).toLocaleDateString('pt-BR')}
+              </span>
+            )}
           </div>
-        </CardHeader>
-        <CardContent>
-          {isConnected ? (
-            <div className="space-y-3">
-              <div className="flex flex-col text-sm text-muted-foreground">
-                {session?.phone_number && <span>Número: {session.phone_number}</span>}
-                {session?.connected_at && (
-                  <span>Conectado desde: {new Date(session.connected_at).toLocaleDateString('pt-BR')}</span>
-                )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                {reconfiguring ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreVertical className="h-4 w-4" />}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleForceReconfigure} disabled={reconfiguring}>
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Reconfigurar Webhook
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleRestartInstance} disabled={reconfiguring}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Reiniciar Instância
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={(e) => e.preventDefault()}>
+                    <WifiOff className="h-4 w-4 mr-2" />
+                    Desconectar
+                  </DropdownMenuItem>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Desconectar WhatsApp?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Ao desconectar, as mensagens automáticas serão pausadas e você precisará escanear o QR Code novamente para reconectar.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDisconnect}>Desconectar</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ) : (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-muted">
+                  <MessageCircle className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">Conexão WhatsApp</CardTitle>
+                  <CardDescription>Conecte seu WhatsApp para enviar mensagens diretamente do CRM</CardDescription>
+                </div>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button variant="outline" size="sm" onClick={handleForceReconfigure} disabled={reconfiguring}>
-                  {reconfiguring ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
-                  Reconfigurar Webhook
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleRestartInstance} disabled={reconfiguring}>
-                  {reconfiguring ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-                  Reiniciar Instância
-                </Button>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      <WifiOff className="h-4 w-4 mr-2" />Desconectar
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Desconectar WhatsApp?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Ao desconectar, as mensagens automáticas serão pausadas e você precisará escanear o QR Code novamente para reconectar.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleDisconnect}>Desconectar</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
+              <Badge variant="secondary" className="gap-1">
+                <WifiOff className="h-3 w-3" />
+                Desconectado
+              </Badge>
             </div>
-          ) : (
+          </CardHeader>
+          <CardContent>
             <Button onClick={handleConnect} disabled={connecting}>
               {connecting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <QrCode className="h-4 w-4 mr-2" />}
               Conectar WhatsApp
             </Button>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* ─── SEÇÃO 2: Saudação Automática ─── */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Zap className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <CardTitle className="text-lg">Saudação Automática</CardTitle>
-              <CardDescription>Mensagem enviada imediatamente quando um novo lead chegar</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          {!isConnected && (
-            <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-sm text-amber-600 dark:text-amber-400">
-              <AlertCircle className="h-4 w-4" />
-              Conecte seu WhatsApp para ativar as automações
-            </div>
-          )}
+      {/* ─── GRID 2 COLUNAS: Saudação + Follow-up ─── */}
+      <div className="grid gap-4 lg:grid-cols-2">
 
-          {newLeadRule ? (
-            <>
-              {/* Toggle global */}
-              <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
-                <div className="flex items-center gap-3">
-                  <Switch
-                    checked={newLeadRule.is_active}
-                    onCheckedChange={(checked) => handleAutomationToggle(newLeadRule.id, checked)}
-                    disabled={!isConnected}
-                  />
-                  <Label className="cursor-pointer font-medium">
-                    {newLeadRule.is_active ? 'Saudação ativada' : 'Saudação desativada'}
-                  </Label>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => setShowTemplatesModal(true)}>
-                  <Settings2 className="h-4 w-4 mr-2" />
-                  Personalizar Templates
-                </Button>
+        {/* COLUNA ESQUERDA: Saudação Automática */}
+        <Card className={cn("border-l-4", newLeadRule?.is_active ? "border-l-green-500" : "border-l-border")}>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Zap className="h-4 w-4 text-primary" />
+                <CardTitle className="text-base">Saudação Automática</CardTitle>
               </div>
+              {newLeadRule && (
+                <Switch
+                  checked={newLeadRule.is_active}
+                  onCheckedChange={(checked) => handleAutomationToggle(newLeadRule.id, checked)}
+                  disabled={!isConnected}
+                />
+              )}
+            </div>
+            <CardDescription className="text-xs">Mensagem enviada quando um novo lead chegar</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!isConnected && (
+              <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-sm text-amber-600 dark:text-amber-400">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                Conecte seu WhatsApp para ativar as automações
+              </div>
+            )}
 
-              {newLeadRule.is_active && (
-                <>
-                  {/* Default template + delay */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="h-px flex-1 bg-border" />
-                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-2">Template Padrão (fallback)</span>
-                      <div className="h-px flex-1 bg-border" />
-                    </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label>Template de Mensagem</Label>
+            {newLeadRule ? (
+              <>
+                {newLeadRule.is_active && (
+                  <>
+                    {/* Default template + delay + templates button */}
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <div className="h-px flex-1 bg-border" />
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-2">Template Padrão (fallback)</span>
+                        <div className="h-px flex-1 bg-border" />
+                      </div>
+                      <div className="grid gap-3">
                         <Select value={newLeadRule.template_id || ''} onValueChange={(value) => updateRuleTemplate(newLeadRule.id, value)}>
-                          <SelectTrigger><SelectValue placeholder="Selecione um template" /></SelectTrigger>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecione um template" /></SelectTrigger>
                           <SelectContent>
                             {templates.map((t) => (
                               <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <Select value={String(newLeadRule.delay_seconds)} onValueChange={(value) => updateRuleDelay(newLeadRule.id, parseInt(value))}>
+                            <SelectTrigger className="h-8 text-xs flex-1"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="0">Imediato</SelectItem>
+                              <SelectItem value="30">30 segundos</SelectItem>
+                              <SelectItem value="60">1 minuto</SelectItem>
+                              <SelectItem value="300">5 minutos</SelectItem>
+                              <SelectItem value="600">10 minutos</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setShowTemplatesModal(true)}>
+                          <Settings2 className="h-3.5 w-3.5 mr-1.5" />
+                          Personalizar Templates
+                        </Button>
                       </div>
-                      <div className="space-y-2">
-                        <Label>Delay de envio</Label>
-                        <Select value={String(newLeadRule.delay_seconds)} onValueChange={(value) => updateRuleDelay(newLeadRule.id, parseInt(value))}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="0">Imediato</SelectItem>
-                            <SelectItem value="30">30 segundos</SelectItem>
-                            <SelectItem value="60">1 minuto</SelectItem>
-                            <SelectItem value="300">5 minutos</SelectItem>
-                            <SelectItem value="600">10 minutos</SelectItem>
-                          </SelectContent>
-                        </Select>
+                      {/* Sequence section */}
+                      <div className="p-3 border border-dashed rounded-lg space-y-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs px-3"
+                            onClick={() => {
+                              setSequenceTarget({ automationRuleId: newLeadRule.id, label: 'Template Padrão (fallback)' });
+                              setShowSequenceModal(true);
+                            }}
+                          >
+                            <Edit2 className="h-3.5 w-3.5 mr-2" />
+                            {sequenceCounts[newLeadRule.id] ? 'Editar Sequência' : 'Configurar Sequência'}
+                          </Button>
+                          {sequenceCounts[newLeadRule.id] ? (
+                            <>
+                              <Badge className="gap-1 h-8 rounded-md px-3 text-xs flex items-center bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30 hover:bg-green-500/20">
+                                ✓ {sequenceCounts[newLeadRule.id]} msgs
+                              </Badge>
+                              <Button variant="outline" size="sm" className="h-8 text-xs px-3" onClick={() => handleDisableSequence(newLeadRule.id)}>
+                                Desativar
+                              </Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Excluir sequência?</AlertDialogTitle>
+                                    <AlertDialogDescription>Todas as mensagens da sequência serão removidas permanentemente.</AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleDeleteSequence(newLeadRule.id)}>Excluir</AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </>
+                          ) : null}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Configure 2–5 mensagens enviadas em sequência
+                        </p>
                       </div>
                     </div>
-                    {/* Sequence section */}
-                    <div className="mt-3 p-3 border border-dashed rounded-lg space-y-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 text-xs px-3"
-                          onClick={() => {
-                            setSequenceTarget({ automationRuleId: newLeadRule.id, label: 'Template Padrão (fallback)' });
-                            setShowSequenceModal(true);
-                          }}
-                        >
-                          <Edit2 className="h-3.5 w-3.5 mr-2" />
-                          {sequenceCounts[newLeadRule.id] ? 'Editar Sequência' : 'Configurar Sequência'}
-                        </Button>
-                        {sequenceCounts[newLeadRule.id] ? (
-                          <>
-                            <Badge className="gap-1 h-8 rounded-md px-3 text-xs flex items-center bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30 hover:bg-green-500/20">
-                              ✓ Sequência ativa ({sequenceCounts[newLeadRule.id]} mensagens)
-                            </Badge>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 text-xs px-3"
-                              onClick={() => handleDisableSequence(newLeadRule.id)}
-                            >
-                              Desativar
-                            </Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Excluir sequência?</AlertDialogTitle>
-                                  <AlertDialogDescription>Todas as mensagens da sequência serão removidas permanentemente.</AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => handleDeleteSequence(newLeadRule.id)}>Excluir</AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </>
-                        ) : null}
+
+                    {/* Sources */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="h-px flex-1 bg-border" />
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-2">Enviar para leads de</span>
+                        <div className="h-px flex-1 bg-border" />
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        Configure 2–5 mensagens enviadas em sequência em vez de uma única mensagem
+                      <div className="flex flex-wrap gap-3">
+                        {[
+                          { key: 'manual', label: 'Cadastro Manual' },
+                          { key: 'meta', label: 'Meta Ads' },
+                          { key: 'webhook', label: 'Webhook' },
+                          { key: 'olx', label: 'Grupo OLX' },
+                        ].map(({ key, label }) => (
+                          <div key={key} className="flex items-center gap-2">
+                            <Checkbox
+                              id={`source-${key}`}
+                              checked={(newLeadRule.trigger_sources as Record<string, boolean> | null)?.[key] !== false}
+                              onCheckedChange={(checked) => updateRuleSources(newLeadRule.id, {
+                                ...newLeadRule.trigger_sources,
+                                [key]: !!checked,
+                              })}
+                            />
+                            <Label htmlFor={`source-${key}`} className="font-normal cursor-pointer text-xs">{label}</Label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Conditional Rules */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="h-px flex-1 bg-border" />
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-2">Regras Condicionais</span>
+                        <div className="h-px flex-1 bg-border" />
+                      </div>
+
+                      <div className="space-y-2 mb-3">
+                        {greetingRules.length === 0 ? (
+                          <div className="text-center py-4 text-sm text-muted-foreground border border-dashed rounded-lg">
+                            <GitBranch className="h-5 w-5 mx-auto mb-2 opacity-40" />
+                            Nenhuma regra condicional criada.<br />
+                            <span className="text-xs">O template padrão acima será usado.</span>
+                          </div>
+                        ) : (
+                          greetingRules.map((rule) => {
+                            const templateName = templates.find(t => t.id === rule.template_id)?.name;
+                            const summary = formatConditionSummary(rule);
+                            return (
+                              <div key={rule.id} className="flex flex-col gap-2 p-2.5 border rounded-lg bg-muted/20">
+                                <div className="flex items-center gap-2">
+                                  <Switch
+                                    checked={rule.is_active}
+                                    onCheckedChange={(v) => toggleGreetingRule(rule.id, v)}
+                                    disabled={!isConnected}
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <Badge variant="outline" className="text-xs h-5 px-1.5 font-normal">
+                                        #{rule.priority}
+                                      </Badge>
+                                      <span className="text-xs font-medium text-muted-foreground">
+                                        {CONDITION_TYPE_LABELS[rule.condition_type]}
+                                      </span>
+                                      {summary && (
+                                        <span className="text-xs text-foreground truncate">{summary}</span>
+                                      )}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground truncate mt-0.5">
+                                      {rule.name} {templateName ? `→ ${templateName}` : ''}
+                                    </p>
+                                  </div>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => { setEditingRule(rule); setShowGreetingRuleModal(true); }}>
+                                    <Edit2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive">
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Remover regra?</AlertDialogTitle>
+                                        <AlertDialogDescription>Esta regra de saudação será removida permanentemente.</AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => deleteGreetingRule(rule.id)}>Remover</AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </div>
+                                {/* Sequence row for conditional rule */}
+                                <div className="flex items-center gap-2 flex-wrap pl-10">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 text-xs px-3"
+                                    onClick={() => {
+                                      setSequenceTarget({ greetingRuleId: rule.id, label: rule.name });
+                                      setShowSequenceModal(true);
+                                    }}
+                                  >
+                                    <Edit2 className="h-3 w-3 mr-1.5" />
+                                    {sequenceCounts[rule.id] ? 'Editar Sequência' : 'Configurar Sequência'}
+                                  </Button>
+                                  {sequenceCounts[rule.id] ? (
+                                    <>
+                                      <Badge className="gap-1 h-8 rounded-md px-3 text-xs flex items-center bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30 hover:bg-green-500/20">
+                                        ✓ {sequenceCounts[rule.id]} msgs
+                                      </Badge>
+                                      <Button variant="outline" size="sm" className="h-8 text-xs px-3" onClick={() => handleDisableSequence(undefined, rule.id)}>
+                                        Desativar
+                                      </Button>
+                                      <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
+                                            <Trash2 className="h-3 w-3" />
+                                          </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                          <AlertDialogHeader>
+                                            <AlertDialogTitle>Excluir sequência?</AlertDialogTitle>
+                                            <AlertDialogDescription>As mensagens da sequência desta regra serão removidas permanentemente.</AlertDialogDescription>
+                                          </AlertDialogHeader>
+                                          <AlertDialogFooter>
+                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                            <AlertDialogAction onClick={() => handleDeleteSequence(undefined, rule.id)}>Excluir</AlertDialogAction>
+                                          </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                      </AlertDialog>
+                                    </>
+                                  ) : null}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => { setEditingRule(null); setShowGreetingRuleModal(true); }}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Adicionar Regra Condicional
+                      </Button>
+
+                      <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        As regras são avaliadas em ordem de prioridade. O template padrão é usado quando nenhuma regra casar.
                       </p>
                     </div>
-                  </div>
-
-                  {/* Sources */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="h-px flex-1 bg-border" />
-                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-2">Enviar para leads de</span>
-                      <div className="h-px flex-1 bg-border" />
-                    </div>
-                    <div className="flex flex-wrap gap-4">
-                      {[
-                        { key: 'manual', label: 'Cadastro Manual' },
-                        { key: 'meta', label: 'Meta Ads' },
-                        { key: 'webhook', label: 'Webhook' },
-                        { key: 'olx', label: 'Grupo OLX' },
-                      ].map(({ key, label }) => (
-                        <div key={key} className="flex items-center gap-2">
-                          <Checkbox
-                            id={`source-${key}`}
-                            checked={(newLeadRule.trigger_sources as Record<string, boolean> | null)?.[key] !== false}
-                            onCheckedChange={(checked) => updateRuleSources(newLeadRule.id, {
-                              ...newLeadRule.trigger_sources,
-                              [key]: !!checked,
-                            })}
-                          />
-                          <Label htmlFor={`source-${key}`} className="font-normal cursor-pointer">{label}</Label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Conditional Rules */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="h-px flex-1 bg-border" />
-                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-2">Regras Condicionais</span>
-                      <div className="h-px flex-1 bg-border" />
-                    </div>
-
-                    <div className="space-y-2 mb-3">
-                      {greetingRules.length === 0 ? (
-                        <div className="text-center py-4 text-sm text-muted-foreground border border-dashed rounded-lg">
-                          <GitBranch className="h-5 w-5 mx-auto mb-2 opacity-40" />
-                          Nenhuma regra condicional criada.<br />
-                          <span className="text-xs">Quando nenhuma regra casar, o template padrão acima será usado.</span>
-                        </div>
-                      ) : (
-                        greetingRules.map((rule) => {
-                          const templateName = templates.find(t => t.id === rule.template_id)?.name;
-                          const summary = formatConditionSummary(rule);
-                          return (
-                            <div key={rule.id} className="flex flex-col gap-2 p-2.5 border rounded-lg bg-muted/20">
-                              <div className="flex items-center gap-2">
-                                <Switch
-                                  checked={rule.is_active}
-                                  onCheckedChange={(v) => toggleGreetingRule(rule.id, v)}
-                                  disabled={!isConnected}
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <Badge variant="outline" className="text-xs h-5 px-1.5 font-normal">
-                                      #{rule.priority}
-                                    </Badge>
-                                    <span className="text-xs font-medium text-muted-foreground">
-                                      {CONDITION_TYPE_LABELS[rule.condition_type]}
-                                    </span>
-                                    {summary && (
-                                      <span className="text-xs text-foreground truncate">{summary}</span>
-                                    )}
-                                  </div>
-                                  <p className="text-xs text-muted-foreground truncate mt-0.5">
-                                    {rule.name} {templateName ? `→ ${templateName}` : ''}
-                                  </p>
-                                </div>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => { setEditingRule(rule); setShowGreetingRuleModal(true); }}>
-                                  <Edit2 className="h-3.5 w-3.5" />
-                                </Button>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive">
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Remover regra?</AlertDialogTitle>
-                                      <AlertDialogDescription>Esta regra de saudação será removida permanentemente.</AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                      <AlertDialogAction onClick={() => deleteGreetingRule(rule.id)}>Remover</AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                              </div>
-                              {/* Sequence row for conditional rule */}
-                              <div className="flex items-center gap-2 flex-wrap pl-10">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-8 text-xs px-3"
-                                  onClick={() => {
-                                    setSequenceTarget({ greetingRuleId: rule.id, label: rule.name });
-                                    setShowSequenceModal(true);
-                                  }}
-                                >
-                                  <Edit2 className="h-3 w-3 mr-1.5" />
-                                  {sequenceCounts[rule.id] ? 'Editar Sequência' : 'Configurar Sequência'}
-                                </Button>
-                                {sequenceCounts[rule.id] ? (
-                                  <>
-                                    <Badge className="gap-1 h-8 rounded-md px-3 text-xs flex items-center bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30 hover:bg-green-500/20">
-                                      ✓ {sequenceCounts[rule.id]} msgs
-                                    </Badge>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-8 text-xs px-3"
-                                      onClick={() => handleDisableSequence(undefined, rule.id)}
-                                    >
-                                      Desativar
-                                    </Button>
-                                    <AlertDialog>
-                                      <AlertDialogTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
-                                          <Trash2 className="h-3 w-3" />
-                                        </Button>
-                                      </AlertDialogTrigger>
-                                      <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                          <AlertDialogTitle>Excluir sequência?</AlertDialogTitle>
-                                          <AlertDialogDescription>As mensagens da sequência desta regra serão removidas permanentemente.</AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                          <AlertDialogAction onClick={() => handleDeleteSequence(undefined, rule.id)}>Excluir</AlertDialogAction>
-                                        </AlertDialogFooter>
-                                      </AlertDialogContent>
-                                    </AlertDialog>
-                                  </>
-                                ) : null}
-                              </div>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full"
-                      onClick={() => { setEditingRule(null); setShowGreetingRuleModal(true); }}
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Adicionar Regra Condicional
-                    </Button>
-
-                    <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-                      <AlertCircle className="h-3 w-3" />
-                      As regras são avaliadas em ordem de prioridade. O template padrão é usado quando nenhuma regra casar.
-                    </p>
-                  </div>
-                </>
-              )}
-            </>
-          ) : (
-            <Button variant="outline" onClick={() => createNewLeadRule()} className="w-full">
-              <Zap className="h-4 w-4 mr-2" />
-              Configurar Saudação Automática
-            </Button>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ─── SEÇÃO 3: Follow-up Automático ─── */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <RotateCcw className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <CardTitle className="text-lg">Follow-up Automático</CardTitle>
-              <CardDescription>Mensagens de acompanhamento para leads que não responderam</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!isConnected && (
-            <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-sm text-amber-600 dark:text-amber-400">
-              <AlertCircle className="h-4 w-4" />
-              Conecte seu WhatsApp para ativar os follow-ups
-            </div>
-          )}
-
-          {!newLeadRule && (
-            <div className="flex items-center gap-2 p-3 bg-muted/50 border border-dashed rounded-lg text-sm text-muted-foreground">
-              <AlertCircle className="h-4 w-4" />
-              Configure a saudação automática antes de ativar o follow-up
-            </div>
-          )}
-
-          <div className="space-y-3">
-            {followUpSteps.map((step, index) => (  // index used below for "Personalizar Templates"
-              <div key={step.id} className="border rounded-lg bg-muted/20 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Switch
-                      checked={step.is_active}
-                      onCheckedChange={async (checked) => {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        await (supabase.from('whatsapp_followup_steps' as any) as any).update({ is_active: checked }).eq('id', step.id);
-                        fetchFollowUpSteps();
-                      }}
-                      disabled={!isConnected}
-                    />
-                    <Label className="font-medium">Etapa {step.position + 1}</Label>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-destructive hover:text-destructive"
-                    onClick={async () => {
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      await (supabase.from('whatsapp_followup_steps' as any) as any).delete().eq('id', step.id);
-                      fetchFollowUpSteps();
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-                {step.is_active && (
-                  <div className="grid gap-4 sm:grid-cols-2 pl-12">
-                    <div className="space-y-2">
-                      <Label>Template de Mensagem</Label>
-                      <Select
-                        value={step.template_id}
-                        onValueChange={async (value) => {
-                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                          await (supabase.from('whatsapp_followup_steps' as any) as any).update({ template_id: value }).eq('id', step.id);
-                          fetchFollowUpSteps();
-                        }}
-                      >
-                        <SelectTrigger><SelectValue placeholder="Selecione um template" /></SelectTrigger>
-                        <SelectContent>
-                          {templates.map((t) => (
-                            <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {index === 0 && (
-                        <Button variant="outline" size="sm" className="h-auto px-3 py-1.5 text-xs" onClick={() => setShowTemplatesModal(true)}>
-                          <Settings2 className="h-3 w-3 mr-1" />Personalizar Templates
-                        </Button>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Delay após etapa anterior</Label>
-                      <Select
-                        value={String(step.delay_minutes)}
-                        onValueChange={async (value) => {
-                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                          await (supabase.from('whatsapp_followup_steps' as any) as any).update({ delay_minutes: parseInt(value) }).eq('id', step.id);
-                          fetchFollowUpSteps();
-                        }}
-                      >
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {DELAY_OPTIONS.map(opt => (
-                            <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+                  </>
                 )}
+              </>
+            ) : (
+              <Button variant="outline" onClick={() => createNewLeadRule()} className="w-full">
+                <Zap className="h-4 w-4 mr-2" />
+                Configurar Saudação Automática
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* COLUNA DIREITA: Follow-up Timeline */}
+        <Card className={cn("border-l-4", followUpSteps.some(s => s.is_active) ? "border-l-blue-500" : "border-l-border")}>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-primary" />
+              <CardTitle className="text-base">Follow-up Automático</CardTitle>
+            </div>
+            <CardDescription className="text-xs">Mensagens para leads que não responderam</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {!isConnected && (
+              <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-sm text-amber-600 dark:text-amber-400">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                Conecte seu WhatsApp para ativar os follow-ups
+              </div>
+            )}
+
+            {!newLeadRule && (
+              <div className="flex items-center gap-2 p-3 bg-muted/50 border border-dashed rounded-lg text-sm text-muted-foreground">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                Configure a saudação antes de ativar o follow-up
+              </div>
+            )}
+
+            {/* Timeline stepper */}
+            <div className="relative">
+              {followUpSteps.map((step, index) => (
+                <div key={step.id} className="flex gap-3 pb-4 relative">
+                  {index < followUpSteps.length - 1 && (
+                    <div className="absolute left-[7px] top-4 bottom-0 w-px bg-border" />
+                  )}
+                  <div className={cn(
+                    "w-3.5 h-3.5 rounded-full border-2 mt-0.5 shrink-0 z-10",
+                    step.is_active ? "bg-primary border-primary" : "bg-muted border-muted-foreground/30"
+                  )} />
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Etapa {step.position + 1}</span>
+                      <div className="flex items-center gap-1">
+                        <Switch
+                          checked={step.is_active}
+                          onCheckedChange={async (checked) => {
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            await (supabase.from('whatsapp_followup_steps' as any) as any).update({ is_active: checked }).eq('id', step.id);
+                            fetchFollowUpSteps();
+                          }}
+                          disabled={!isConnected}
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          onClick={async () => {
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            await (supabase.from('whatsapp_followup_steps' as any) as any).delete().eq('id', step.id);
+                            fetchFollowUpSteps();
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                    {step.is_active && (
+                      <div className="space-y-2">
+                        <Select
+                          value={step.template_id}
+                          onValueChange={async (value) => {
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            await (supabase.from('whatsapp_followup_steps' as any) as any).update({ template_id: value }).eq('id', step.id);
+                            fetchFollowUpSteps();
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecione um template" /></SelectTrigger>
+                          <SelectContent>
+                            {templates.map((t) => (
+                              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <Select
+                            value={String(step.delay_minutes)}
+                            onValueChange={async (value) => {
+                              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                              await (supabase.from('whatsapp_followup_steps' as any) as any).update({ delay_minutes: parseInt(value) }).eq('id', step.id);
+                              fetchFollowUpSteps();
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-xs flex-1"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {DELAY_OPTIONS.map(opt => (
+                                <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {index === 0 && (
+                          <Button variant="outline" size="sm" className="h-8 text-xs w-full" onClick={() => setShowTemplatesModal(true)}>
+                            <Settings2 className="h-3 w-3 mr-1.5" />Personalizar Templates
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full mt-1"
+                disabled={templates.length === 0 || !newLeadRule}
+                onClick={async () => {
+                  if (templates.length === 0) { setShowTemplatesModal(true); return; }
+                  const { data: accountData } = await supabase.rpc('get_user_account_id');
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  await (supabase.from('whatsapp_followup_steps' as any) as any).insert({
+                    account_id: accountData,
+                    name: `Follow-up ${followUpSteps.length + 1}`,
+                    template_id: templates[0].id,
+                    delay_minutes: followUpSteps.length === 0 ? 60 : followUpSteps.length === 1 ? 1440 : 4320,
+                    position: followUpSteps.length,
+                    is_active: true,
+                  });
+                  fetchFollowUpSteps();
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Adicionar Etapa
+              </Button>
+
+              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-2">
+                <AlertCircle className="h-3 w-3" />
+                Cancelados automaticamente quando o lead responde
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ─── COMO FUNCIONA — Collapsible no rodapé ─── */}
+      <Collapsible>
+        <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full py-1">
+          <ChevronDown className="h-3.5 w-3.5" />
+          Como funciona a automação?
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="mt-3 p-4 border rounded-lg space-y-3">
+            {[
+              { n: 1, title: 'Novo lead chega', desc: 'Via cadastro manual, Meta Ads, Webhook ou Grupo OLX' },
+              { n: 2, title: 'Regras condicionais avaliadas', desc: 'Sistema verifica se alguma regra condicional (por imóvel, valor, tipo...) se aplica' },
+              { n: 3, title: 'Saudação enviada', desc: 'Template da regra condicional, ou o template padrão se nenhuma regra casar' },
+              { n: 4, title: 'Follow-up automático (opcional)', desc: 'Se o lead não responder, as etapas de follow-up são disparadas automaticamente' },
+            ].map(({ n, title, desc }) => (
+              <div key={n} className="flex items-start gap-3">
+                <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">{n}</div>
+                <div>
+                  <p className="text-sm font-medium">{title}</p>
+                  <p className="text-xs text-muted-foreground">{desc}</p>
+                </div>
               </div>
             ))}
-
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              disabled={templates.length === 0 || !newLeadRule}
-              onClick={async () => {
-                if (templates.length === 0) { setShowTemplatesModal(true); return; }
-                const { data: accountData } = await supabase.rpc('get_user_account_id');
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                await (supabase.from('whatsapp_followup_steps' as any) as any).insert({
-                  account_id: accountData,
-                  name: `Follow-up ${followUpSteps.length + 1}`,
-                  template_id: templates[0].id,
-                  delay_minutes: followUpSteps.length === 0 ? 60 : followUpSteps.length === 1 ? 1440 : 4320,
-                  position: followUpSteps.length,
-                  is_active: true,
-                });
-                fetchFollowUpSteps();
-              }}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Adicionar Etapa de Follow-up
-            </Button>
-
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <AlertCircle className="h-3 w-3" />
-              Follow-ups são cancelados automaticamente quando o lead responde
-            </p>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* ─── SEÇÃO 4: Como Funciona ─── */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Clock className="h-5 w-5" />
-            Como Funciona
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-start gap-3">
-            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">1</div>
-            <div>
-              <p className="text-sm font-medium">Novo lead chega</p>
-              <p className="text-xs text-muted-foreground">Via cadastro manual, Meta Ads, Webhook ou Grupo OLX</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">2</div>
-            <div>
-              <p className="text-sm font-medium">Regras condicionais avaliadas</p>
-              <p className="text-xs text-muted-foreground">Sistema verifica se alguma regra condicional (por imóvel, valor, tipo...) se aplica</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">3</div>
-            <div>
-              <p className="text-sm font-medium">Saudação enviada</p>
-              <p className="text-xs text-muted-foreground">Template da regra condicional, ou o template padrão se nenhuma regra casar</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">4</div>
-            <div>
-              <p className="text-sm font-medium">Follow-up automático (opcional)</p>
-              <p className="text-xs text-muted-foreground">Se o lead não responder, as etapas de follow-up são disparadas automaticamente</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* QR Modal */}
       <Dialog open={showQRModal} onOpenChange={setShowQRModal}>
