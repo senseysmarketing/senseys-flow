@@ -445,12 +445,14 @@ Deno.serve(async (req) => {
             }
 
             let phoneNumber = session.phone_number
-            if (isConnected && !phoneNumber) {
-              phoneNumber = await fetchPhoneNumber(instanceName)
-              console.log('[whatsapp-connect] Fetched phone number:', phoneNumber)
+            if (isConnected) {
+              const freshPhone = await fetchPhoneNumber(instanceName)
+              console.log('[whatsapp-connect] Fetched phone number:', freshPhone)
+              if (freshPhone) phoneNumber = freshPhone
             }
 
-            if (newStatus !== session.status || (isConnected && !session.phone_number && phoneNumber)) {
+            const phoneChanged = isConnected && phoneNumber && phoneNumber !== session.phone_number
+            if (newStatus !== session.status || phoneChanged) {
               console.log('[whatsapp-connect] Status changed:', session.status, '->', newStatus)
               await supabase
                 .from('whatsapp_sessions')
