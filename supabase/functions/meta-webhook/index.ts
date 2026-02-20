@@ -222,6 +222,13 @@ const handler = async (req: Request): Promise<Response> => {
               const { data: nCf } = await supabase.from("custom_fields").insert({ account_id: cfg.account_id, name: k.replace(/_/g, " "), field_key: k, field_type: "text", is_active: true, is_required: false }).select("id").single();
               if (nCf) await supabase.from("lead_custom_field_values").insert({ lead_id: newLead.id, custom_field_id: nCf.id, value: v });
             }
+            // TAMBÉM salvar em lead_form_field_values para suporte a {form_*} nos templates
+            await supabase.from("lead_form_field_values").insert({
+              lead_id: newLead.id,
+              field_name: k,
+              field_label: k.replace(/_/g, " ").replace(/\?/g, "").trim(),
+              field_value: v,
+            });
           }
 
           await supabase.from("lead_activities").insert({ lead_id: newLead.id, account_id: cfg.account_id, activity_type: "created", description: `Lead via Facebook${campName ? ` (${campName})` : ""} - ${temp === "hot" ? "Quente" : temp === "warm" ? "Morno" : "Frio"}` });
