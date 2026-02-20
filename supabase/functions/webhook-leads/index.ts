@@ -666,19 +666,17 @@ serve(async (req) => {
 
         if (templateId) {
           // Check for sequence steps configured for this rule
-          const seqFilter = matchedRule
-            ? { greeting_rule_id: matchedRule.id }
-            : { automation_rule_id: ruleId }
 
-          const seqFilterKey = Object.keys(seqFilter)[0]
-          const seqFilterVal = Object.values(seqFilter)[0]
-
-          const { data: seqSteps } = await supabase
-            .from('whatsapp_greeting_sequence_steps' as 'whatsapp_followup_steps')
+          // Use (supabase as any) to avoid TypeScript cast issues with the new table
+          const seqQuery = (supabase as any)
+            .from('whatsapp_greeting_sequence_steps')
             .select('*')
-            .eq(seqFilterKey as 'account_id', seqFilterVal as string)
             .eq('is_active', true)
             .order('position')
+
+          const { data: seqSteps } = matchedRule
+            ? await seqQuery.eq('greeting_rule_id', matchedRule.id)
+            : await seqQuery.eq('automation_rule_id', ruleId)
 
           if (seqSteps && seqSteps.length > 0) {
             // Enqueue multiple messages in sequence with accumulated delays
