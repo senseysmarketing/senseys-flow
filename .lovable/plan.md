@@ -1,114 +1,59 @@
 
-## Correção: Sequência de Saudação Não Enviando Todas as Mensagens
+## Correção: Exclusão de Lead Falha por FK em whatsapp_messages e whatsapp_conversations
 
-### Causa Raiz Identificada
+### Causa Raiz
 
-O fluxo de envio envolve dois componentes que entram em conflito:
+Ao tentar deletar um lead, o banco bloqueia a operação porque duas tabelas têm chaves estrangeiras com regra `NO ACTION` (sem cascade automático):
 
-**1. `webhook-leads`** — ao criar um lead manualmente, busca as etapas de sequência em `whatsapp_greeting_sequence_steps` e deveria enfileirar **todas** as mensagens de uma vez. Para o lead "Leo Henry", só enfileirou **1 mensagem** (a PT1), indicando que não encontrou as sequências naquela chamada.
-
-**2. `process-whatsapp-queue`** (linhas 319–365) — depois de enviar a primeira mensagem com sucesso, **ativa uma lógica adicional** que busca follow-ups em `whatsapp_followup_steps` (tabela dos follow-ups pós-saudação, com delays de 1440+ minutos) e agenda novos itens na fila. Esta lógica foi adicionada para suportar follow-ups automáticos, mas está sendo ativada **também para mensagens de sequência de saudação**, causando:
-- Agendamento de Follow-Up PT1 para amanhã (1440 min = 1 dia)  
-- Agendamento de Follow-Up PT2 para depois de amanhã (2880 min = 2 dias)
-- Agendamento de Follow-Up PT3 para daqui 3 dias (4320 min = 3 dias)
-
-Em vez das mensagens PT2 e PT3 da sequência de saudação com 10s e 5s de delay.
-
-### Dois Problemas a Corrigir
-
----
-
-#### Problema 1: `process-whatsapp-queue` — lógica de follow-up disparando para sequências de saudação
-
-Quando `process-whatsapp-queue` envia uma mensagem com sucesso, verifica:
-```
-if (msg.automation_rule_id && !msg.followup_step_id) → agenda follow-ups
-```
-
-O problema é que mensagens de **sequência de saudação** também têm `automation_rule_id` e **não** têm `followup_step_id`, então a condição `true` aciona o agendamento dos follow-ups da tabela `whatsapp_followup_steps`.
-
-**Solução:** Verificar se já existem mensagens pendentes/enviadas da sequência de saudação para este lead antes de agendar follow-ups. Se existir qualquer outra mensagem da mesma `automation_rule_id` para o mesmo lead, significa que é uma sequência — não um disparo único — e o follow-up **não deve ser agendado novamente**.
-
-```ts
-// ANTES de agendar follow-ups, verificar se já há outras mensagens da sequência de saudação
-const { data: existingSequenceMsgs } = await supabase
-  .from('whatsapp_message_queue')
-  .select('id')
-  .eq('lead_id', msg.lead_id)
-  .eq('automation_rule_id', msg.automation_rule_id)
-  .neq('id', msg.id) // exclude the current message
-  .limit(1)
-
-// Se já existem outras mensagens desta automação para este lead, é uma sequência de saudação
-// Neste caso não agendar follow-ups (eles já foram enfileirados pelo webhook)
-if (existingSequenceMsgs && existingSequenceMsgs.length > 0) {
-  console.log(`[process-whatsapp-queue] Greeting sequence detected for lead ${msg.lead_id}, skipping follow-up scheduling`)
-  // skip follow-up scheduling
-}
-```
-
----
-
-#### Problema 2: `webhook-leads` — sequência não foi enfileirada corretamente
-
-O `webhook-leads` faz a query em `whatsapp_greeting_sequence_steps` filtrando por `automation_rule_id = ruleId` (linha 679), mas apenas 1 mensagem foi criada para o lead "Leo Henry". Isso pode significar que a query retornou vazio. A causa provável é que o `ruleId` no momento da query ainda era `null` ou diferente do ID da regra que tem a sequência configurada.
-
-**Solução:** Adicionar log de debug e garantir que a query da sequência utiliza o mesmo `ruleId` que foi encontrado. Além disso, adicionar verificação de que o `ruleId` não é nulo antes de buscar as sequências:
-
-```ts
-if (templateId && ruleId) { // garantir que ruleId é válido
-  const seqQuery = ...
-  const { data: seqSteps, error: seqError } = ...
-  if (seqError) console.error('Sequence query error:', seqError)
-  console.log(`Sequence steps found: ${seqSteps?.length || 0} for rule ${ruleId}`)
-  ...
-}
-```
-
----
-
-### Dados Confirmados no Banco
-
-| Mensagem | Tabela origem | Agendado para | Status |
-|---|---|---|---|
-| Saudacao PT1 | `whatsapp_greeting_sequence_steps` | 14:33 | ✅ Enviado |
-| Follow-Up PT1 | `whatsapp_followup_steps` (errado!) | Amanhã (+1 dia) | ⏳ Pendente |
-| Follow-Up PT2 | `whatsapp_followup_steps` (errado!) | Depois de amanhã (+2 dias) | ⏳ Pendente |
-| Follow-Up PT3 | `whatsapp_followup_steps` (errado!) | Daqui 3 dias (+3 dias) | ⏳ Pendente |
-
-O que deveria ter sido agendado pelo `webhook-leads`:
-| Mensagem | Tabela origem | Agendado para |
+| Tabela | Constraint | Regra atual |
 |---|---|---|
-| Saudacao PT1 | sequência passo 1 (30s) | 14:33 |
-| Saudacao PT2 | sequência passo 2 (+10s) | 14:33 + 40s |
-| Saudacao PT3 | sequência passo 3 (+5s) | 14:33 + 45s |
+| `whatsapp_messages` | `whatsapp_messages_lead_id_fkey` | NO ACTION ❌ |
+| `whatsapp_conversations` | `whatsapp_conversations_lead_id_fkey` | NO ACTION ❌ |
 
----
+As demais tabelas relacionadas (lead_activities, lead_custom_field_values, whatsapp_message_queue, etc.) já estão configuradas com `CASCADE` e funcionam corretamente.
 
-### Dados Imediatos a Limpar
+### Solução
 
-Os 3 follow-ups errados do lead "Leo Henry" precisam ser cancelados no banco antes do deploy (executar via Supabase SQL):
+Duas abordagens, sendo a mais correta é a **opção 1**:
 
+**Opção 1 (Preferida): Adicionar ON DELETE CASCADE nas FKs no banco** — Isso garante que qualquer exclusão de lead (seja via código, SQL direto, ou outras rotinas) automaticamente remove os registros relacionados sem precisar mudar o código da aplicação.
+
+Migration SQL a executar:
 ```sql
-UPDATE whatsapp_message_queue
-SET status = 'cancelled', error_message = 'Cancelado: follow-up agendado incorretamente no lugar de sequência de saudação'
-WHERE lead_id = '7205e0a4-3592-4561-a1f9-8c2ed52e4f40'
-AND status = 'pending'
-AND followup_step_id IS NOT NULL;
+-- Remove as FKs com NO ACTION e recria com CASCADE
+ALTER TABLE public.whatsapp_messages
+  DROP CONSTRAINT whatsapp_messages_lead_id_fkey,
+  ADD CONSTRAINT whatsapp_messages_lead_id_fkey
+    FOREIGN KEY (lead_id) REFERENCES public.leads(id) ON DELETE SET NULL;
+
+ALTER TABLE public.whatsapp_conversations
+  DROP CONSTRAINT whatsapp_conversations_lead_id_fkey,
+  ADD CONSTRAINT whatsapp_conversations_lead_id_fkey
+    FOREIGN KEY (lead_id) REFERENCES public.leads(id) ON DELETE SET NULL;
 ```
 
----
+**Nota importante:** Para `whatsapp_messages` e `whatsapp_conversations`, usamos `SET NULL` em vez de `CASCADE` porque essas mensagens/conversas têm valor histórico — ao deletar o lead, as mensagens permanecem no sistema (úteis para auditoria/conversas), mas o vínculo com o lead é removido (`lead_id` fica null). Isso é mais seguro do que apagar todo o histórico de mensagens junto com o lead.
 
-### Arquivos a Modificar
+Se a preferência for apagar tudo (mensagens e conversas junto), usar `CASCADE` em vez de `SET NULL`.
 
-1. **`supabase/functions/process-whatsapp-queue/index.ts`** — Linhas 319–365: adicionar verificação de sequência existente antes de agendar follow-ups. Esta é a correção **prioritária** pois impede que o bug se repita.
+**Opção 2 (Código apenas):** Modificar `handleDeleteLead` em `src/pages/Leads.tsx` para deletar manualmente os registros antes de deletar o lead. Menos robusto pois depende de toda chamada de deleção fazer o mesmo.
 
-2. **`supabase/functions/webhook-leads/index.ts`** — Linhas 667–731: adicionar logs e verificação de `ruleId` não nulo antes da query de sequências, para diagnosticar por que a sequência não foi enfileirada corretamente.
+### Abordagem Escolhida
 
----
+Usar `SET NULL` (não CASCADE destrutivo) para ambas as tabelas de mensagens:
+- `whatsapp_messages.lead_id` → SET NULL ao deletar lead
+- `whatsapp_conversations.lead_id` → SET NULL ao deletar lead
+
+Isso preserva o histórico de mensagens (que pode estar vinculado a conversas em andamento) mas desvincula do lead, permitindo a exclusão sem erro.
+
+### Arquivo a modificar
+
+- **Migration SQL** (via ferramenta de migração): alterar as duas constraints de `NO ACTION` para `SET NULL`
+- **`src/pages/Leads.tsx`** — nenhuma alteração necessária no código, a migration resolve tudo
 
 ### Impacto
 
-- Leads futuros com sequência de saudação: corrigidos (o follow-up automático não será mais agendado em conflito com a sequência)
-- Lead "Leo Henry": os 3 follow-ups errados serão cancelados via SQL direto
-- Follow-up automático (pós-saudação, único) continua funcionando normalmente para leads sem sequência configurada
+- Lead "Leo Henry" e todos os futuros leads poderão ser deletados normalmente
+- Histórico de mensagens do WhatsApp é preservado (lead_id fica null, mas mensagens existem)
+- Conversas do WhatsApp também preservadas sem vínculo ao lead deletado
+- Zero mudança de comportamento para leads ativos
