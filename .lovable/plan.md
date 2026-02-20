@@ -1,71 +1,54 @@
 
-## UI: Melhorias na Interface de Saudação Automática
+## UI: Melhorias Visuais na Seção de Follow-up Automático
 
 ### O que será feito
 
-Três melhorias visuais e funcionais no card de **Saudação Automática** em `WhatsAppIntegrationSettings.tsx`:
+Dois ajustes no bloco de follow-up em `WhatsAppIntegrationSettings.tsx` (linhas 852–925), espelhando o visual já aplicado na Saudação Automática:
 
 ---
 
-### 1. Badge de status da sequência + botões de ação inline
+### 1. Adicionar borda e fundo em cada "Etapa X"
 
-**Situação atual:** O botão "Configurar Sequência de Mensagens" sempre aparece igual, sem nenhum indicador se há uma sequência ativa configurada ou não.
+**Situação atual:** Cada etapa é separada apenas por uma linha (`border-t`), sem container visual próprio.
 
-**Novo comportamento:**
-- O componente buscará os steps da sequência (da `whatsapp_greeting_sequence_steps`) ao carregar — um count simples por `automation_rule_id`
-- Se houver steps ativos → mostra um badge verde "✓ Sequência ativa (N mensagens)" ao lado do botão
-- Aparece um botão secundário "Desativar" (toggle `is_active = false` em todos os steps) e um botão de lixeira "Excluir sequência" (com AlertDialog de confirmação)
-- O botão principal vira "Editar Sequência" quando já existe uma configurada
-
-**Estrutura visual para o bloco da sequência (fallback rule):**
-```
-[ ✏ Editar Sequência ]   ● Sequência ativa (3 mensagens)   [Desativar]  [🗑]
-Configure 2–5 mensagens enviadas em sequência...
-```
-
-O mesmo indicador também aparece para cada regra condicional na lista.
-
----
-
-### 2. Botão "Personalizar Templates" na mesma linha do toggle
-
-**Situação atual:** "Personalizar Templates" aparece como link pequeno abaixo do select de template, meio escondido.
-
-**Novo comportamento:** Um botão real (`variant="outline"`, `size="sm"`) com ícone de `Settings2`, posicionado à **direita do toggle** de Saudação ativada/desativada — na mesma linha (`flex items-center justify-between`).
+**Novo comportamento:** Cada etapa ganha um container com `border rounded-lg bg-muted/20 p-4`, idêntico ao estilo dos itens de regras condicionais da saudação — criando uma hierarquia visual clara entre as etapas.
 
 **Antes:**
-```
-[ Toggle ] Saudação ativada                          [     linha     ]
-...
-[ link Personalizar Templates ]
+```tsx
+<div className={`space-y-3 ${index > 0 ? 'border-t pt-3' : ''} ${index < followUpSteps.length - 1 ? 'pb-3' : ''}`}>
 ```
 
 **Depois:**
+```tsx
+<div className="border rounded-lg bg-muted/20 p-4 space-y-3">
 ```
-[ Toggle ] Saudação ativada          [ ⚙ Personalizar Templates ]
-```
+
+O `space-y-0` do container pai vira `space-y-3` para separação entre cards.
 
 ---
 
-### Dados necessários
+### 2. Botão "Personalizar Templates" apenas na Etapa 1
 
-Será adicionado um novo estado `sequenceCounts` do tipo `Record<string, number>` (mapeando `automation_rule_id | greeting_rule_id` → quantidade de steps ativos). Uma função `fetchSequenceCounts()` fará um único `select` na `whatsapp_greeting_sequence_steps` filtrando `is_active = true`, agrupando os resultados no frontend para montar o mapa.
+**Situação atual:** O botão "Personalizar Templates" aparece abaixo do select de template em **todas** as etapas (linha 900–902).
 
-Novos handlers:
-- `handleDisableSequence(automationRuleId?, greetingRuleId?)` — atualiza `is_active = false` em todos os steps correspondentes
-- `handleDeleteSequence(automationRuleId?, greetingRuleId?)` — deleta os steps correspondentes (com confirmação via AlertDialog)
+**Novo comportamento:** O botão só aparece quando `index === 0` (Etapa 1), usando uma condição simples:
+
+```tsx
+{index === 0 && (
+  <Button variant="outline" size="sm" className="h-auto px-3 py-1.5 text-xs" onClick={() => setShowTemplatesModal(true)}>
+    <Settings2 className="h-3 w-3 mr-1" />
+    Personalizar Templates
+  </Button>
+)}
+```
+
+O estilo será `variant="outline"` com `size="sm"` — igual ao botão da saudação, em vez do `variant="link"` atual.
 
 ---
 
 ### Arquivo a modificar
 
-**`src/components/whatsapp/WhatsAppIntegrationSettings.tsx`** — seções:
-- Linha ~134: adicionar estado `sequenceCounts`
-- Linha ~218: adicionar `fetchSequenceCounts` + incluir no `fetchGreetingRules`/`useEffect`
-- Linha ~512-523: linha do toggle → adicionar botão "Personalizar Templates" à direita
-- Linha ~545-548: remover o link antigo de "Personalizar Templates"
-- Linha ~563-579: bloco da sequência do fallback rule → adicionar badge + botões inline
-- Linha ~656-664: cada regra condicional → adicionar badge + botões inline da sequência
+**`src/components/whatsapp/WhatsAppIntegrationSettings.tsx`** — linhas 852–925: ajustar container de cada etapa e condicionar o botão de templates.
 
 ---
 
@@ -73,17 +56,21 @@ Novos handlers:
 
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
-│ ⚡ Saudação Automática                                           │
-│    Mensagem enviada imediatamente quando um novo lead chegar     │
+│ ↺ Follow-up Automático                                          │
+│   Mensagens de acompanhamento para leads que não responderam    │
 ├─────────────────────────────────────────────────────────────────┤
-│ [●] Saudação ativada              [ ⚙ Personalizar Templates ]  │
-│                                                                  │
-│ ─────────────── TEMPLATE PADRÃO (FALLBACK) ──────────────────  │
-│  Template de Mensagem          Delay de envio                    │
-│  [Saudacao PT1 ▼]              [Imediato ▼]                     │
-│                                                                  │
-│  [ ✏ Editar Sequência ]  ●verde Sequência ativa (3 mensagens)   │
-│                           [Desativar]  [🗑 Excluir]              │
-│  Configure 2–5 mensagens enviadas em sequência...               │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │ [●] Etapa 1                                          [🗑] │   │
+│  │  Template de Mensagem         Delay após etapa anterior   │   │
+│  │  [[Senseys] 1º Fo up - V1 ▼]  [2 horas ▼]               │   │
+│  │  [ ⚙ Personalizar Templates ]                            │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │ [●] Etapa 2                                          [🗑] │   │
+│  │  Template de Mensagem         Delay após etapa anterior   │   │
+│  │  [[Senseys] 2º Fo up - V1 ▼]  [24 horas ▼]              │   │
+│  │  (sem botão de Personalizar)                              │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│  [ + Adicionar Etapa de Follow-up ]                             │
 └─────────────────────────────────────────────────────────────────┘
 ```
