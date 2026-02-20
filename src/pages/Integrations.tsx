@@ -79,7 +79,7 @@ const Integrations = () => {
         </TabsList>
       </Tabs>
 
-      <div className="max-w-4xl">
+      <div className="w-full">
         {renderContent()}
       </div>
     </div>
