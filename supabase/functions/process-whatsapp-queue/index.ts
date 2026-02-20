@@ -319,19 +319,20 @@ Deno.serve(async (req) => {
         // BUT only if this is NOT part of a greeting sequence (sequences are fully enqueued by webhook-leads)
         if (msg.automation_rule_id && !msg.followup_step_id) {
           try {
-            // Check if there are other messages from the same automation for this lead
-            // If yes, this is a multi-step greeting sequence — don't schedule follow-ups
+            // Check if there are other greeting sequence messages from the same automation for this lead
+            // IMPORTANT: filter out followup_step_id messages (those are long-term follow-ups, not greeting steps)
             const { data: existingSequenceMsgs } = await supabase
               .from('whatsapp_message_queue')
               .select('id')
               .eq('lead_id', msg.lead_id)
               .eq('automation_rule_id', msg.automation_rule_id)
+              .is('followup_step_id', null)
               .neq('id', msg.id)
               .limit(1)
 
             if (existingSequenceMsgs && existingSequenceMsgs.length > 0) {
               console.log(`[process-whatsapp-queue] Greeting sequence detected for lead ${msg.lead_id}, skipping follow-up scheduling`)
-              // Skip follow-up scheduling — sequence messages already enqueued by webhook-leads
+              // Skip follow-up scheduling — sequence messages already enqueued
             } else {
 
             // Check if the automation rule is a new_lead greeting
