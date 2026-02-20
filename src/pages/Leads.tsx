@@ -395,7 +395,7 @@ const Leads = () => {
             ? (sources as Record<string, boolean>).manual !== false 
             : true;
 
-          if (automationRule.template_id && manualEnabled) {
+          if (manualEnabled) {
             // Check if WhatsApp is connected
             const { data: session } = await supabase
               .from('whatsapp_sessions')
@@ -405,41 +405,75 @@ const Leads = () => {
               .single();
 
             if (session) {
-              const scheduledFor = new Date(Date.now() + ((automationRule.delay_seconds || 0) * 1000));
-              
-              // Get template to compose message
-              const { data: template } = await supabase
-                .from('whatsapp_templates')
-                .select('template')
-                .eq('id', automationRule.template_id)
-                .single();
-              
-              if (template) {
-                // Replace variables in template
-                let message = template.template
-                  .replace(/{nome}/gi, newLead.name || '')
-                  .replace(/{telefone}/gi, newLead.phone || '')
-                  .replace(/{email}/gi, newLead.email || '');
-                
-                const { error: queueError } = await supabase.from('whatsapp_message_queue').insert({
-                  account_id: profile.account_id,
-                  lead_id: insertedLead.id,
-                  phone: newLead.phone,
-                  message: message,
-                  template_id: automationRule.template_id,
-                  automation_rule_id: automationRule.id,
-                  scheduled_for: scheduledFor.toISOString(),
-                  status: 'pending'
+              // Check if there are greeting sequence steps for this automation rule
+              const { data: seqSteps } = await supabase
+                .from('whatsapp_greeting_sequence_steps')
+                .select('*')
+                .eq('automation_rule_id', automationRule.id)
+                .eq('is_active', true)
+                .order('position');
+
+              if (seqSteps && seqSteps.length > 0) {
+                // Enqueue ALL sequence steps with accumulated delays
+                let accumulated = automationRule.delay_seconds || 0;
+                const inserts = seqSteps.map((step: any) => {
+                  accumulated += (step.delay_seconds || 0);
+                  return {
+                    account_id: profile.account_id,
+                    lead_id: insertedLead.id,
+                    phone: newLead.phone,
+                    message: '',
+                    template_id: step.template_id,
+                    automation_rule_id: automationRule.id,
+                    scheduled_for: new Date(Date.now() + accumulated * 1000).toISOString(),
+                    status: 'pending'
+                  };
                 });
-                
+
+                const { error: queueError } = await supabase.from('whatsapp_message_queue').insert(inserts);
                 if (queueError) {
-                  console.error('WhatsApp queue insert error:', queueError);
+                  console.error('WhatsApp sequence queue insert error:', queueError);
                 } else {
-                  console.log(`WhatsApp greeting scheduled for manual lead ${insertedLead.id}`);
-                  // Trigger queue processing immediately
-                  supabase.functions.invoke('process-whatsapp-queue').catch(e => 
+                  console.log(`WhatsApp greeting sequence (${seqSteps.length} steps) scheduled for manual lead ${insertedLead.id}`);
+                  supabase.functions.invoke('process-whatsapp-queue').catch(e =>
                     console.log('Queue processing trigger:', e)
                   );
+                }
+              } else if (automationRule.template_id) {
+                // No sequence: enqueue single message (original behavior)
+                const scheduledFor = new Date(Date.now() + ((automationRule.delay_seconds || 0) * 1000));
+
+                const { data: template } = await supabase
+                  .from('whatsapp_templates')
+                  .select('template')
+                  .eq('id', automationRule.template_id)
+                  .single();
+
+                if (template) {
+                  let message = template.template
+                    .replace(/{nome}/gi, newLead.name || '')
+                    .replace(/{telefone}/gi, newLead.phone || '')
+                    .replace(/{email}/gi, newLead.email || '');
+
+                  const { error: queueError } = await supabase.from('whatsapp_message_queue').insert({
+                    account_id: profile.account_id,
+                    lead_id: insertedLead.id,
+                    phone: newLead.phone,
+                    message: message,
+                    template_id: automationRule.template_id,
+                    automation_rule_id: automationRule.id,
+                    scheduled_for: scheduledFor.toISOString(),
+                    status: 'pending'
+                  });
+
+                  if (queueError) {
+                    console.error('WhatsApp queue insert error:', queueError);
+                  } else {
+                    console.log(`WhatsApp greeting scheduled for manual lead ${insertedLead.id}`);
+                    supabase.functions.invoke('process-whatsapp-queue').catch(e =>
+                      console.log('Queue processing trigger:', e)
+                    );
+                  }
                 }
               }
             }
