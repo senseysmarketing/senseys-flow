@@ -132,6 +132,7 @@ export function WhatsAppIntegrationSettings() {
   const [editingRule, setEditingRule] = useState<GreetingRule | null>(null);
   const [showSequenceModal, setShowSequenceModal] = useState(false);
   const [sequenceTarget, setSequenceTarget] = useState<{ automationRuleId?: string; greetingRuleId?: string; label: string } | null>(null);
+  const [sequenceCounts, setSequenceCounts] = useState<Record<string, number>>({});
 
   const fetchSession = useCallback(async () => {
     if (!user) return;
@@ -209,6 +210,39 @@ export function WhatsAppIntegrationSettings() {
     setGreetingRules((data || []) as GreetingRule[]);
   }, []);
 
+  const fetchSequenceCounts = useCallback(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase.from('whatsapp_greeting_sequence_steps' as any) as any)
+      .select('automation_rule_id, greeting_rule_id')
+      .eq('is_active', true);
+    if (!data) return;
+    const counts: Record<string, number> = {};
+    for (const row of data) {
+      const key = row.automation_rule_id || row.greeting_rule_id;
+      if (key) counts[key] = (counts[key] || 0) + 1;
+    }
+    setSequenceCounts(counts);
+  }, []);
+
+  const handleDisableSequence = async (automationRuleId?: string, greetingRuleId?: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const q = (supabase.from('whatsapp_greeting_sequence_steps' as any) as any)
+      .update({ is_active: false });
+    if (automationRuleId) await q.eq('automation_rule_id', automationRuleId);
+    else if (greetingRuleId) await q.eq('greeting_rule_id', greetingRuleId);
+    fetchSequenceCounts();
+    toast({ title: 'Sequência desativada', description: 'As mensagens da sequência foram desativadas.' });
+  };
+
+  const handleDeleteSequence = async (automationRuleId?: string, greetingRuleId?: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const q = (supabase.from('whatsapp_greeting_sequence_steps' as any) as any).delete();
+    if (automationRuleId) await q.eq('automation_rule_id', automationRuleId);
+    else if (greetingRuleId) await q.eq('greeting_rule_id', greetingRuleId);
+    fetchSequenceCounts();
+    toast({ title: 'Sequência excluída', description: 'As mensagens da sequência foram removidas.' });
+  };
+
   const fetchFollowUpSteps = useCallback(async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data } = await (supabase.from('whatsapp_followup_steps' as any) as any)
@@ -220,14 +254,14 @@ export function WhatsAppIntegrationSettings() {
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      await Promise.all([fetchSession(), fetchTemplates(), fetchAutomationRules(), fetchGreetingRules(), fetchFollowUpSteps()]);
+      await Promise.all([fetchSession(), fetchTemplates(), fetchAutomationRules(), fetchGreetingRules(), fetchFollowUpSteps(), fetchSequenceCounts()]);
       setLoading(false);
     };
 
     if (user) {
       loadData();
     }
-  }, [user, fetchSession, fetchTemplates, fetchAutomationRules, fetchGreetingRules, fetchFollowUpSteps]);
+  }, [user, fetchSession, fetchTemplates, fetchAutomationRules, fetchGreetingRules, fetchFollowUpSteps, fetchSequenceCounts]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -520,6 +554,10 @@ export function WhatsAppIntegrationSettings() {
                     {newLeadRule.is_active ? 'Saudação ativada' : 'Saudação desativada'}
                   </Label>
                 </div>
+                <Button variant="outline" size="sm" onClick={() => setShowTemplatesModal(true)}>
+                  <Settings2 className="h-4 w-4 mr-2" />
+                  Personalizar Templates
+                </Button>
               </div>
 
               {newLeadRule.is_active && (
@@ -542,9 +580,6 @@ export function WhatsAppIntegrationSettings() {
                             ))}
                           </SelectContent>
                         </Select>
-                        <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setShowTemplatesModal(true)}>
-                          <Settings2 className="h-3 w-3 mr-1" />Personalizar Templates
-                        </Button>
                       </div>
                       <div className="space-y-2">
                         <Label>Delay de envio</Label>
@@ -560,20 +595,54 @@ export function WhatsAppIntegrationSettings() {
                         </Select>
                       </div>
                     </div>
-                    {/* Sequence button */}
-                    <div className="mt-3">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setSequenceTarget({ automationRuleId: newLeadRule.id, label: 'Template Padrão (fallback)' });
-                          setShowSequenceModal(true);
-                        }}
-                      >
-                        <Edit2 className="h-3.5 w-3.5 mr-2" />
-                        Configurar Sequência de Mensagens
-                      </Button>
-                      <p className="text-xs text-muted-foreground mt-1">
+                    {/* Sequence section */}
+                    <div className="mt-3 p-3 border border-dashed rounded-lg space-y-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSequenceTarget({ automationRuleId: newLeadRule.id, label: 'Template Padrão (fallback)' });
+                            setShowSequenceModal(true);
+                          }}
+                        >
+                          <Edit2 className="h-3.5 w-3.5 mr-2" />
+                          {sequenceCounts[newLeadRule.id] ? 'Editar Sequência' : 'Configurar Sequência'}
+                        </Button>
+                        {sequenceCounts[newLeadRule.id] ? (
+                          <>
+                            <Badge className="gap-1 bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30 hover:bg-green-500/20">
+                              ✓ Sequência ativa ({sequenceCounts[newLeadRule.id]} mensagens)
+                            </Badge>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => handleDisableSequence(newLeadRule.id)}
+                            >
+                              Desativar
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Excluir sequência?</AlertDialogTitle>
+                                  <AlertDialogDescription>Todas as mensagens da sequência serão removidas permanentemente.</AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleDeleteSequence(newLeadRule.id)}>Excluir</AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </>
+                        ) : null}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
                         Configure 2–5 mensagens enviadas em sequência em vez de uma única mensagem
                       </p>
                     </div>
@@ -628,60 +697,97 @@ export function WhatsAppIntegrationSettings() {
                           const templateName = templates.find(t => t.id === rule.template_id)?.name;
                           const summary = formatConditionSummary(rule);
                           return (
-                            <div key={rule.id} className="flex items-center gap-2 p-2.5 border rounded-lg bg-muted/20">
-                              <Switch
-                                checked={rule.is_active}
-                                onCheckedChange={(v) => toggleGreetingRule(rule.id, v)}
-                                disabled={!isConnected}
-                              />
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <Badge variant="outline" className="text-xs h-5 px-1.5 font-normal">
-                                    #{rule.priority}
-                                  </Badge>
-                                  <span className="text-xs font-medium text-muted-foreground">
-                                    {CONDITION_TYPE_LABELS[rule.condition_type]}
-                                  </span>
-                                  {summary && (
-                                    <span className="text-xs text-foreground truncate">{summary}</span>
-                                  )}
+                            <div key={rule.id} className="flex flex-col gap-2 p-2.5 border rounded-lg bg-muted/20">
+                              <div className="flex items-center gap-2">
+                                <Switch
+                                  checked={rule.is_active}
+                                  onCheckedChange={(v) => toggleGreetingRule(rule.id, v)}
+                                  disabled={!isConnected}
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <Badge variant="outline" className="text-xs h-5 px-1.5 font-normal">
+                                      #{rule.priority}
+                                    </Badge>
+                                    <span className="text-xs font-medium text-muted-foreground">
+                                      {CONDITION_TYPE_LABELS[rule.condition_type]}
+                                    </span>
+                                    {summary && (
+                                      <span className="text-xs text-foreground truncate">{summary}</span>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-muted-foreground truncate mt-0.5">
+                                    {rule.name} {templateName ? `→ ${templateName}` : ''}
+                                  </p>
                                 </div>
-                                <p className="text-xs text-muted-foreground truncate mt-0.5">
-                                  {rule.name} {templateName ? `→ ${templateName}` : ''}
-                                </p>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => { setEditingRule(rule); setShowGreetingRuleModal(true); }}>
+                                  <Edit2 className="h-3.5 w-3.5" />
+                                </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive">
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Remover regra?</AlertDialogTitle>
+                                      <AlertDialogDescription>Esta regra de saudação será removida permanentemente.</AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => deleteGreetingRule(rule.id)}>Remover</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
                               </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 shrink-0"
-                                title="Configurar sequência de mensagens"
-                                onClick={() => {
-                                  setSequenceTarget({ greetingRuleId: rule.id, label: rule.name });
-                                  setShowSequenceModal(true);
-                                }}
-                              >
-                                <Edit2 className="h-3.5 w-3.5 opacity-60" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => { setEditingRule(rule); setShowGreetingRuleModal(true); }}>
-                                <Edit2 className="h-3.5 w-3.5" />
-                              </Button>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive">
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Remover regra?</AlertDialogTitle>
-                                    <AlertDialogDescription>Esta regra de saudação será removida permanentemente.</AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => deleteGreetingRule(rule.id)}>Remover</AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
+                              {/* Sequence row for conditional rule */}
+                              <div className="flex items-center gap-2 flex-wrap pl-10">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  onClick={() => {
+                                    setSequenceTarget({ greetingRuleId: rule.id, label: rule.name });
+                                    setShowSequenceModal(true);
+                                  }}
+                                >
+                                  <Edit2 className="h-3 w-3 mr-1.5" />
+                                  {sequenceCounts[rule.id] ? 'Editar Sequência' : 'Configurar Sequência'}
+                                </Button>
+                                {sequenceCounts[rule.id] ? (
+                                  <>
+                                    <Badge className="gap-1 text-xs bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30 hover:bg-green-500/20">
+                                      ✓ {sequenceCounts[rule.id]} msgs
+                                    </Badge>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 text-xs"
+                                      onClick={() => handleDisableSequence(undefined, rule.id)}
+                                    >
+                                      Desativar
+                                    </Button>
+                                    <AlertDialog>
+                                      <AlertDialogTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive">
+                                          <Trash2 className="h-3 w-3" />
+                                        </Button>
+                                      </AlertDialogTrigger>
+                                      <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                          <AlertDialogTitle>Excluir sequência?</AlertDialogTitle>
+                                          <AlertDialogDescription>As mensagens da sequência desta regra serão removidas permanentemente.</AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                          <AlertDialogAction onClick={() => handleDeleteSequence(undefined, rule.id)}>Excluir</AlertDialogAction>
+                                        </AlertDialogFooter>
+                                      </AlertDialogContent>
+                                    </AlertDialog>
+                                  </>
+                                ) : null}
+                              </div>
                             </div>
                           );
                         })
@@ -946,7 +1052,7 @@ export function WhatsAppIntegrationSettings() {
       <GreetingSequenceModal
         open={showSequenceModal}
         onClose={() => { setShowSequenceModal(false); setSequenceTarget(null); }}
-        onSaved={() => {}}
+        onSaved={fetchSequenceCounts}
         templates={templates}
         automationRuleId={sequenceTarget?.automationRuleId}
         greetingRuleId={sequenceTarget?.greetingRuleId}
