@@ -1730,6 +1730,70 @@ export type Database = {
           },
         ]
       }
+      whatsapp_greeting_sequence_steps: {
+        Row: {
+          account_id: string
+          automation_rule_id: string | null
+          created_at: string | null
+          delay_seconds: number
+          greeting_rule_id: string | null
+          id: string
+          is_active: boolean
+          name: string
+          position: number
+          template_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          account_id: string
+          automation_rule_id?: string | null
+          created_at?: string | null
+          delay_seconds?: number
+          greeting_rule_id?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          position?: number
+          template_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          account_id?: string
+          automation_rule_id?: string | null
+          created_at?: string | null
+          delay_seconds?: number
+          greeting_rule_id?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          position?: number
+          template_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_greeting_sequence_steps_automation_rule_id_fkey"
+            columns: ["automation_rule_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_automation_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_greeting_sequence_steps_greeting_rule_id_fkey"
+            columns: ["greeting_rule_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_greeting_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_greeting_sequence_steps_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_message_log: {
         Row: {
           account_id: string | null
