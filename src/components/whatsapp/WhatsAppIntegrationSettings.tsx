@@ -849,9 +849,9 @@ export function WhatsAppIntegrationSettings() {
             </div>
           )}
 
-          <div className="space-y-0">
-            {followUpSteps.map((step, index) => (
-              <div key={step.id} className={`space-y-3 ${index > 0 ? 'border-t pt-3' : ''} ${index < followUpSteps.length - 1 ? 'pb-3' : ''}`}>
+          <div className="space-y-3">
+            {followUpSteps.map((step, index) => (  // index used below for "Personalizar Templates"
+              <div key={step.id} className="border rounded-lg bg-muted/20 p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <Switch
@@ -897,9 +897,11 @@ export function WhatsAppIntegrationSettings() {
                           ))}
                         </SelectContent>
                       </Select>
-                      <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setShowTemplatesModal(true)}>
-                        <Settings2 className="h-3 w-3 mr-1" />Personalizar Templates
-                      </Button>
+                      {index === 0 && (
+                        <Button variant="outline" size="sm" className="h-auto px-3 py-1.5 text-xs" onClick={() => setShowTemplatesModal(true)}>
+                          <Settings2 className="h-3 w-3 mr-1" />Personalizar Templates
+                        </Button>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <Label>Delay após etapa anterior</Label>
