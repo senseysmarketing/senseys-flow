@@ -666,6 +666,7 @@ serve(async (req) => {
 
         if (templateId) {
           // Check for sequence steps configured for this rule
+          console.log(`[webhook-leads] Checking sequence steps. matchedRule=${matchedRule?.id || 'none'}, ruleId=${ruleId}`)
 
           // Use (supabase as any) to avoid TypeScript cast issues with the new table
           const seqQuery = (supabase as any)
@@ -674,9 +675,16 @@ serve(async (req) => {
             .eq('is_active', true)
             .order('position')
 
-          const { data: seqSteps } = matchedRule
-            ? await seqQuery.eq('greeting_rule_id', matchedRule.id)
-            : await seqQuery.eq('automation_rule_id', ruleId)
+          const seqFilter = matchedRule
+            ? seqQuery.eq('greeting_rule_id', matchedRule.id)
+            : (ruleId ? seqQuery.eq('automation_rule_id', ruleId) : null)
+
+          const { data: seqSteps, error: seqError } = seqFilter
+            ? await seqFilter
+            : { data: null, error: null }
+
+          if (seqError) console.error('[webhook-leads] Sequence query error:', seqError)
+          console.log(`[webhook-leads] Sequence steps found: ${seqSteps?.length || 0} for ${matchedRule ? 'greeting_rule ' + matchedRule.id : 'automation_rule ' + ruleId}`)
 
           if (seqSteps && seqSteps.length > 0) {
             // Enqueue multiple messages in sequence with accumulated delays
