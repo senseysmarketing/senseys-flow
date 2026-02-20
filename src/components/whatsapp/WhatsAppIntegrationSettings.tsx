@@ -537,7 +537,7 @@ export function WhatsAppIntegrationSettings() {
       <div className="grid gap-4 lg:grid-cols-2">
 
         {/* COLUNA ESQUERDA: Saudação Automática */}
-        <Card className={cn("border-l-4", newLeadRule?.is_active ? "border-l-green-500" : "border-l-border")}>
+        <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -818,7 +818,7 @@ export function WhatsAppIntegrationSettings() {
         </Card>
 
         {/* COLUNA DIREITA: Follow-up Timeline */}
-        <Card className={cn("border-l-4", followUpSteps.some(s => s.is_active) ? "border-l-blue-500" : "border-l-border")}>
+        <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-primary" />
