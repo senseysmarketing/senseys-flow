@@ -602,7 +602,7 @@ export function WhatsAppIntegrationSettings() {
                       </div>
                       {/* Sequence section */}
                       <div className="p-3 border border-dashed rounded-lg space-y-2">
-                        <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center justify-center gap-2 flex-wrap">
                           <Button
                             variant="outline"
                             size="sm"
@@ -656,7 +656,7 @@ export function WhatsAppIntegrationSettings() {
                         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-2">Enviar para leads de</span>
                         <div className="h-px flex-1 bg-border" />
                       </div>
-                      <div className="flex flex-wrap gap-3">
+                      <div className="flex flex-wrap gap-3 justify-center">
                         {[
                           { key: 'manual', label: 'Cadastro Manual' },
                           { key: 'meta', label: 'Meta Ads' },
@@ -743,7 +743,7 @@ export function WhatsAppIntegrationSettings() {
                                   </AlertDialog>
                                 </div>
                                 {/* Sequence row for conditional rule */}
-                                <div className="flex items-center gap-2 flex-wrap pl-10">
+                                <div className="flex items-center justify-center gap-2 flex-wrap pl-10">
                                   <Button
                                     variant="outline"
                                     size="sm"
