@@ -1,62 +1,92 @@
 
-## Ajustes Visuais: Remover Bordas Coloridas e Expandir Largura da Página
+## Correção: Exclusão de Usuário da Equipe
 
-### Problemas Identificados
+### Diagnóstico
 
-**Problema 1 — Largura limitada:** Em `src/pages/Integrations.tsx` (linha 82), o wrapper do conteúdo usa `max-w-4xl` (896px máximo), o que trava o layout nesse tamanho independente da resolução da tela.
+Confirmado via banco de dados: "Gabriel Inumaru" ainda existe na tabela `profiles` (account_id: `05f41011...`) mas sem nenhum `user_role` associado. Isso significa que a edge function `delete-team-member` executou parcialmente:
 
-**Problema 2 — Bordas coloridas:** Em `src/components/whatsapp/WhatsAppIntegrationSettings.tsx`, dois cards têm bordas laterais condicionais:
-- Linha 540: `<Card className={cn("border-l-4", newLeadRule?.is_active ? "border-l-green-500" : "border-l-border")}>` — card Saudação Automática
-- Linha 821: `<Card className={cn("border-l-4", followUpSteps.some(s => s.is_active) ? "border-l-blue-500" : "border-l-border")}>` — card Follow-up Automático
+- Deletou `user_roles` ✅
+- Falhou em deletar `profiles` ❌  
+- Provavelmente falhou em deletar o usuário do `auth` ❌
+
+### Causa Raiz
+
+Existem dois problemas:
+
+**Problema 1 — Edge function sem tratamento de erro robusto**: A edge function deleta `user_roles` e `profiles` usando o cliente admin (service role), mas se a exclusão do `profile` falhar por qualquer razão (constraint, etc.), a função continua e considera a operação bem-sucedida. O erro é apenas logado (`console.error`) mas não relançado.
+
+**Problema 2 — UI não filtra usuários sem role**: O componente `TeamManagement.tsx` exibe todos os profiles retornados, incluindo aqueles cujo `user_role` foi deletado mas o perfil permaneceu. Isso cria um "fantasma" na lista.
 
 ---
 
 ### Solução
 
-#### Mudança 1 — `src/pages/Integrations.tsx`
+#### Correção 1 — `supabase/functions/delete-team-member/index.ts`
 
-Remover o `max-w-4xl` do wrapper de conteúdo para que o layout ocupe a largura disponível:
+Tornar a deleção do `profile` mais robusta: verificar o resultado e relançar o erro se falhar. Também adicionar verificação explícita após cada operação:
 
-```tsx
-// ANTES:
-<div className="max-w-4xl">
-  {renderContent()}
-</div>
+```typescript
+// Deletar user_roles primeiro (FK constraint)
+const { error: rolesError } = await supabaseAdmin
+  .from('user_roles')
+  .delete()
+  .eq('user_id', targetUserId);
 
-// DEPOIS:
-<div className="w-full">
-  {renderContent()}
-</div>
+if (rolesError) {
+  throw new Error('Erro ao remover roles do usuário: ' + rolesError.message);
+}
+
+// Deletar profile
+const { error: profileError } = await supabaseAdmin
+  .from('profiles')
+  .delete()
+  .eq('user_id', targetUserId);
+
+if (profileError) {
+  throw new Error('Erro ao remover perfil do usuário: ' + profileError.message);
+}
+
+// Deletar do auth
+const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(targetUserId);
+
+if (deleteError) {
+  throw new Error('Erro ao remover usuário do auth: ' + deleteError.message);
+}
 ```
 
-#### Mudança 2 — `src/components/whatsapp/WhatsAppIntegrationSettings.tsx`
+#### Correção 2 — `src/components/TeamManagement.tsx`
 
-Remover as classes de borda lateral colorida dos dois cards, mantendo apenas o estilo padrão de card:
+Filtrar na função `fetchTeamMembers` para exibir apenas membros que possuem um `user_role` associado (ou seja, membros legítimos), removendo os "fantasmas":
 
-```tsx
-// ANTES (linha 540):
-<Card className={cn("border-l-4", newLeadRule?.is_active ? "border-l-green-500" : "border-l-border")}>
-
-// DEPOIS:
-<Card>
+```typescript
+// Filtrar: mostrar apenas quem tem role (exceto o proprietário que sempre aparece)
+const membersWithRoles = (profiles || [])
+  .map(profile => {
+    const userRole = userRoles?.find(ur => ur.user_id === profile.user_id);
+    return {
+      ...profile,
+      role: userRole?.roles as { id: string; name: string } | null
+    };
+  })
+  .filter(member => member.role !== null); // Remove membros sem role
 ```
 
-```tsx
-// ANTES (linha 821):
-<Card className={cn("border-l-4", followUpSteps.some(s => s.is_active) ? "border-l-blue-500" : "border-l-border")}>
+#### Correção 3 — Limpar o dado "fantasma" do banco
 
-// DEPOIS:
-<Card>
+Executar SQL para remover o profile órfão do Gabriel Inumaru que ficou sem role:
+
+```sql
+-- Limpar perfil órfão (sem user_role associado)
+DELETE FROM profiles 
+WHERE user_id = '921060f6-6992-439b-ac9c-9c2b7cbb9f26';
 ```
+
+E tentar remover o usuário do auth via edge function test ou SQL direto.
 
 ---
 
-### Impacto
+### Arquivos Alterados
 
-| Aspecto | Antes | Depois |
-|---|---|---|
-| Largura do conteúdo | Limitado a 896px (max-w-4xl) | Preenche toda a largura disponível |
-| Cards do WhatsApp | Borda verde/azul lateral de 4px | Sem borda colorida lateral |
-| Layout responsivo | Estático em 896px | Adapta-se ao tamanho da tela |
-
-Apenas 3 linhas de código alteradas em 2 arquivos. Toda a lógica, estados e handlers permanecem intactos.
+1. **`supabase/functions/delete-team-member/index.ts`** — Melhorar tratamento de erros, verificar resultado de cada operação de deleção
+2. **`src/components/TeamManagement.tsx`** — Filtrar membros sem role na função `fetchTeamMembers`
+3. **Migração SQL** — Limpar o registro órfão do Gabriel Inumaru do banco
