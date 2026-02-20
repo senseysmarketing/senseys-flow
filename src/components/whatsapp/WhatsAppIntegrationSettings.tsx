@@ -168,7 +168,7 @@ export function WhatsAppIntegrationSettings() {
           if (response.data && !response.data.connected) {
             setSession(prev => prev ? { ...prev, status: 'disconnected', connected_at: null } : null);
             toast({ variant: 'destructive', title: 'WhatsApp Desconectado', description: 'A conexão com o WhatsApp foi perdida. Reconecte para continuar enviando mensagens.' });
-          } else if (response.data?.phoneNumber && !data.phone_number) {
+          } else if (response.data?.phoneNumber && response.data.phoneNumber !== data.phone_number) {
             setSession(prev => prev ? { ...prev, phone_number: response.data.phoneNumber } : null);
           }
         } catch (e) {
