@@ -1,79 +1,114 @@
 
-## Correção: Variáveis {form_*} não substituídas em templates do WhatsApp
+## Correção: Sequência de Saudação Não Enviando Todas as Mensagens
 
-### Diagnóstico
+### Causa Raiz Identificada
 
-O problema tem **uma causa raiz** confirmada pelo banco de dados:
+O fluxo de envio envolve dois componentes que entram em conflito:
 
-Quando um lead chega pelo Meta Webhook (`meta-webhook`), os campos do formulário são salvos em **`lead_custom_field_values`** (ligada à tabela `custom_fields`). Mas quando o `process-whatsapp-queue` vai substituir as variáveis `{form_*}`, ele busca em **`lead_form_field_values`** — uma tabela diferente, que está completamente vazia para esses leads.
+**1. `webhook-leads`** — ao criar um lead manualmente, busca as etapas de sequência em `whatsapp_greeting_sequence_steps` e deveria enfileirar **todas** as mensagens de uma vez. Para o lead "Leo Henry", só enfileirou **1 mensagem** (a PT1), indicando que não encontrou as sequências naquela chamada.
 
-Evidência real no banco:
-- Lead "Cleide Wanderley" tem em `lead_custom_field_values`:
-  - `field_key: você_está_buscando_imóvel_para_moradia_própria_ou_para_investimento?_` → `value: moradia`
-- `lead_form_field_values` para esse lead: **zero registros**
+**2. `process-whatsapp-queue`** (linhas 319–365) — depois de enviar a primeira mensagem com sucesso, **ativa uma lógica adicional** que busca follow-ups em `whatsapp_followup_steps` (tabela dos follow-ups pós-saudação, com delays de 1440+ minutos) e agenda novos itens na fila. Esta lógica foi adicionada para suportar follow-ups automáticos, mas está sendo ativada **também para mensagens de sequência de saudação**, causando:
+- Agendamento de Follow-Up PT1 para amanhã (1440 min = 1 dia)  
+- Agendamento de Follow-Up PT2 para depois de amanhã (2880 min = 2 dias)
+- Agendamento de Follow-Up PT3 para daqui 3 dias (4320 min = 3 dias)
 
-### Solução
+Em vez das mensagens PT2 e PT3 da sequência de saudação com 10s e 5s de delay.
 
-A correção mais limpa e segura é **dupla**:
+### Dois Problemas a Corrigir
 
-**1. `meta-webhook/index.ts`** — Além de salvar em `lead_custom_field_values`, salvar também em `lead_form_field_values` (linhas 216–225). Isso garante que novos leads que chegarem via Meta já tenham seus dados na tabela correta que o processador da fila consulta.
+---
 
-**2. `process-whatsapp-queue/index.ts`** — Como fallback para leads já existentes que só têm dados em `lead_custom_field_values`, adicionar uma segunda busca nessa tabela se `lead_form_field_values` não retornar resultado (linhas 200–226).
+#### Problema 1: `process-whatsapp-queue` — lógica de follow-up disparando para sequências de saudação
 
-### Detalhes Técnicos
+Quando `process-whatsapp-queue` envia uma mensagem com sucesso, verifica:
+```
+if (msg.automation_rule_id && !msg.followup_step_id) → agenda follow-ups
+```
 
-**No `meta-webhook`**, após o loop de `lead_custom_field_values`, adicionar inserção paralela em `lead_form_field_values`:
+O problema é que mensagens de **sequência de saudação** também têm `automation_rule_id` e **não** têm `followup_step_id`, então a condição `true` aciona o agendamento dos follow-ups da tabela `whatsapp_followup_steps`.
+
+**Solução:** Verificar se já existem mensagens pendentes/enviadas da sequência de saudação para este lead antes de agendar follow-ups. Se existir qualquer outra mensagem da mesma `automation_rule_id` para o mesmo lead, significa que é uma sequência — não um disparo único — e o follow-up **não deve ser agendado novamente**.
 
 ```ts
-// NOVO: salvar também em lead_form_field_values para suporte a {form_*} nos templates
-for (const [k, v] of Object.entries(fields)) {
-  if (EXCLUDED_FIELDS.has(k) || !v) continue;
-  await supabase.from("lead_form_field_values").insert({
-    lead_id: newLead.id,
-    field_name: k,
-    field_label: k.replace(/_/g, ' '),
-    field_value: v,
-  });
+// ANTES de agendar follow-ups, verificar se já há outras mensagens da sequência de saudação
+const { data: existingSequenceMsgs } = await supabase
+  .from('whatsapp_message_queue')
+  .select('id')
+  .eq('lead_id', msg.lead_id)
+  .eq('automation_rule_id', msg.automation_rule_id)
+  .neq('id', msg.id) // exclude the current message
+  .limit(1)
+
+// Se já existem outras mensagens desta automação para este lead, é uma sequência de saudação
+// Neste caso não agendar follow-ups (eles já foram enfileirados pelo webhook)
+if (existingSequenceMsgs && existingSequenceMsgs.length > 0) {
+  console.log(`[process-whatsapp-queue] Greeting sequence detected for lead ${msg.lead_id}, skipping follow-up scheduling`)
+  // skip follow-up scheduling
 }
 ```
 
-**No `process-whatsapp-queue`**, se `lead_form_field_values` não retornar campos, buscar em `lead_custom_field_values` como fallback:
+---
+
+#### Problema 2: `webhook-leads` — sequência não foi enfileirada corretamente
+
+O `webhook-leads` faz a query em `whatsapp_greeting_sequence_steps` filtrando por `automation_rule_id = ruleId` (linha 679), mas apenas 1 mensagem foi criada para o lead "Leo Henry". Isso pode significar que a query retornou vazio. A causa provável é que o `ruleId` no momento da query ainda era `null` ou diferente do ID da regra que tem a sequência configurada.
+
+**Solução:** Adicionar log de debug e garantir que a query da sequência utiliza o mesmo `ruleId` que foi encontrado. Além disso, adicionar verificação de que o `ruleId` não é nulo antes de buscar as sequências:
 
 ```ts
-// Se nao encontrou em lead_form_field_values, buscar em lead_custom_field_values (legado Meta)
-if (!formFields || formFields.length === 0) {
-  const { data: customFields } = await supabase
-    .from('lead_custom_field_values')
-    .select('value, custom_fields(field_key)')
-    .eq('lead_id', msg.lead_id)
-  
-  if (customFields && customFields.length > 0) {
-    // match usando field_key como field_name equivalente
-    for (const match of formVarMatches) {
-      const fieldName = match.slice(6, -1)
-      const normalize = (s: string) => s.toLowerCase().replace(/\?/g, '').replace(/_/g, ' ').trim()
-      const found = customFields.find(f => 
-        normalize((f.custom_fields as any)?.field_key || '') === normalize(fieldName)
-      )
-      message = message.replace(new RegExp(match.replace(/[{}?]/g, c => `\\${c}`), 'gi'), found?.value || '')
-    }
-  } else {
-    // limpar variaveis nao encontradas
-    for (const match of formVarMatches) {
-      message = message.replace(new RegExp(match.replace(/[{}?]/g, c => `\\${c}`), 'gi'), '')
-    }
-  }
+if (templateId && ruleId) { // garantir que ruleId é válido
+  const seqQuery = ...
+  const { data: seqSteps, error: seqError } = ...
+  if (seqError) console.error('Sequence query error:', seqError)
+  console.log(`Sequence steps found: ${seqSteps?.length || 0} for rule ${ruleId}`)
+  ...
 }
 ```
 
-### Arquivos a modificar
+---
 
-1. **`supabase/functions/meta-webhook/index.ts`** — Linhas ~216–225: adicionar inserção duplicada em `lead_form_field_values`
-2. **`supabase/functions/process-whatsapp-queue/index.ts`** — Linhas ~208–224: adicionar fallback lookup em `lead_custom_field_values`
+### Dados Confirmados no Banco
+
+| Mensagem | Tabela origem | Agendado para | Status |
+|---|---|---|---|
+| Saudacao PT1 | `whatsapp_greeting_sequence_steps` | 14:33 | ✅ Enviado |
+| Follow-Up PT1 | `whatsapp_followup_steps` (errado!) | Amanhã (+1 dia) | ⏳ Pendente |
+| Follow-Up PT2 | `whatsapp_followup_steps` (errado!) | Depois de amanhã (+2 dias) | ⏳ Pendente |
+| Follow-Up PT3 | `whatsapp_followup_steps` (errado!) | Daqui 3 dias (+3 dias) | ⏳ Pendente |
+
+O que deveria ter sido agendado pelo `webhook-leads`:
+| Mensagem | Tabela origem | Agendado para |
+|---|---|---|
+| Saudacao PT1 | sequência passo 1 (30s) | 14:33 |
+| Saudacao PT2 | sequência passo 2 (+10s) | 14:33 + 40s |
+| Saudacao PT3 | sequência passo 3 (+5s) | 14:33 + 45s |
+
+---
+
+### Dados Imediatos a Limpar
+
+Os 3 follow-ups errados do lead "Leo Henry" precisam ser cancelados no banco antes do deploy (executar via Supabase SQL):
+
+```sql
+UPDATE whatsapp_message_queue
+SET status = 'cancelled', error_message = 'Cancelado: follow-up agendado incorretamente no lugar de sequência de saudação'
+WHERE lead_id = '7205e0a4-3592-4561-a1f9-8c2ed52e4f40'
+AND status = 'pending'
+AND followup_step_id IS NOT NULL;
+```
+
+---
+
+### Arquivos a Modificar
+
+1. **`supabase/functions/process-whatsapp-queue/index.ts`** — Linhas 319–365: adicionar verificação de sequência existente antes de agendar follow-ups. Esta é a correção **prioritária** pois impede que o bug se repita.
+
+2. **`supabase/functions/webhook-leads/index.ts`** — Linhas 667–731: adicionar logs e verificação de `ruleId` não nulo antes da query de sequências, para diagnosticar por que a sequência não foi enfileirada corretamente.
+
+---
 
 ### Impacto
 
-- Leads futuros: corrigidos pelo fix no `meta-webhook` (dados salvos em ambas tabelas)
-- Leads existentes (como Cleide): corrigidos pelo fallback no `process-whatsapp-queue`
-- Nenhuma migração de dados necessária
-- Nenhuma tabela existente é alterada
+- Leads futuros com sequência de saudação: corrigidos (o follow-up automático não será mais agendado em conflito com a sequência)
+- Lead "Leo Henry": os 3 follow-ups errados serão cancelados via SQL direto
+- Follow-up automático (pós-saudação, único) continua funcionando normalmente para leads sem sequência configurada
