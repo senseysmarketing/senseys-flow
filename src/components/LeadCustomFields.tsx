@@ -48,10 +48,21 @@ const LeadCustomFields = ({ leadId }: LeadCustomFieldsProps) => {
 
       if (fieldsError) throw fieldsError;
 
-      // Filter out basic lead data fields
-      const filteredFields = (fieldsData || []).filter(field => 
-        !excludedFieldKeys.includes(field.field_key.toLowerCase())
+      // Fetch form field names for this lead to avoid duplication
+      const { data: formFieldsData } = await supabase
+        .from("lead_form_field_values")
+        .select("field_name")
+        .eq("lead_id", leadId);
+
+      const formFieldNames = new Set(
+        (formFieldsData || []).map(f => f.field_name.toLowerCase())
       );
+
+      // Filter out basic lead data fields AND fields already shown in form data
+      const filteredFields = (fieldsData || []).filter(field => {
+        const keyLower = field.field_key.toLowerCase();
+        return !excludedFieldKeys.includes(keyLower) && !formFieldNames.has(keyLower);
+      });
 
       // Fetch values for this lead
       const { data: valuesData, error: valuesError } = await supabase
