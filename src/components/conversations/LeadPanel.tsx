@@ -1,9 +1,11 @@
-import { ArrowLeft, Mail, Phone, User, Tag, ThermometerSun, Building2, X } from "lucide-react";
+import { ArrowLeft, Mail, Phone, User, Tag, ThermometerSun, Building2, X, Timer } from "lucide-react";
 import LeadFormFields from "@/components/LeadFormFields";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useScheduledMessages, formatScheduledTime } from "@/hooks/use-scheduled-messages";
 import { cn } from "@/lib/utils";
 
 interface LeadPanelProps {
@@ -36,6 +38,8 @@ function TempBadge({ temp }: { temp: string | null }) {
 }
 
 export function LeadPanel({ lead, onClose, isMobile }: LeadPanelProps) {
+  const { nextMessage: scheduledMessage, totalPending: scheduledCount } = useScheduledMessages(lead.id);
+
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
@@ -76,6 +80,20 @@ export function LeadPanel({ lead, onClose, isMobile }: LeadPanelProps) {
               <TempBadge temp={lead.temperature} />
             </div>
           </div>
+
+          {/* Alerta de mensagem programada */}
+          {scheduledMessage && (
+            <Alert className="border-primary/30 bg-primary/10 text-foreground [&>svg]:text-primary">
+              <Timer className="h-4 w-4" />
+              <AlertTitle className="text-xs font-semibold">Mensagem programada</AlertTitle>
+              <AlertDescription className="text-xs text-muted-foreground">
+                {scheduledMessage.rule_name || 'Mensagem automática'} — {formatScheduledTime(scheduledMessage.scheduled_for)}
+                {scheduledCount > 1 && (
+                  <span className="block mt-0.5">+{scheduledCount - 1} follow-up{scheduledCount - 1 > 1 ? 's' : ''}</span>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
 
           <Separator />
 

@@ -6,7 +6,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreVertical, Eye, Edit, Trash, Phone, Mail, Building2, MessageSquareWarning } from "lucide-react";
+import { MoreVertical, Eye, Edit, Trash, Phone, Mail, Building2, MessageSquareWarning, Timer } from "lucide-react";
 import { AvatarFallbackColored } from "@/components/ui/avatar-fallback-colored";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import TemperatureBadge from "@/components/TemperatureBadge";
@@ -42,6 +42,7 @@ interface LeadMobileCardProps {
   isSelected?: boolean;
   onSelect?: (id: string) => void;
   whatsappError?: string | null;
+  hasScheduledMessage?: boolean;
 }
 
 const formatPhone = (phone: string) => {
@@ -87,6 +88,7 @@ const LeadMobileCard = ({
   isSelected,
   onSelect,
   whatsappError = null,
+  hasScheduledMessage = false,
 }: LeadMobileCardProps) => {
   const temp = (lead.temperature as keyof typeof temperatureStyles) || 'warm';
   const styles = temperatureStyles[temp] || temperatureStyles.warm;
@@ -193,6 +195,18 @@ const LeadMobileCard = ({
       {/* Actions */}
       <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
         <div className="relative flex-1">
+          {hasScheduledMessage && !whatsappError && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="absolute -top-2 -right-2 z-10">
+                  <Timer className="h-4 w-4 text-primary" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-[200px] text-xs">
+                Mensagem programada para envio
+              </TooltipContent>
+            </Tooltip>
+          )}
           {whatsappError && (
             <Tooltip>
               <TooltipTrigger asChild>

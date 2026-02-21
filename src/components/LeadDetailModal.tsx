@@ -36,9 +36,10 @@ import { toast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useLeadWhatsAppFailure } from "@/hooks/use-whatsapp-failures";
+import { useScheduledMessages, formatScheduledTime } from "@/hooks/use-scheduled-messages";
 import { useAccount } from "@/hooks/use-account";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { MessageSquareWarning, WifiOff } from "lucide-react";
+import { MessageSquareWarning, WifiOff, Timer } from "lucide-react";
 
 interface Lead {
   id: string;
@@ -93,6 +94,7 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
   const [disqualificationData, setDisqualificationData] = useState<{ reasons: string[]; notes: string | null } | null>(null);
   const [duplicateLeadInfo, setDuplicateLeadInfo] = useState<DuplicateLeadInfo | null>(null);
   const { failure: whatsappFailure, isDisconnected: whatsappDisconnected } = useLeadWhatsAppFailure(lead?.id, account?.id ?? undefined);
+  const { nextMessage: scheduledMessage, totalPending: scheduledCount } = useScheduledMessages(lead?.id);
 
   useEffect(() => {
     if (lead?.assigned_broker_id) {
@@ -340,6 +342,25 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
                   {whatsappFailure.toLowerCase().includes('não existe no whatsapp') || whatsappFailure.toLowerCase().includes('não possui whatsapp') || whatsappFailure.toLowerCase().includes('failed to send')
                     ? 'Este número não existe no WhatsApp. Verifique o telefone do lead.'
                     : whatsappFailure}
+                </AlertDescription>
+              </Alert>
+              <Separator />
+            </>
+          )}
+
+          {/* Alerta de mensagem programada */}
+          {scheduledMessage && (
+            <>
+              <Alert className="border-primary/30 bg-primary/10 text-foreground [&>svg]:text-primary">
+                <Timer className="h-5 w-5" />
+                <AlertTitle className="font-semibold">
+                  Mensagem programada
+                </AlertTitle>
+                <AlertDescription className="text-muted-foreground">
+                  {scheduledMessage.rule_name || 'Mensagem automática'} — Envio em {formatScheduledTime(scheduledMessage.scheduled_for)}
+                  {scheduledCount > 1 && (
+                    <span className="block mt-1 text-xs">+{scheduledCount - 1} follow-up{scheduledCount - 1 > 1 ? 's' : ''} agendado{scheduledCount - 1 > 1 ? 's' : ''}</span>
+                  )}
                 </AlertDescription>
               </Alert>
               <Separator />
