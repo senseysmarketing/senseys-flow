@@ -1,57 +1,36 @@
 
-## Aviso de Mensagem Programada no Modal de Detalhes do Lead
 
-### Confirmacao: Sistema de Horario Comercial Funcionando
+## Corrigir Duplicacao entre "Dados do Formulario" e "Informacoes Adicionais"
 
-O lead **Daniel Garcia Neto** chegou em **21/02 (sabado) as 03:27 (horario SP)**. A configuracao da conta Senseys e **08h-18h, Seg-Sex**. A mensagem de saudacao foi corretamente reprogramada para **23/02 (segunda-feira) as 08:00 (horario SP)**. Tudo funcionando como esperado.
+### Causa do Problema
 
-### O que sera implementado
+Quando um lead chega pelo Meta (Facebook), os campos do formulario sao salvos em **duas tabelas** simultaneamente:
+- `lead_form_field_values` (tabela dos dados de formulario)
+- `lead_custom_field_values` (tabela dos campos personalizados)
 
-Um novo alerta informativo no modal de detalhes do lead (e tambem no painel lateral de conversas) que mostra as proximas mensagens de WhatsApp programadas para aquele lead. O visual sera semelhante ao alerta de falha de WhatsApp ja existente, mas com tom informativo (azul/primary).
+Isso acontece intencionalmente no `meta-webhook` para que as variaveis `{form_*}` funcionem nos templates de mensagem. Porem, na UI, ambos os componentes exibem os mesmos dados, causando a duplicacao visivel.
 
-O alerta mostrara:
-- Icone de relogio/agendamento
-- Titulo "Mensagem programada"
-- Data e hora da proxima mensagem (em horario de Sao Paulo)
-- Nome/tipo da mensagem (ex: "Saudacao para Novos Leads")
-- Se houver mais mensagens, indicar quantas estao na fila (ex: "+2 follow-ups agendados")
+### Solucao
 
-### Arquivos que serao alterados
+Alterar o componente `LeadCustomFields.tsx` para que ele **exclua campos cujos `field_key` ja existem em `lead_form_field_values`** do mesmo lead. Assim:
 
-**1. Novo hook: `src/hooks/use-scheduled-messages.tsx`**
+- **"Dados do Formulario"** mostra as perguntas e respostas que vieram diretamente do formulario (Meta, webhook, etc.)
+- **"Informacoes Adicionais"** mostra apenas campos personalizados que **nao** estao presentes nos dados do formulario (ex: campos preenchidos manualmente, dados de outras fontes)
 
-Hook reutilizavel que consulta a tabela `whatsapp_message_queue` para um lead especifico, retornando mensagens com status `pending` ordenadas por `scheduled_for`. Retorna:
-- `nextMessage`: proxima mensagem (scheduled_for, message, automation_rule_id)
-- `totalPending`: total de mensagens pendentes
-- `loading`: estado de carregamento
+### Alteracao Tecnica
 
-A query buscara tambem o nome da regra de automacao (`whatsapp_automation_rules.name`) para exibir o tipo da mensagem.
+**Arquivo: `src/components/LeadCustomFields.tsx`**
 
-**2. `src/components/LeadDetailModal.tsx`**
+Dentro da funcao `fetchData`, apos buscar os campos personalizados e seus valores, tambem buscar os `field_name` da tabela `lead_form_field_values` para o mesmo lead. Depois, filtrar os custom fields removendo aqueles cujo `field_key` corresponde a um `field_name` existente nos form fields.
 
-Adicionar o alerta de mensagem programada logo apos os alertas de WhatsApp existentes (linhas 315-347). Usara o novo hook `useScheduledMessages(lead.id)`. O alerta aparecera apenas quando houver mensagens pendentes.
-
-Visual proposto:
 ```
-[Clock icon] Mensagem programada
-Saudacao para Novos Leads - Envio em 23 de fevereiro as 08:00
-+0 follow-ups agendados
+// Pseudocodigo da logica adicionada:
+1. Buscar lead_form_field_values.field_name para o lead
+2. Criar um Set com esses field_names (lowercase)
+3. Filtrar custom_fields removendo os que tem field_key presente nesse Set
 ```
 
-Estilo: `border-primary/30 bg-primary/10` com icone em cor primary, semelhante ao padrao dos outros alertas.
+Isso garante que se um campo ja aparece em "Dados do Formulario", ele nao sera repetido em "Informacoes Adicionais". Campos exclusivos de custom fields (preenchidos manualmente ou de outras fontes) continuarao aparecendo normalmente.
 
-**3. `src/components/conversations/LeadPanel.tsx`**
+Nenhuma outra alteracao e necessaria -- o componente `LeadFormFields.tsx` permanece inalterado.
 
-Adicionar o mesmo alerta na secao de detalhes do lead no painel lateral de conversas, logo antes do Separator apos o nome/status. Usara o mesmo hook.
-
-**4. `src/components/leads/LeadMobileCard.tsx`**
-
-Adicionar um pequeno indicador visual (icone de relogio) no card mobile quando o lead tiver mensagens programadas, similar ao indicador de erro de WhatsApp ja existente.
-
-### Detalhes Tecnicos
-
-- A consulta ao banco usara `whatsapp_message_queue` com filtro `lead_id = X` e `status = 'pending'`, ordenado por `scheduled_for ASC`
-- Para obter o nome da regra, fara um join com `whatsapp_automation_rules` via `automation_rule_id`
-- O horario sera formatado em `pt-BR` com timezone `America/Sao_Paulo` usando `toLocaleString`
-- O hook usara `useEffect` com dependencia no `leadId` para buscar os dados quando o modal abrir
-- Para o LeadMobileCard, sera criado um hook em batch (`useScheduledMessagesMap`) que aceita array de lead_ids, similar ao `useWhatsAppFailures`
