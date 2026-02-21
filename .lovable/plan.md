@@ -1,121 +1,57 @@
 
-## Sistema de Horário Comercial para Envio de WhatsApp
+## Aviso de Mensagem Programada no Modal de Detalhes do Lead
 
-### Visão Geral
+### Confirmacao: Sistema de Horario Comercial Funcionando
 
-A ideia é excelente e resolve um problema real de experiência do lead — ninguém quer receber mensagens automatizadas de madrugada ou no fim de semana. O sistema funcionará assim:
+O lead **Daniel Garcia Neto** chegou em **21/02 (sabado) as 03:27 (horario SP)**. A configuracao da conta Senseys e **08h-18h, Seg-Sex**. A mensagem de saudacao foi corretamente reprogramada para **23/02 (segunda-feira) as 08:00 (horario SP)**. Tudo funcionando como esperado.
 
-- O usuário configura os **horários permitidos** (ex: 08h–18h) e os **dias da semana** (ex: seg–sex)
-- Ao enfileirar uma mensagem (saudação ou follow-up), o sistema calcula se o horário agendado cai dentro da janela permitida
-- Se não cair, reprograma automaticamente para o **próximo momento válido mais próximo**
-- Todo o cálculo usa o **fuso de São Paulo (America/Sao_Paulo)** para evitar distorções de horário
+### O que sera implementado
 
----
+Um novo alerta informativo no modal de detalhes do lead (e tambem no painel lateral de conversas) que mostra as proximas mensagens de WhatsApp programadas para aquele lead. O visual sera semelhante ao alerta de falha de WhatsApp ja existente, mas com tom informativo (azul/primary).
 
-### Arquitetura da Solução
+O alerta mostrara:
+- Icone de relogio/agendamento
+- Titulo "Mensagem programada"
+- Data e hora da proxima mensagem (em horario de Sao Paulo)
+- Nome/tipo da mensagem (ex: "Saudacao para Novos Leads")
+- Se houver mais mensagens, indicar quantas estao na fila (ex: "+2 follow-ups agendados")
 
-**1. Nova tabela: `whatsapp_sending_schedule`**
+### Arquivos que serao alterados
 
-Armazena a configuração de horário comercial por conta:
+**1. Novo hook: `src/hooks/use-scheduled-messages.tsx`**
 
-```sql
-CREATE TABLE whatsapp_sending_schedule (
-  id              uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  account_id      uuid NOT NULL UNIQUE,
-  is_enabled      boolean DEFAULT false,          -- on/off da feature
-  start_hour      integer DEFAULT 8,              -- hora início (0-23)
-  end_hour        integer DEFAULT 18,             -- hora fim (0-23)
-  allowed_days    integer[] DEFAULT '{1,2,3,4,5}', -- 0=Dom, 1=Seg...6=Sáb
-  created_at      timestamptz DEFAULT now(),
-  updated_at      timestamptz DEFAULT now()
-);
+Hook reutilizavel que consulta a tabela `whatsapp_message_queue` para um lead especifico, retornando mensagens com status `pending` ordenadas por `scheduled_for`. Retorna:
+- `nextMessage`: proxima mensagem (scheduled_for, message, automation_rule_id)
+- `totalPending`: total de mensagens pendentes
+- `loading`: estado de carregamento
+
+A query buscara tambem o nome da regra de automacao (`whatsapp_automation_rules.name`) para exibir o tipo da mensagem.
+
+**2. `src/components/LeadDetailModal.tsx`**
+
+Adicionar o alerta de mensagem programada logo apos os alertas de WhatsApp existentes (linhas 315-347). Usara o novo hook `useScheduledMessages(lead.id)`. O alerta aparecera apenas quando houver mensagens pendentes.
+
+Visual proposto:
+```
+[Clock icon] Mensagem programada
+Saudacao para Novos Leads - Envio em 23 de fevereiro as 08:00
++0 follow-ups agendados
 ```
 
-**Por que UNIQUE em `account_id`**: cada conta tem apenas uma configuração global de horário.
+Estilo: `border-primary/30 bg-primary/10` com icone em cor primary, semelhante ao padrao dos outros alertas.
 
----
+**3. `src/components/conversations/LeadPanel.tsx`**
 
-**2. Função utilitária na Edge Function: `getNextValidSendTime`**
+Adicionar o mesmo alerta na secao de detalhes do lead no painel lateral de conversas, logo antes do Separator apos o nome/status. Usara o mesmo hook.
 
-Implementada diretamente no `process-whatsapp-queue`, esta função recebe um timestamp e a configuração de horário comercial, e retorna o próximo momento válido para envio:
+**4. `src/components/leads/LeadMobileCard.tsx`**
 
-```
-Lógica:
-1. Converte o horário proposto para São Paulo (UTC-3)
-2. Verifica se o dia da semana está na lista de dias permitidos
-3. Verifica se a hora atual está dentro da janela (start_hour <= hora < end_hour)
-4. Se sim → retorna o mesmo timestamp (pode enviar agora)
-5. Se a hora já passou do fim do dia → avança para o próximo dia permitido às start_hour
-6. Se a hora ainda não chegou ao início → avança para start_hour do mesmo dia
-7. Se o dia não é permitido → avança dia a dia até encontrar um dia permitido
-```
+Adicionar um pequeno indicador visual (icone de relogio) no card mobile quando o lead tiver mensagens programadas, similar ao indicador de erro de WhatsApp ja existente.
 
-**Exemplo prático:**
-- Configuração: 08h–18h, Seg–Sex
-- Mensagem agendada para: Sexta 19h30
-- Resultado: Segunda-feira 08h00
+### Detalhes Tecnicos
 
----
-
-**3. Ponto de integração na Edge Function**
-
-A lógica de ajuste de horário é aplicada em **dois momentos** dentro do `process-whatsapp-queue`:
-
-**A) Ao processar mensagens da fila:** antes de verificar se pode enviar, aplica a função. Se o horário atual não é válido, reprograma a mensagem e pula para a próxima.
-
-**B) Ao agendar follow-ups:** após enviar a saudação com sucesso, ao calcular `scheduled_for` dos follow-ups (`now + delay_minutes`), aplica `getNextValidSendTime` no horário calculado antes de inserir na fila.
-
----
-
-**4. UI de configuração na aba WhatsApp**
-
-Uma nova seção "Horário de Envio" será adicionada ao componente `WhatsAppIntegrationSettings.tsx` dentro do card de configuração global, acima das saudações. Conterá:
-
-- **Toggle** para ativar/desativar o controle de horário
-- **Seletor de horário início e fim** (dropdowns de hora em hora, 00h–23h)
-- **Checkboxes dos dias da semana** (Dom, Seg, Ter, Qua, Qui, Sex, Sáb)
-- **Preview da janela configurada** ("Mensagens serão enviadas de Seg a Sex, das 08h às 18h")
-
----
-
-### Arquivos que serão alterados
-
-1. **Migração SQL** — Cria a tabela `whatsapp_sending_schedule` com RLS adequado
-2. **`supabase/functions/process-whatsapp-queue/index.ts`** — Adiciona a função `getNextValidSendTime` e a integração nas duas etapas (verificação de envio e agendamento de follow-ups)
-3. **`src/components/whatsapp/WhatsAppIntegrationSettings.tsx`** — Adiciona a seção de UI de configuração de horário comercial
-
----
-
-### Fluxo Completo (Exemplo)
-
-```text
-Lead chega às 19h30 de uma Sexta-feira
-     │
-     ▼
-webhook-leads enfileira mensagem de saudação
-  scheduled_for = agora + delay (ex: 19h30)
-     │
-     ▼
-process-whatsapp-queue executa (a cada minuto)
-  → busca mensagem com scheduled_for <= agora
-  → verifica configuração de horário da conta
-  → 19h30 Sexta está fora da janela (08h–18h, Seg–Sex)
-  → reprograma para Segunda 08h00
-  → atualiza scheduled_for no banco
-     │
-     ▼
-Segunda 08h00 → cron executa
-  → mensagem é enviada com sucesso
-  → follow-ups são agendados:
-      Etapa 1: agora + 24h = Terça 08h00 ✓ (dentro da janela)
-      Etapa 2: agora + 48h = Quarta 08h00 ✓
-```
-
----
-
-### Detalhes Técnicos
-
-- **Fuso horário**: usa `Intl.DateTimeFormat` com `timeZone: 'America/Sao_Paulo'` — isso respeita automaticamente horário de verão quando o Brasil o adotar
-- **`end_hour` é exclusivo**: configurar até 18h significa que mensagens são enviadas até 17h59, não às 18h00
-- **Fallback seguro**: se a feature estiver desativada (`is_enabled = false`), o comportamento atual é mantido sem nenhuma alteração
-- **Sem loop infinito**: o algoritmo itera no máximo 7 dias até encontrar um dia válido; se nenhum dia estiver configurado, retorna o timestamp original sem modificação
+- A consulta ao banco usara `whatsapp_message_queue` com filtro `lead_id = X` e `status = 'pending'`, ordenado por `scheduled_for ASC`
+- Para obter o nome da regra, fara um join com `whatsapp_automation_rules` via `automation_rule_id`
+- O horario sera formatado em `pt-BR` com timezone `America/Sao_Paulo` usando `toLocaleString`
+- O hook usara `useEffect` com dependencia no `leadId` para buscar os dados quando o modal abrir
+- Para o LeadMobileCard, sera criado um hook em batch (`useScheduledMessagesMap`) que aceita array de lead_ids, similar ao `useWhatsAppFailures`
