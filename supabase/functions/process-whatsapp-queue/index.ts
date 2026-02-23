@@ -252,11 +252,132 @@ Deno.serve(async (req) => {
             .eq('is_from_me', false)
             .limit(1)
 
-          const leadHasResponded = (incomingByPhone && incomingByPhone.length > 0) ||
+          let leadHasResponded = (incomingByPhone && incomingByPhone.length > 0) ||
                                    (incomingByLeadId && incomingByLeadId.length > 0)
+          let detectedBy = (incomingByPhone?.length > 0) ? 'phone suffix' : 'lead_id (@lid)'
+
+          // ── Fallback: check Evolution API directly if DB has no incoming msgs ──
+          if (!leadHasResponded && session?.instance_name) {
+            try {
+              const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL') || ''
+              const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || ''
+
+              if (EVOLUTION_API_URL && EVOLUTION_API_KEY) {
+                const apiUrl = EVOLUTION_API_URL.startsWith('http') ? EVOLUTION_API_URL : `https://${EVOLUTION_API_URL}`
+                const formattedPhoneForJid = formatPhoneForEvolution(msg.phone || '')
+                const remoteJid = `${formattedPhoneForJid}@s.whatsapp.net`
+
+                console.log(`[process-whatsapp-queue] DB has no incoming msgs for lead ${msg.lead_id}, checking Evolution API for ${remoteJid}`)
+
+                const apiResponse = await fetch(
+                  `${apiUrl}/chat/findMessages/${session.instance_name}`,
+                  {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'apikey': EVOLUTION_API_KEY,
+                    },
+                    body: JSON.stringify({
+                      where: {
+                        key: { remoteJid },
+                      },
+                    }),
+                  }
+                )
+
+                if (apiResponse.ok) {
+                  const apiResult = await apiResponse.json()
+                  // Handle various response formats
+                  let apiMessages: any[] = []
+                  if (Array.isArray(apiResult)) {
+                    apiMessages = apiResult
+                  } else if (apiResult?.messages && Array.isArray(apiResult.messages)) {
+                    apiMessages = apiResult.messages
+                  } else if (apiResult?.data && Array.isArray(apiResult.data)) {
+                    apiMessages = apiResult.data
+                  } else if (typeof apiResult === 'object' && apiResult !== null) {
+                    for (const key of Object.keys(apiResult)) {
+                      if (Array.isArray(apiResult[key])) {
+                        apiMessages = apiResult[key]
+                        break
+                      }
+                    }
+                  }
+
+                  // Filter for incoming messages only (fromMe === false)
+                  const incomingFromApi = apiMessages.filter((m: any) => m.key && m.key.fromMe === false)
+
+                  if (incomingFromApi.length > 0) {
+                    leadHasResponded = true
+                    detectedBy = 'Evolution API fallback'
+                    console.log(`[process-whatsapp-queue] ⚠️ WEBHOOK ISSUE DETECTED: Lead ${msg.lead_id} has ${incomingFromApi.length} incoming msgs in Evolution API but ZERO in DB. Instance: ${session.instance_name}`)
+
+                    // Sync these messages to the DB for future checks
+                    const syncInserts: any[] = []
+                    for (const apiMsg of incomingFromApi.slice(0, 20)) { // limit sync to 20
+                      const messageId = apiMsg.key?.id
+                      if (!messageId) continue
+
+                      let content: string | null = null
+                      if (apiMsg.message?.conversation) content = apiMsg.message.conversation
+                      else if (apiMsg.message?.extendedTextMessage?.text) content = apiMsg.message.extendedTextMessage.text
+                      else if (apiMsg.message?.imageMessage) content = apiMsg.message.imageMessage.caption || '📷 Imagem'
+                      else if (apiMsg.message?.audioMessage) content = '🎤 Áudio'
+                      else if (apiMsg.message?.videoMessage) content = apiMsg.message.videoMessage.caption || '🎥 Vídeo'
+                      else if (apiMsg.message?.documentMessage) content = apiMsg.message.documentMessage.fileName || '📎 Documento'
+
+                      if (!content) continue
+
+                      const timestamp = apiMsg.messageTimestamp
+                        ? new Date(typeof apiMsg.messageTimestamp === 'number'
+                            ? (apiMsg.messageTimestamp > 1e12 ? apiMsg.messageTimestamp : apiMsg.messageTimestamp * 1000)
+                            : apiMsg.messageTimestamp).toISOString()
+                        : new Date().toISOString()
+
+                      syncInserts.push({
+                        account_id: msg.account_id,
+                        remote_jid: remoteJid,
+                        phone: formattedPhoneForJid,
+                        message_id: messageId,
+                        content,
+                        media_type: 'text',
+                        is_from_me: false,
+                        status: 'received',
+                        timestamp,
+                        lead_id: msg.lead_id,
+                        contact_name: apiMsg.pushName || null,
+                      })
+                    }
+
+                    if (syncInserts.length > 0) {
+                      const { error: syncErr } = await supabase
+                        .from('whatsapp_messages')
+                        .upsert(syncInserts, { onConflict: 'message_id,account_id', ignoreDuplicates: true })
+                      if (syncErr) {
+                        console.error(`[process-whatsapp-queue] Error syncing API msgs to DB:`, syncErr.message)
+                        // Try individual inserts as fallback
+                        for (const ins of syncInserts) {
+                          await supabase.from('whatsapp_messages').insert(ins).select().maybeSingle()
+                        }
+                      } else {
+                        console.log(`[process-whatsapp-queue] Synced ${syncInserts.length} incoming msgs from API to DB for lead ${msg.lead_id}`)
+                      }
+                    }
+                  } else {
+                    console.log(`[process-whatsapp-queue] Evolution API also has no incoming msgs for lead ${msg.lead_id} (${apiMessages.length} total msgs checked)`)
+                  }
+                } else {
+                  console.error(`[process-whatsapp-queue] Evolution API findMessages failed: ${apiResponse.status}`)
+                }
+              }
+            } catch (apiErr) {
+              console.error(`[process-whatsapp-queue] Error checking Evolution API for lead response:`, apiErr)
+              // Don't block the flow — continue with DB-only result
+            }
+          }
+          // ── End Evolution API fallback ──────────────────────────────────────
 
           if (leadHasResponded) {
-            const detectedBy = (incomingByPhone?.length > 0) ? 'phone suffix' : 'lead_id (@lid)'
             console.log(`[process-whatsapp-queue] Lead ${msg.lead_id} already responded (detected by ${detectedBy}), cancelling follow-up ${msg.id}`)
             
             await supabase
