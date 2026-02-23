@@ -74,3 +74,6 @@ verify_jwt = false
 
 [functions.olx-webhook]
 verify_jwt = false
+
+[functions.sync-whatsapp-replies]
+verify_jwt = false

@@ -256,6 +256,78 @@ Deno.serve(async (req) => {
                                    (incomingByLeadId && incomingByLeadId.length > 0)
           let detectedBy = (incomingByPhone?.length > 0) ? 'phone suffix' : 'lead_id (@lid)'
 
+          // ── Layer 2: @lid temporal correlation check ──────────────────────
+          // If no response found yet, check if any @lid messages arrived
+          // within 60 minutes of the greeting we sent to this lead
+          if (!leadHasResponded) {
+            try {
+              // Find the greeting (outgoing, automation, no followup_step_id) sent to this lead
+              const { data: greetingMsg } = await supabase
+                .from('whatsapp_messages')
+                .select('timestamp')
+                .eq('account_id', msg.account_id)
+                .eq('lead_id', msg.lead_id)
+                .eq('is_from_me', true)
+                .order('timestamp', { ascending: true })
+                .limit(1)
+                .maybeSingle()
+
+              if (greetingMsg) {
+                const greetingTime = new Date(greetingMsg.timestamp)
+                const windowEnd = new Date(greetingTime.getTime() + 60 * 60 * 1000) // +60 min
+
+                // Search for @lid incoming messages in this time window (no lead_id)
+                const { data: lidReplies } = await supabase
+                  .from('whatsapp_messages')
+                  .select('id, remote_jid, content, timestamp')
+                  .eq('account_id', msg.account_id)
+                  .eq('is_from_me', false)
+                  .is('lead_id', null)
+                  .like('remote_jid', '%@lid')
+                  .gte('timestamp', greetingMsg.timestamp)
+                  .lte('timestamp', windowEnd.toISOString())
+                  .order('timestamp', { ascending: true })
+                  .limit(5)
+
+                if (lidReplies && lidReplies.length > 0) {
+                  leadHasResponded = true
+                  detectedBy = `@lid temporal correlation (greeting at ${greetingMsg.timestamp}, reply at ${lidReplies[0].timestamp})`
+                  console.log(`[process-whatsapp-queue] ✅ @lid TEMPORAL MATCH: Lead ${msg.lead_id} replied via ${lidReplies[0].remote_jid} within ${Math.round((new Date(lidReplies[0].timestamp).getTime() - greetingTime.getTime()) / 1000)}s of greeting`)
+
+                  // Resolve the association: update lead_id on the @lid messages
+                  for (const lidReply of lidReplies) {
+                    await supabase
+                      .from('whatsapp_messages')
+                      .update({ lead_id: msg.lead_id })
+                      .eq('id', lidReply.id)
+
+                    // Also update all messages from this @lid JID
+                    await supabase
+                      .from('whatsapp_messages')
+                      .update({ lead_id: msg.lead_id })
+                      .eq('account_id', msg.account_id)
+                      .eq('remote_jid', lidReply.remote_jid)
+                      .is('lead_id', null)
+                  }
+
+                  // Save lid_jid mapping in conversation
+                  const leadPhoneClean = (msg.phone || '').replace(/\D/g, '')
+                  const leadRemoteJid = leadPhoneClean.length > 0 ? `${formatPhoneForEvolution(msg.phone || '')}@s.whatsapp.net` : null
+                  if (leadRemoteJid) {
+                    await supabase
+                      .from('whatsapp_conversations')
+                      .update({ lid_jid: lidReplies[0].remote_jid, lead_id: msg.lead_id })
+                      .eq('account_id', msg.account_id)
+                      .eq('remote_jid', leadRemoteJid)
+                  }
+                }
+              }
+            } catch (lidErr) {
+              console.error(`[process-whatsapp-queue] Error in @lid temporal check:`, lidErr)
+            }
+          }
+          // ── End @lid temporal correlation ──────────────────────────────────
+
           // ── Fallback: check Evolution API directly if DB has no incoming msgs ──
           if (!leadHasResponded && session?.instance_name) {
             try {

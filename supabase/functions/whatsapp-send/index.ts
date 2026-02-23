@@ -223,6 +223,24 @@ Deno.serve(async (req) => {
       })
     }
 
+    // Layer 3: Capture @lid from Evolution API response for future mapping
+    try {
+      const responseRemoteJid = sendData.key?.remoteJid
+      if (responseRemoteJid && responseRemoteJid.includes('@lid')) {
+        console.log(`[whatsapp-send] 📌 Captured @lid mapping: ${formattedPhone} -> ${responseRemoteJid}`)
+        
+        // Save the lid_jid in the conversation for this lead
+        const phoneRemoteJid = `${formattedPhone}@s.whatsapp.net`
+        await supabase
+          .from('whatsapp_conversations')
+          .update({ lid_jid: responseRemoteJid })
+          .eq('account_id', accountId)
+          .eq('remote_jid', phoneRemoteJid)
+      }
+    } catch (lidErr) {
+      console.error('[whatsapp-send] Error capturing @lid:', lidErr)
+    }
+
     console.log('[whatsapp-send] Message sent successfully')
     return new Response(JSON.stringify({ 
       success: true,
