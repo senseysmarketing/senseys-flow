@@ -5,6 +5,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Sleep helper for rate limiting between sends
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 // Robust phone formatting for Evolution API
 function formatPhoneForEvolution(phone: string): string {
   let cleaned = phone.replace(/\D/g, '')
@@ -636,6 +641,9 @@ Deno.serve(async (req) => {
 
         processedCount++
         console.log(`[process-whatsapp-queue] Message ${msg.id} sent successfully`)
+
+        // Rate limiting: 1.5s delay between sends to avoid Evolution API 400 errors
+        await sleep(1500)
 
         // After successfully sending a greeting, schedule follow-up messages
         if (msg.automation_rule_id && !msg.followup_step_id) {

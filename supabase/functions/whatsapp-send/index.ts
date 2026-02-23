@@ -22,6 +22,95 @@ function formatPhoneForEvolution(phone: string): string {
   return cleaned
 }
 
+// Sleep helper
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+// Normalize Evolution API errors to user-friendly Portuguese messages
+function normalizeEvolutionError(status: number, data: any): string {
+  // Check for specific error patterns in the response body
+  const errorMsg = data?.error || data?.message || ''
+  const errorStr = typeof errorMsg === 'string' ? errorMsg.toLowerCase() : ''
+
+  if (errorStr.includes('not exist') || errorStr.includes('not registered') || data?.exists === false) {
+    return 'Número não possui WhatsApp'
+  }
+
+  if (status === 401 || errorStr.includes('unauthorized') || errorStr.includes('invalid api')) {
+    return 'Erro de autenticação com a API. Verifique as configurações.'
+  }
+
+  if (status === 404 || errorStr.includes('not found') || errorStr.includes('instance not found')) {
+    return 'Sessão do WhatsApp não encontrada. Reconecte nas configurações.'
+  }
+
+  if (status === 408 || errorStr.includes('timeout') || errorStr.includes('timed out')) {
+    return 'Servidor não respondeu a tempo. Tente novamente.'
+  }
+
+  if (status === 400) {
+    return 'Erro temporário na conexão. Tente novamente em alguns segundos.'
+  }
+
+  if (status >= 500) {
+    return 'Erro no servidor do WhatsApp. Tente novamente em alguns segundos.'
+  }
+
+  return errorMsg || 'Erro ao enviar mensagem. Tente novamente.'
+}
+
+// Send message to Evolution API with 1 automatic retry on 400/500 errors
+async function sendWithRetry(
+  instanceName: string,
+  formattedPhone: string,
+  message: string,
+  maxRetries = 1
+): Promise<{ response: Response; data: any }> {
+  const url = `${EVOLUTION_API_URL}/message/sendText/${instanceName}`
+  const body = JSON.stringify({ number: formattedPhone, text: message })
+  const headers = { 'Content-Type': 'application/json', 'apikey': EVOLUTION_API_KEY }
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const isRetry = attempt > 0
+    if (isRetry) {
+      console.log(`[whatsapp-send] ⏳ Retry attempt ${attempt} after 3s backoff...`)
+      await sleep(3000)
+    }
+
+    const response = await fetch(url, { method: 'POST', headers, body })
+    const data = await response.json()
+
+    console.log(`[whatsapp-send] ${isRetry ? 'RETRY' : 'Attempt'} ${attempt + 1} - Status: ${response.status}, Body: ${JSON.stringify(data).substring(0, 300)}`)
+
+    // If success, return immediately
+    if (response.ok) {
+      return { response, data }
+    }
+
+    // Check if it's an invalid number error - no point retrying
+    const isInvalidNumber =
+      data?.exists === false ||
+      data?.error?.includes?.('not exist') ||
+      data?.error?.includes?.('not registered') ||
+      data?.message?.includes?.('not exist') ||
+      (data?.status === 404)
+
+    if (isInvalidNumber) {
+      return { response, data }
+    }
+
+    // Only retry on 400 or 5xx errors (likely transient)
+    const shouldRetry = (response.status === 400 || response.status >= 500) && attempt < maxRetries
+    if (!shouldRetry) {
+      return { response, data }
+    }
+  }
+
+  // Fallback (shouldn't reach here)
+  throw new Error('sendWithRetry exhausted all attempts')
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -106,7 +195,7 @@ Deno.serve(async (req) => {
     if (sessionError || !session) {
       console.log('[whatsapp-send] No connected session found')
       return new Response(JSON.stringify({ 
-        error: 'WhatsApp not connected',
+        error: 'WhatsApp não conectado. Reconecte nas configurações.',
         connected: false
       }), {
         status: 400,
@@ -114,26 +203,14 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Send message via Evolution API
-    const sendResponse = await fetch(
-      `${EVOLUTION_API_URL}/message/sendText/${session.instance_name}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': EVOLUTION_API_KEY,
-        },
-        body: JSON.stringify({
-          number: formattedPhone,
-          text: message,
-        }),
-      }
+    // Send message via Evolution API with automatic retry
+    const { response: sendResponse, data: sendData } = await sendWithRetry(
+      session.instance_name,
+      formattedPhone,
+      message
     )
 
-    const sendData = await sendResponse.json()
-    console.log('[whatsapp-send] Send response:', JSON.stringify(sendData))
-
-    // Detect invalid number: Evolution API returns exists: false or specific error patterns
+    // Detect invalid number
     const isInvalidNumber = 
       sendData?.exists === false || 
       sendData?.error?.includes?.('not exist') ||
@@ -145,7 +222,7 @@ Deno.serve(async (req) => {
     if (!sendResponse.ok || isInvalidNumber) {
       const errorMsg = isInvalidNumber 
         ? 'Número não possui WhatsApp' 
-        : (sendData?.error || sendData?.message || 'Failed to send message')
+        : normalizeEvolutionError(sendResponse.status, sendData)
 
       // Log failed message
       await supabase.from('whatsapp_message_log').insert({
@@ -229,7 +306,6 @@ Deno.serve(async (req) => {
       if (responseRemoteJid && responseRemoteJid.includes('@lid')) {
         console.log(`[whatsapp-send] 📌 Captured @lid mapping: ${formattedPhone} -> ${responseRemoteJid}`)
         
-        // Save the lid_jid in the conversation for this lead
         const phoneRemoteJid = `${formattedPhone}@s.whatsapp.net`
         await supabase
           .from('whatsapp_conversations')
