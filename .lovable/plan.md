@@ -1,50 +1,102 @@
 
-## Correcao: Retry com Backoff + Delay entre Envios + Mensagens de Erro Amigaveis
+## Correcao: Sincronizacao Automatica do Round Robin com Novos Corretores
 
-### Problema
+### Problema Diagnosticado
 
-Sim, o erro "Bad Request" pode absolutamente ser causado por envios rapidos demais. A Evolution API tem rate limiting implicito, e quando o `process-whatsapp-queue` processa ate 50 mensagens em sequencia sem nenhum delay, ou quando um usuario envia mensagens manualmente em rapida sucessao, a API pode rejeitar com 400 "Bad Request".
+A conta "Matriz Imobiliaria" (account_id: `90151ad5`) tem **5 corretores** cadastrados mas o `broker_round_robin` so contem **1** (Junior Cesar Rosa). Resultado: todos os 66+ leads estao sendo atribuidos exclusivamente a ele.
 
-Alem disso, quando o erro acontece, o sistema mostra a mensagem crua da API em vez de algo util para o usuario.
+**Causa raiz**: Quando o round robin e criado automaticamente (pelo `apply-distribution-rules` ao receber o primeiro lead), ele captura apenas os corretores que existem naquele momento. Novos corretores adicionados posteriormente **nunca sao incluidos** na lista de rotacao.
 
-### Solucao: 3 Melhorias
+Dados confirmados no banco:
+- `broker_round_robin.broker_order`: `["76859bd7-57d4-4869-b96d-7f48fe315cdf"]` (apenas Junior)
+- `profiles` na conta: 5 corretores (Junior, Pedro Gabriel, Maria Julia, Paulo Pereira, Marcelo Gomes)
+- Ultimos 10 leads: todos atribuidos a `76859bd7` (Junior)
 
-#### 1. Delay entre envios no process-whatsapp-queue
+### Solucao: 2 Correcoes
 
-Adicionar um `await sleep(1500)` (1.5 segundos) entre cada mensagem processada no loop principal. Isso evita sobrecarregar a Evolution API quando ha muitos follow-ups agendados no mesmo minuto.
+#### 1. Auto-sync na edge function `apply-distribution-rules`
 
-#### 2. Retry automatico com backoff no whatsapp-send
+Antes de executar o round robin, verificar se todos os corretores da conta estao no `broker_order`. Se houver corretores faltando, adiciona-los automaticamente ao final da lista.
 
-Quando a Evolution API retorna 400 ou 500, aguardar 3 segundos e tentar novamente uma unica vez antes de reportar erro. Isso cobre erros temporarios de rate limiting.
+```text
+Logica:
+1. Buscar brokers da conta (profiles)
+2. Buscar broker_order do round robin
+3. Para cada broker que NAO esta no broker_order -> adicionar ao final
+4. Se houve mudanca -> salvar broker_order atualizado
+5. Prosseguir com o round robin normalmente
+```
 
-#### 3. Mensagens de erro em portugues amigavel
+Isso garante que mesmo que o admin esqueca de configurar manualmente, novos corretores entram na rotacao automaticamente.
 
-Mapear os codigos de erro da Evolution API para mensagens claras para o usuario:
-- 400 -> "Erro temporario. Tente novamente em alguns segundos."
-- 404 -> "Sessao nao encontrada. Reconecte o WhatsApp."
-- 408/timeout -> "Servidor nao respondeu. Tente novamente."
+#### 2. Auto-sync na UI do DistributionRulesManager
+
+No componente `DistributionRulesManager.tsx`, ao carregar os dados, verificar se existem corretores que nao estao no `broker_order` e adiciona-los automaticamente. Tambem exibir um botao "Sincronizar Corretores" caso o usuario queira forcar a atualizacao.
+
+**Arquivo: `src/components/DistributionRulesManager.tsx`**
+
+No `fetchData()` (linhas 140-179), apos carregar os brokers e o round robin config:
+1. Comparar `broker_order` com a lista completa de `brokers`
+2. Se houver corretores faltando, adicionar ao final do `broker_order`
+3. Salvar automaticamente no banco
+
+#### 3. Correcao imediata dos dados
+
+Atualizar o `broker_round_robin` da conta "Matriz Imobiliaria" para incluir todos os 5 corretores, e resetar o `last_broker_index` para 0 para que a distribuicao comece do inicio com a lista completa.
 
 ### Alteracoes Tecnicas
 
-**Arquivo 1: `supabase/functions/whatsapp-send/index.ts`**
+**Arquivo 1: `supabase/functions/apply-distribution-rules/index.ts`**
 
-- Extrair a logica de envio para a Evolution API em uma funcao `sendWithRetry()` que:
-  1. Tenta enviar normalmente
-  2. Se receber 400/500, aguarda 3 segundos e tenta novamente (1 retry)
-  3. Loga ambas as tentativas
-- Adicionar funcao `normalizeError(status, data)` que converte erros para portugues
-- Aplicar no ponto onde a mensagem e enviada (linhas 117-131)
+Na funcao `getNextRoundRobinBroker` (linhas 254-334), adicionar verificacao de sync APOS carregar o `rrConfig` e os `brokers`:
 
-**Arquivo 2: `supabase/functions/process-whatsapp-queue/index.ts`**
+```text
+// Apos linha 295 (const brokerOrder = ...)
+// Verificar se todos os brokers estao no broker_order
+const missingBrokers = brokers
+  .filter(b => !brokerOrder.includes(b.user_id))
+  .map(b => b.user_id);
 
-- Adicionar funcao `sleep(ms)` no topo do arquivo
-- Inserir `await sleep(1500)` apos cada envio bem-sucedido no loop (apos linha 638)
-- Isso garante intervalo minimo de 1.5s entre mensagens da mesma conta
+if (missingBrokers.length > 0) {
+  brokerOrder.push(...missingBrokers);
+  // Atualizar no banco
+  await supabase
+    .from('broker_round_robin')
+    .update({ broker_order: brokerOrder })
+    .eq('id', rrConfig.id);
+  console.log(`Added ${missingBrokers.length} missing brokers to round robin`);
+}
+```
+
+**Arquivo 2: `src/components/DistributionRulesManager.tsx`**
+
+No `fetchData()`, apos carregar brokers e round robin config:
+
+```text
+// Se existem brokers que nao estao no broker_order, adicionar
+const currentOrder = rrConfig.broker_order || [];
+const allBrokerIds = brokers.map(b => b.user_id);
+const missing = allBrokerIds.filter(id => !currentOrder.includes(id));
+
+if (missing.length > 0 && rrConfig.id) {
+  const newOrder = [...currentOrder, ...missing];
+  await supabase
+    .from('broker_round_robin')
+    .update({ broker_order: newOrder })
+    .eq('id', rrConfig.id);
+  // Atualizar state local
+  rrConfig.broker_order = newOrder;
+}
+```
+
+Tambem remover do `broker_order` corretores que nao existem mais (limpeza de fantasmas).
+
+**Correcao imediata via SQL**: Atualizar o `broker_round_robin` da Matriz Imobiliaria com todos os 5 corretores.
 
 ### Resultado Esperado
 
 | Cenario | Antes | Depois |
 |---------|-------|--------|
-| 10 follow-ups no mesmo minuto | Todos enviados em ~2s, risco de 400 | Enviados em ~15s com delay, sem rejeicao |
-| Erro 400 temporario | Falha imediata, "Bad Request" | Retry apos 3s, segunda chance de sucesso |
-| Erro mostrado ao usuario | "Bad Request" | "Erro temporario. Tente novamente em alguns segundos." |
+| Novo corretor adicionado | Nao entra no round robin | Adicionado automaticamente na proxima execucao |
+| Corretor removido | Fica na lista, erro ao tentar atribuir | Removido automaticamente (ja tratado com skip) |
+| Conta Matriz Imobiliaria | 100% leads para Junior | Leads distribuidos entre os 5 corretores |
