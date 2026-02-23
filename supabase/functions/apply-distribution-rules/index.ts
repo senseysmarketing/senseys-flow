@@ -255,7 +255,8 @@ async function getNextRoundRobinBroker(
   supabase: any,
   accountId: string,
   maxActiveLeads?: number,
-  activeStatusIds?: string[]
+  activeStatusIds?: string[],
+  participatingBrokerIds?: string[]
 ): Promise<{ brokerId: string; brokerName: string } | null> {
   // Get round robin configuration
   let { data: rrConfig } = await supabase
@@ -316,12 +317,24 @@ async function getNextRoundRobinBroker(
     console.log(`Round robin synced: added ${missingBrokers.length}, removed ${ghostBrokers.length} brokers`);
   }
 
+  // Filter by participating broker IDs if specified
+  let effectiveOrder = brokerOrder;
+  if (participatingBrokerIds && participatingBrokerIds.length > 0) {
+    effectiveOrder = brokerOrder.filter(id => participatingBrokerIds.includes(id));
+    console.log(`Filtered to ${effectiveOrder.length}/${brokerOrder.length} participating brokers`);
+    if (effectiveOrder.length === 0) {
+      console.log('No participating brokers found in round robin order');
+      return null;
+    }
+  }
+
   const lastIndex = rrConfig.last_broker_index ?? -1;
   
   // Try each broker in order, starting from the next one
-  for (let i = 0; i < brokerOrder.length; i++) {
-    const index = (lastIndex + 1 + i) % brokerOrder.length;
-    const brokerId = brokerOrder[index];
+  // Map the lastIndex to effective order position
+  for (let i = 0; i < effectiveOrder.length; i++) {
+    const effectiveIndex = (lastIndex + 1 + i) % effectiveOrder.length;
+    const brokerId = effectiveOrder[effectiveIndex];
     
     // Check if broker still exists in profiles
     const broker = brokers.find((b: Broker) => b.user_id === brokerId);
@@ -339,16 +352,16 @@ async function getNextRoundRobinBroker(
       }
     }
     
-    // Update the last broker index
+    // Update the last broker index (using effective index for participating brokers)
     await supabase
       .from('broker_round_robin')
       .update({ 
-        last_broker_index: index,
+        last_broker_index: effectiveIndex,
         updated_at: new Date().toISOString()
       })
       .eq('id', rrConfig.id);
     
-    console.log(`Selected broker: ${broker.full_name} (index: ${index})`);
+    console.log(`Selected broker: ${broker.full_name} (index: ${effectiveIndex})`);
     return { brokerId: broker.user_id, brokerName: broker.full_name || 'Corretor' };
   }
   
@@ -377,20 +390,22 @@ async function resolveBroker(
     return null;
   }
   
+  const participatingBrokerIds = rule.conditions?.participating_broker_ids as string[] | undefined;
+
   // For workload rules, use round robin with capacity check
   if (rule.rule_type === 'workload') {
     const maxLeads = rule.conditions?.max_active_leads || 50;
     const activeStatusIds = rule.conditions?.active_status_ids as string[] | undefined;
-    return await getNextRoundRobinBroker(supabase, accountId, maxLeads, activeStatusIds);
+    return await getNextRoundRobinBroker(supabase, accountId, maxLeads, activeStatusIds, participatingBrokerIds);
   }
   
   // For round robin rules, use round robin
   if (rule.rule_type === 'round_robin') {
-    return await getNextRoundRobinBroker(supabase, accountId);
+    return await getNextRoundRobinBroker(supabase, accountId, undefined, undefined, participatingBrokerIds);
   }
   
   // For other rules without a target broker, use round robin as fallback
-  return await getNextRoundRobinBroker(supabase, accountId);
+  return await getNextRoundRobinBroker(supabase, accountId, undefined, undefined, participatingBrokerIds);
 }
 
 serve(async (req) => {

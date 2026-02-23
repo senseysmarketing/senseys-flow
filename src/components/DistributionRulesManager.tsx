@@ -11,10 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Toggle } from "@/components/ui/toggle";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Plus, Edit2, Trash2, Shuffle, Building2, Globe, Target, HelpCircle,
   Thermometer, Megaphone, Clock, Scale, MapPin, Layers, AlertCircle,
-  Flame, Sun, Snowflake, GripVertical
+  Flame, Sun, Snowflake, GripVertical, Users
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -111,6 +112,8 @@ const DistributionRulesManager = () => {
     // Compound
     compound_operator: string;
     compound_conditions: Array<{ type: string; value: string }>;
+    // Participating brokers
+    participating_broker_ids: string[];
   }>({
     name: "",
     rule_type: "round_robin",
@@ -131,6 +134,7 @@ const DistributionRulesManager = () => {
     neighborhood: "",
     compound_operator: "AND",
     compound_conditions: [],
+    participating_broker_ids: [],
   });
 
   useEffect(() => {
@@ -234,6 +238,11 @@ const DistributionRulesManager = () => {
         conditions.operator = form.compound_operator;
         conditions.conditions = form.compound_conditions;
         break;
+    }
+
+    // Add participating broker ids if not all are selected
+    if (form.participating_broker_ids.length > 0 && form.participating_broker_ids.length < brokers.length) {
+      conditions.participating_broker_ids = form.participating_broker_ids;
     }
     
     return conditions;
@@ -366,6 +375,7 @@ const DistributionRulesManager = () => {
       neighborhood: "",
       compound_operator: "AND",
       compound_conditions: [],
+      participating_broker_ids: [],
     });
   };
 
@@ -393,6 +403,7 @@ const DistributionRulesManager = () => {
       neighborhood: conditions.neighborhood || "",
       compound_operator: conditions.operator || "AND",
       compound_conditions: conditions.conditions || [],
+      participating_broker_ids: conditions.participating_broker_ids || [],
     });
     setIsDialogOpen(true);
   };
@@ -822,6 +833,82 @@ const DistributionRulesManager = () => {
                             ))}
                           </SelectContent>
                         </Select>
+                      </div>
+                    </>
+                  )}
+
+                  {/* CORRETORES PARTICIPANTES */}
+                  {["round_robin", "workload"].includes(form.rule_type) && (
+                    <>
+                      <Separator />
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="flex items-center gap-2">
+                            <Users className="h-4 w-4" />
+                            Corretores Participantes
+                          </Label>
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setForm({ ...form, participating_broker_ids: brokers.map(b => b.user_id) })}
+                            >
+                              Todos
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setForm({ ...form, participating_broker_ids: [] })}
+                            >
+                              Nenhum
+                            </Button>
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Desmarque corretores que não devem receber leads por esta regra. Se nenhum for selecionado, todos participam.
+                        </p>
+                        <div className="space-y-2 max-h-48 overflow-y-auto border rounded-lg p-3">
+                          {brokers.map(broker => {
+                            const isChecked = form.participating_broker_ids.length === 0 
+                              ? true 
+                              : form.participating_broker_ids.includes(broker.user_id);
+                            return (
+                              <div key={broker.user_id} className="flex items-center gap-2">
+                                <Checkbox
+                                  id={`broker-${broker.user_id}`}
+                                  checked={isChecked}
+                                  onCheckedChange={(checked) => {
+                                    if (form.participating_broker_ids.length === 0) {
+                                      // First uncheck: select all except this one
+                                      const allExcept = brokers
+                                        .map(b => b.user_id)
+                                        .filter(id => id !== broker.user_id);
+                                      setForm({ ...form, participating_broker_ids: checked ? brokers.map(b => b.user_id) : allExcept });
+                                    } else {
+                                      const newIds = checked
+                                        ? [...form.participating_broker_ids, broker.user_id]
+                                        : form.participating_broker_ids.filter(id => id !== broker.user_id);
+                                      setForm({ ...form, participating_broker_ids: newIds });
+                                    }
+                                  }}
+                                />
+                                <label
+                                  htmlFor={`broker-${broker.user_id}`}
+                                  className="text-sm cursor-pointer"
+                                >
+                                  {broker.full_name || "Sem nome"}
+                                </label>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {form.participating_broker_ids.length > 0 && form.participating_broker_ids.length < brokers.length && (
+                          <p className="text-xs text-muted-foreground">
+                            {form.participating_broker_ids.length} de {brokers.length} corretores selecionados
+                          </p>
+                        )}
                       </div>
                     </>
                   )}
