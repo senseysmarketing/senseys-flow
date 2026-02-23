@@ -293,6 +293,29 @@ async function getNextRoundRobinBroker(
   }
   
   const brokerOrder = (rrConfig.broker_order as string[]) || brokers.map((b: Broker) => b.user_id);
+  
+  // Auto-sync: add missing brokers to round robin order
+  const allBrokerIds = brokers.map((b: Broker) => b.user_id);
+  const missingBrokers = allBrokerIds.filter(id => !brokerOrder.includes(id));
+  // Also remove brokers that no longer exist
+  const ghostBrokers = brokerOrder.filter(id => !allBrokerIds.includes(id));
+  
+  if (missingBrokers.length > 0 || ghostBrokers.length > 0) {
+    // Remove ghosts
+    for (const ghost of ghostBrokers) {
+      const idx = brokerOrder.indexOf(ghost);
+      if (idx !== -1) brokerOrder.splice(idx, 1);
+    }
+    // Add missing
+    brokerOrder.push(...missingBrokers);
+    
+    await supabase
+      .from('broker_round_robin')
+      .update({ broker_order: brokerOrder })
+      .eq('id', rrConfig.id);
+    console.log(`Round robin synced: added ${missingBrokers.length}, removed ${ghostBrokers.length} brokers`);
+  }
+
   const lastIndex = rrConfig.last_broker_index ?? -1;
   
   // Try each broker in order, starting from the next one

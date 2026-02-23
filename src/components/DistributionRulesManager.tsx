@@ -160,9 +160,25 @@ const DistributionRulesManager = () => {
       setLeadStatuses(statusesRes.data || []);
       
       if (!rrRes.error && rrRes.data) {
+        const currentOrder = (rrRes.data.broker_order as string[]) || [];
+        const allBrokerIds = (brokersRes.data || []).map(b => b.user_id);
+        const missing = allBrokerIds.filter(id => !currentOrder.includes(id));
+        const ghosts = currentOrder.filter(id => !allBrokerIds.includes(id));
+        
+        let finalOrder = currentOrder;
+        if (missing.length > 0 || ghosts.length > 0) {
+          finalOrder = currentOrder.filter(id => allBrokerIds.includes(id));
+          finalOrder.push(...missing);
+          await supabase
+            .from("broker_round_robin")
+            .update({ broker_order: finalOrder })
+            .eq("id", rrRes.data.id);
+          console.log(`Round robin synced: +${missing.length} -${ghosts.length} brokers`);
+        }
+        
         setRoundRobinConfig({
           id: rrRes.data.id,
-          broker_order: (rrRes.data.broker_order as string[]) || [],
+          broker_order: finalOrder,
           last_broker_index: rrRes.data.last_broker_index || 0,
         });
       }
