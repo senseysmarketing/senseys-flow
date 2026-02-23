@@ -1,39 +1,30 @@
 
 
-## Correcao: Filtrar corretores na Configuracao Round Robin
+## Correcao: Filtro de corretores Round Robin nao funciona quando regra esta inativa
 
 ### Problema
-Ao desmarcar corretores na regra Round Robin (ex: Junior Cesar Rosa e Maria julia cintra rubim), eles continuam aparecendo na secao "Configuracao Round Robin" abaixo. Isso acontece porque a lista `orderedBrokers` (linha 521-523) exibe todos os corretores da tabela `broker_round_robin.broker_order`, sem considerar o campo `participating_broker_ids` salvo nas conditions da regra ativa.
+A regra "Distribuicao Padrao (Round Robin)" esta com `is_active = false` (toggle desligado no UI). O codigo na linha 521 filtra apenas regras ativas:
+```
+rules.find(r => r.rule_type === 'round_robin' && r.is_active)
+```
+Como a regra esta inativa, `participatingIds` fica `undefined` e todos os 5 corretores sao exibidos, ignorando a selecao de 3 participantes.
 
 ### Solucao
 
-Filtrar `orderedBrokers` com base nos `participating_broker_ids` da regra Round Robin ativa.
+Alterar o filtro para considerar qualquer regra round_robin (ativa ou nao) ao exibir a lista de corretores na secao "Configuracao Round Robin".
 
 ### Detalhes Tecnicos
 
-**Arquivo: `src/components/DistributionRulesManager.tsx`**
+**Arquivo: `src/components/DistributionRulesManager.tsx` (linha 521)**
 
-1. Encontrar a regra round_robin ativa nas `rules` carregadas e extrair seus `participating_broker_ids`
-2. Alterar o calculo de `orderedBrokers` (linha 521-523) para filtrar apenas os corretores participantes quando houver selecao parcial
-3. Adicionar um indicador visual informando que nem todos os corretores participam (ex: "Mostrando apenas corretores participantes da regra ativa")
-
-Logica da alteracao:
-
-```
-// Antes (mostra todos):
-const orderedBrokers = roundRobinConfig?.broker_order.length 
-  ? roundRobinConfig.broker_order.map(id => brokers.find(...)).filter(Boolean)
-  : brokers;
-
-// Depois (filtra por participantes):
+Mudar de:
+```typescript
 const activeRoundRobin = rules.find(r => r.rule_type === 'round_robin' && r.is_active);
-const participatingIds = activeRoundRobin?.conditions?.participating_broker_ids;
-
-const orderedBrokers = (roundRobinConfig?.broker_order.length 
-  ? roundRobinConfig.broker_order.map(id => brokers.find(...)).filter(Boolean)
-  : brokers
-).filter(b => !participatingIds?.length || participatingIds.includes(b.user_id));
 ```
 
-Tambem sera adicionada uma nota visual abaixo do titulo informando quantos corretores estao participando quando houver filtro ativo.
+Para:
+```typescript
+const activeRoundRobin = rules.find(r => r.rule_type === 'round_robin');
+```
 
+Isso garante que a selecao de participantes seja respeitada independentemente do estado ativo/inativo da regra. A logica restante permanece identica.
