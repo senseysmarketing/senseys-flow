@@ -518,7 +518,7 @@ const DistributionRulesManager = () => {
     );
   }
 
-  const activeRoundRobin = rules.find(r => r.rule_type === 'round_robin' && r.is_active);
+  const activeRoundRobin = rules.find(r => r.rule_type === 'round_robin');
   const participatingIds = (activeRoundRobin?.conditions as any)?.participating_broker_ids as string[] | undefined;
 
   const orderedBrokers = (roundRobinConfig?.broker_order.length 
