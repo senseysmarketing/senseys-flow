@@ -145,13 +145,17 @@ const handler = async (req: Request): Promise<Response> => {
             try {
               const ad = await (await fetch(`https://graph.facebook.com/v19.0/${ad_id}?fields=name,campaign{id,name},effective_instagram_media_id&access_token=${tokenData.access_token}`)).json();
               if (!ad.error) { adName = ad.name || ""; campName = ad.campaign?.name || ""; campId = ad.campaign?.id || ""; isIg = !!ad.effective_instagram_media_id; }
-            } catch {}
+            } catch (adErr) {
+              console.error("Error fetching ad info:", adErr);
+            }
           }
           if (adgroup_id) {
             try {
               const adset = await (await fetch(`https://graph.facebook.com/v19.0/${adgroup_id}?fields=name&access_token=${tokenData.access_token}`)).json();
               if (!adset.error) adsetName = adset.name || "";
-            } catch {}
+            } catch (adsetErr) {
+              console.error("Error fetching adset info:", adsetErr);
+            }
           }
 
           const { data: existing } = await supabase.from("leads").select("id").eq("meta_lead_id", leadgen_id).single();
@@ -238,65 +242,207 @@ const handler = async (req: Request): Promise<Response> => {
             let propName = null;
             if (propId) { const { data: p } = await supabase.from("properties").select("title").eq("id", propId).single(); propName = p?.title || null; }
             await supabase.functions.invoke("notify-new-lead", { body: { lead_id: newLead.id, lead_name: name, lead_phone: phone, lead_email: email, lead_temperature: temp, lead_origem: "Facebook Lead Ads", property_name: propName, account_id: cfg.account_id, assigned_broker_id: brokerId } });
-          } catch {}
+          } catch (notifyErr) {
+            console.error("Notify error for lead:", newLead.id, notifyErr);
+          }
 
-          // Check for WhatsApp automation rule (new_lead) for meta source
+          // Check for WhatsApp greeting (conditional rules first, then default automation rule)
           try {
-            const { data: automationRule } = await supabase
-              .from("whatsapp_automation_rules")
-              .select("*")
+            const { data: whatsappSession } = await supabase
+              .from("whatsapp_sessions")
+              .select("status")
               .eq("account_id", cfg.account_id)
-              .eq("trigger_type", "new_lead")
-              .eq("is_active", true)
+              .eq("status", "connected")
               .single();
 
-            if (automationRule) {
-              const sources = automationRule.trigger_sources || { meta: true };
-              const metaEnabled = typeof sources === "object" && sources !== null 
-                ? (sources as Record<string, boolean>).meta !== false 
-                : true;
+            if (!whatsappSession) {
+              console.log(`WhatsApp not connected for account ${cfg.account_id}`);
+            } else {
+              // Fetch all active greeting rules ordered by priority
+              const { data: greetingRules } = await supabase
+                .from("whatsapp_greeting_rules" as any)
+                .select("*")
+                .eq("account_id", cfg.account_id)
+                .eq("is_active", true)
+                .order("priority", { ascending: true });
 
-              if (automationRule.template_id && metaEnabled) {
-                const { data: session } = await supabase
-                  .from("whatsapp_sessions")
-                  .select("status")
+              // Fetch property info for rule matching
+              let propertyInfo: { sale_price: number | null; rent_price: number | null; type: string | null; transaction_type: string | null } | null = null;
+              let propertyName: string | null = null;
+              if (propId) {
+                const { data: propData } = await supabase
+                  .from("properties")
+                  .select("title, sale_price, rent_price, type, transaction_type")
+                  .eq("id", propId)
+                  .single();
+                if (propData) {
+                  propertyName = propData.title || null;
+                  propertyInfo = { sale_price: propData.sale_price, rent_price: propData.rent_price, type: propData.type, transaction_type: propData.transaction_type };
+                }
+              }
+
+              // Evaluate conditional rules in priority order
+              let matchedRule: any = null;
+              const leadOriginNormalized = (isIg ? "instagram" : "facebook");
+
+              for (const rule of (greetingRules || [])) {
+                switch (rule.condition_type) {
+                  case "property":
+                    if (propId && rule.condition_property_id === propId) matchedRule = rule;
+                    break;
+                  case "price_range": {
+                    const price = propertyInfo?.sale_price || propertyInfo?.rent_price;
+                    if (price) {
+                      const minOk = !rule.condition_price_min || price >= rule.condition_price_min;
+                      const maxOk = !rule.condition_price_max || price <= rule.condition_price_max;
+                      if (minOk && maxOk) matchedRule = rule;
+                    }
+                    break;
+                  }
+                  case "property_type":
+                    if (propertyInfo?.type && rule.condition_property_type &&
+                        propertyInfo.type.toLowerCase() === rule.condition_property_type.toLowerCase()) matchedRule = rule;
+                    break;
+                  case "transaction_type":
+                    if (propertyInfo?.transaction_type && rule.condition_transaction_type &&
+                        propertyInfo.transaction_type.toLowerCase() === rule.condition_transaction_type.toLowerCase()) matchedRule = rule;
+                    break;
+                  case "campaign":
+                    if (rule.condition_campaign && campName &&
+                        campName.toLowerCase().includes(rule.condition_campaign.toLowerCase())) matchedRule = rule;
+                    break;
+                  case "origin":
+                    if (rule.condition_origin && leadOriginNormalized.includes(rule.condition_origin.toLowerCase())) matchedRule = rule;
+                    break;
+                  case "form_answer":
+                    if (rule.condition_form_question && rule.condition_form_answer) {
+                      const { data: formFieldVals } = await supabase
+                        .from("lead_form_field_values")
+                        .select("field_name, field_value")
+                        .eq("lead_id", newLead.id);
+                      if (formFieldVals && formFieldVals.length > 0) {
+                        const norm = (s: string) => s.toLowerCase().replace(/\?/g, "").replace(/_/g, " ").trim();
+                        const found = formFieldVals.find(fv =>
+                          norm(fv.field_name) === norm(rule.condition_form_question!) &&
+                          fv.field_value !== null && norm(fv.field_value) === norm(rule.condition_form_answer!)
+                        );
+                        if (found) matchedRule = rule;
+                      }
+                    }
+                    break;
+                }
+                if (matchedRule) break;
+              }
+
+              // Determine template and delay
+              let templateId: string | null = null;
+              let delaySeconds = 0;
+              let ruleId: string | null = null;
+
+              if (matchedRule && matchedRule.template_id) {
+                templateId = matchedRule.template_id;
+                delaySeconds = matchedRule.delay_seconds || 0;
+                console.log(`Conditional greeting rule matched: ${matchedRule.name} (type: ${matchedRule.condition_type})`);
+              } else {
+                // Fallback: default whatsapp_automation_rules
+                const { data: automationRule } = await supabase
+                  .from("whatsapp_automation_rules")
+                  .select("*")
                   .eq("account_id", cfg.account_id)
-                  .eq("status", "connected")
+                  .eq("trigger_type", "new_lead")
+                  .eq("is_active", true)
                   .single();
 
-                if (session) {
-                  const scheduledFor = new Date(Date.now() + ((automationRule.delay_seconds || 0) * 1000));
-                  
-                  const { data: template } = await supabase
+                if (automationRule) {
+                  const sources = automationRule.trigger_sources || { meta: true };
+                  const metaEnabled = typeof sources === "object" && sources !== null
+                    ? (sources as Record<string, boolean>).meta !== false : true;
+
+                  if (automationRule.template_id && metaEnabled) {
+                    templateId = automationRule.template_id;
+                    delaySeconds = automationRule.delay_seconds || 0;
+                    ruleId = automationRule.id;
+                    console.log(`Fallback to default automation rule: ${automationRule.name}`);
+                  } else {
+                    console.log(`Meta source disabled or no template for automation rule ${automationRule.id}`);
+                  }
+                } else {
+                  console.log(`No active automation rule for account ${cfg.account_id}`);
+                }
+              }
+
+              if (templateId) {
+                // Check for sequence steps
+                const seqQuery = (supabase as any)
+                  .from("whatsapp_greeting_sequence_steps")
+                  .select("*")
+                  .eq("is_active", true)
+                  .order("position");
+
+                const seqFilter = matchedRule
+                  ? seqQuery.eq("greeting_rule_id", matchedRule.id)
+                  : (ruleId ? seqQuery.eq("automation_rule_id", ruleId) : null);
+
+                const { data: seqSteps, error: seqError } = seqFilter
+                  ? await seqFilter
+                  : { data: null, error: null };
+
+                if (seqError) console.error("Sequence query error:", seqError);
+
+                if (seqSteps && seqSteps.length > 0) {
+                  // Enqueue multiple messages in sequence
+                  let accumulatedDelay = delaySeconds;
+                  const inserts = seqSteps.map((step: { template_id: string; delay_seconds: number }) => {
+                    accumulatedDelay += (step.delay_seconds || 0);
+                    return {
+                      account_id: cfg.account_id,
+                      lead_id: newLead.id,
+                      phone: phone,
+                      message: "",
+                      template_id: step.template_id,
+                      automation_rule_id: ruleId,
+                      scheduled_for: new Date(Date.now() + accumulatedDelay * 1000).toISOString(),
+                      status: "pending",
+                    };
+                  });
+                  await supabase.from("whatsapp_message_queue").insert(inserts);
+                  console.log(`WhatsApp greeting SEQUENCE (${seqSteps.length} msgs) scheduled for lead ${newLead.id}`);
+                } else {
+                  // Single message
+                  const { data: tmpl } = await supabase
                     .from("whatsapp_templates")
                     .select("template")
-                    .eq("id", automationRule.template_id)
+                    .eq("id", templateId)
                     .single();
-                  
-                  if (template) {
-                    let message = template.template
+
+                  if (tmpl) {
+                    const scheduledFor = new Date(Date.now() + delaySeconds * 1000);
+                    const message = tmpl.template
                       .replace(/{nome}/gi, name || "")
                       .replace(/{telefone}/gi, phone || "")
-                      .replace(/{email}/gi, email || "");
-                    
+                      .replace(/{email}/gi, email || "")
+                      .replace(/{imovel}/gi, propertyName || "");
+
                     await supabase.from("whatsapp_message_queue").insert({
                       account_id: cfg.account_id,
                       lead_id: newLead.id,
                       phone: phone,
                       message: message,
-                      template_id: automationRule.template_id,
-                      automation_rule_id: automationRule.id,
+                      template_id: templateId,
+                      automation_rule_id: ruleId,
                       scheduled_for: scheduledFor.toISOString(),
-                      status: "pending"
+                      status: "pending",
                     });
-                    console.log(`WhatsApp scheduled for Meta lead ${newLead.id}`);
-                    // Trigger queue processing immediately
-                    supabase.functions.invoke("process-whatsapp-queue").catch(() => {});
+                    console.log(`WhatsApp greeting scheduled for lead ${newLead.id} at ${scheduledFor.toISOString()}`);
                   }
                 }
+
+                supabase.functions.invoke("process-whatsapp-queue").catch(() => {});
               }
             }
-          } catch {}
+          } catch (whatsappErr) {
+            console.error("WhatsApp automation error for lead:", newLead.id, whatsappErr);
+          }
 
           // CAPI
           if (temp === "hot") {
@@ -313,7 +459,9 @@ const handler = async (req: Request): Promise<Response> => {
                 const capiJson = await capiRes.json();
                 await supabase.from("meta_capi_events_log").insert({ lead_id: newLead.id, account_id: cfg.account_id, event_name: "Lead", event_id: evtId, pixel_id: px.pixel_id, status_code: capiRes.status, response_body: capiJson, error_message: capiJson.error?.message || null });
               }
-            } catch {}
+            } catch (capiErr) {
+              console.error("CAPI error for lead:", newLead.id, capiErr);
+            }
           }
         }
       }
