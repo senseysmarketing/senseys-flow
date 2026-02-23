@@ -1,102 +1,68 @@
 
-## Correcao: Sincronizacao Automatica do Round Robin com Novos Corretores
 
-### Problema Diagnosticado
+## Seleção de Corretores Participantes por Regra de Distribuição
 
-A conta "Matriz Imobiliaria" (account_id: `90151ad5`) tem **5 corretores** cadastrados mas o `broker_round_robin` so contem **1** (Junior Cesar Rosa). Resultado: todos os 66+ leads estao sendo atribuidos exclusivamente a ele.
+### Problema Atual
+Todas as regras de distribuição (Round Robin, Por Carga, etc.) incluem automaticamente todos os corretores da conta. Nao ha como excluir um corretor específico de uma regra ou selecionar apenas alguns participantes.
 
-**Causa raiz**: Quando o round robin e criado automaticamente (pelo `apply-distribution-rules` ao receber o primeiro lead), ele captura apenas os corretores que existem naquele momento. Novos corretores adicionados posteriormente **nunca sao incluidos** na lista de rotacao.
+### Solucao
 
-Dados confirmados no banco:
-- `broker_round_robin.broker_order`: `["76859bd7-57d4-4869-b96d-7f48fe315cdf"]` (apenas Junior)
-- `profiles` na conta: 5 corretores (Junior, Pedro Gabriel, Maria Julia, Paulo Pereira, Marcelo Gomes)
-- Ultimos 10 leads: todos atribuidos a `76859bd7` (Junior)
+Adicionar um campo `participating_broker_ids` nas conditions de cada regra, permitindo selecionar quais corretores participam. Quando vazio/nulo, todos participam (comportamento atual preservado).
 
-### Solucao: 2 Correcoes
+### Mudancas
 
-#### 1. Auto-sync na edge function `apply-distribution-rules`
+**1. Frontend - DistributionRulesManager.tsx**
 
-Antes de executar o round robin, verificar se todos os corretores da conta estao no `broker_order`. Se houver corretores faltando, adiciona-los automaticamente ao final da lista.
+- Adicionar ao formulario de criacao/edicao de regras uma secao "Corretores Participantes" com checkboxes para cada corretor da conta
+- Um botao "Selecionar Todos" / "Desmarcar Todos" para facilitar
+- Exibir esta secao para todos os tipos de regra (round_robin, workload, origin, temperature, etc.)
+- Para regras que ja tem `target_broker_id` (destino fixo), manter o campo existente e nao mostrar a selecao de participantes (pois o destino ja e um corretor especifico)
+- Para regras de round_robin e workload (que distribuem entre varios), mostrar a selecao de participantes
+- Salvar os IDs selecionados dentro do campo `conditions` como `participating_broker_ids`
+- Na Configuracao Round Robin (card inferior), filtrar a lista de corretores para mostrar apenas os participantes da regra round_robin ativa, ou todos se nenhum filtro foi definido
 
-```text
-Logica:
-1. Buscar brokers da conta (profiles)
-2. Buscar broker_order do round robin
-3. Para cada broker que NAO esta no broker_order -> adicionar ao final
-4. Se houve mudanca -> salvar broker_order atualizado
-5. Prosseguir com o round robin normalmente
+**2. Frontend - Formulario**
+
+- Adicionar `participating_broker_ids: string[]` ao state do form
+- Na funcao `buildConditions()`, incluir `participating_broker_ids` quando houver selecao parcial
+- Na funcao `openEditDialog()`, carregar os `participating_broker_ids` existentes das conditions
+- Mostrar a secao apenas para tipos round_robin e workload (os que distribuem entre multiplos corretores)
+
+**3. Backend - apply-distribution-rules/index.ts**
+
+- Na funcao `getNextRoundRobinBroker`, aceitar um parametro opcional `participatingBrokerIds`
+- Quando fornecido, filtrar `brokerOrder` para incluir apenas os IDs participantes
+- Na funcao `resolveBroker`, extrair `participating_broker_ids` das conditions da regra e passar para `getNextRoundRobinBroker`
+
+### Detalhes Tecnicos
+
+**State do formulario - novo campo:**
+```typescript
+participating_broker_ids: string[]  // vazio = todos participam
 ```
 
-Isso garante que mesmo que o admin esqueca de configurar manualmente, novos corretores entram na rotacao automaticamente.
+**UI da selecao (dentro do Dialog de criar/editar regra):**
+- Secao com titulo "Corretores Participantes"
+- Lista de checkboxes com nome de cada corretor
+- Texto auxiliar: "Desmarque corretores que nao devem receber leads por esta regra. Se nenhum for selecionado, todos participam."
+- Botao rapido "Todos" / "Nenhum"
 
-#### 2. Auto-sync na UI do DistributionRulesManager
-
-No componente `DistributionRulesManager.tsx`, ao carregar os dados, verificar se existem corretores que nao estao no `broker_order` e adiciona-los automaticamente. Tambem exibir um botao "Sincronizar Corretores" caso o usuario queira forcar a atualizacao.
-
-**Arquivo: `src/components/DistributionRulesManager.tsx`**
-
-No `fetchData()` (linhas 140-179), apos carregar os brokers e o round robin config:
-1. Comparar `broker_order` com a lista completa de `brokers`
-2. Se houver corretores faltando, adicionar ao final do `broker_order`
-3. Salvar automaticamente no banco
-
-#### 3. Correcao imediata dos dados
-
-Atualizar o `broker_round_robin` da conta "Matriz Imobiliaria" para incluir todos os 5 corretores, e resetar o `last_broker_index` para 0 para que a distribuicao comece do inicio com a lista completa.
-
-### Alteracoes Tecnicas
-
-**Arquivo 1: `supabase/functions/apply-distribution-rules/index.ts`**
-
-Na funcao `getNextRoundRobinBroker` (linhas 254-334), adicionar verificacao de sync APOS carregar o `rrConfig` e os `brokers`:
-
-```text
-// Apos linha 295 (const brokerOrder = ...)
-// Verificar se todos os brokers estao no broker_order
-const missingBrokers = brokers
-  .filter(b => !brokerOrder.includes(b.user_id))
-  .map(b => b.user_id);
-
-if (missingBrokers.length > 0) {
-  brokerOrder.push(...missingBrokers);
-  // Atualizar no banco
-  await supabase
-    .from('broker_round_robin')
-    .update({ broker_order: brokerOrder })
-    .eq('id', rrConfig.id);
-  console.log(`Added ${missingBrokers.length} missing brokers to round robin`);
+**Conditions salvas (exemplo):**
+```json
+{
+  "participating_broker_ids": ["uuid1", "uuid2", "uuid3"]
 }
 ```
 
-**Arquivo 2: `src/components/DistributionRulesManager.tsx`**
+**Edge function - alteracao em `getNextRoundRobinBroker`:**
+- Novo parametro: `participatingBrokerIds?: string[]`
+- Filtrar `brokerOrder` antes de iterar: `brokerOrder.filter(id => participatingBrokerIds.includes(id))`
 
-No `fetchData()`, apos carregar brokers e round robin config:
+**Edge function - alteracao em `resolveBroker`:**
+- Extrair `rule.conditions.participating_broker_ids` e passar para `getNextRoundRobinBroker`
 
-```text
-// Se existem brokers que nao estao no broker_order, adicionar
-const currentOrder = rrConfig.broker_order || [];
-const allBrokerIds = brokers.map(b => b.user_id);
-const missing = allBrokerIds.filter(id => !currentOrder.includes(id));
+### Compatibilidade
+- Regras existentes sem `participating_broker_ids` continuam funcionando normalmente (todos participam)
+- Nao requer migracao de banco - o campo `conditions` ja e JSONB flexivel
+- A configuracao visual do Round Robin (card de reordenacao) continua funcionando, mas indicara quais corretores estao ativos na regra
 
-if (missing.length > 0 && rrConfig.id) {
-  const newOrder = [...currentOrder, ...missing];
-  await supabase
-    .from('broker_round_robin')
-    .update({ broker_order: newOrder })
-    .eq('id', rrConfig.id);
-  // Atualizar state local
-  rrConfig.broker_order = newOrder;
-}
-```
-
-Tambem remover do `broker_order` corretores que nao existem mais (limpeza de fantasmas).
-
-**Correcao imediata via SQL**: Atualizar o `broker_round_robin` da Matriz Imobiliaria com todos os 5 corretores.
-
-### Resultado Esperado
-
-| Cenario | Antes | Depois |
-|---------|-------|--------|
-| Novo corretor adicionado | Nao entra no round robin | Adicionado automaticamente na proxima execucao |
-| Corretor removido | Fica na lista, erro ao tentar atribuir | Removido automaticamente (ja tratado com skip) |
-| Conta Matriz Imobiliaria | 100% leads para Junior | Leads distribuidos entre os 5 corretores |
