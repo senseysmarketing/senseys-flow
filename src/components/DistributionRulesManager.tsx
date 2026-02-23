@@ -518,9 +518,13 @@ const DistributionRulesManager = () => {
     );
   }
 
-  const orderedBrokers = roundRobinConfig?.broker_order.length 
+  const activeRoundRobin = rules.find(r => r.rule_type === 'round_robin' && r.is_active);
+  const participatingIds = (activeRoundRobin?.conditions as any)?.participating_broker_ids as string[] | undefined;
+
+  const orderedBrokers = (roundRobinConfig?.broker_order.length 
     ? roundRobinConfig.broker_order.map(id => brokers.find(b => b.user_id === id)).filter(Boolean) as Broker[]
-    : brokers;
+    : brokers
+  ).filter(b => !participatingIds?.length || participatingIds.includes(b.user_id));
 
   return (
     <div className="space-y-6">
@@ -1036,6 +1040,11 @@ const DistributionRulesManager = () => {
           <CardDescription>
             Arraste para reordenar a sequência de distribuição de leads entre corretores
           </CardDescription>
+          {participatingIds && participatingIds.length > 0 && participatingIds.length < brokers.length && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+              Mostrando {participatingIds.length} de {brokers.length} corretores (apenas participantes da regra ativa)
+            </p>
+          )}
         </CardHeader>
         <CardContent>
           <DragDropContext onDragEnd={handleRoundRobinReorder}>
