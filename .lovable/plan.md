@@ -1,68 +1,39 @@
 
 
-## Seleção de Corretores Participantes por Regra de Distribuição
+## Correcao: Filtrar corretores na Configuracao Round Robin
 
-### Problema Atual
-Todas as regras de distribuição (Round Robin, Por Carga, etc.) incluem automaticamente todos os corretores da conta. Nao ha como excluir um corretor específico de uma regra ou selecionar apenas alguns participantes.
+### Problema
+Ao desmarcar corretores na regra Round Robin (ex: Junior Cesar Rosa e Maria julia cintra rubim), eles continuam aparecendo na secao "Configuracao Round Robin" abaixo. Isso acontece porque a lista `orderedBrokers` (linha 521-523) exibe todos os corretores da tabela `broker_round_robin.broker_order`, sem considerar o campo `participating_broker_ids` salvo nas conditions da regra ativa.
 
 ### Solucao
 
-Adicionar um campo `participating_broker_ids` nas conditions de cada regra, permitindo selecionar quais corretores participam. Quando vazio/nulo, todos participam (comportamento atual preservado).
-
-### Mudancas
-
-**1. Frontend - DistributionRulesManager.tsx**
-
-- Adicionar ao formulario de criacao/edicao de regras uma secao "Corretores Participantes" com checkboxes para cada corretor da conta
-- Um botao "Selecionar Todos" / "Desmarcar Todos" para facilitar
-- Exibir esta secao para todos os tipos de regra (round_robin, workload, origin, temperature, etc.)
-- Para regras que ja tem `target_broker_id` (destino fixo), manter o campo existente e nao mostrar a selecao de participantes (pois o destino ja e um corretor especifico)
-- Para regras de round_robin e workload (que distribuem entre varios), mostrar a selecao de participantes
-- Salvar os IDs selecionados dentro do campo `conditions` como `participating_broker_ids`
-- Na Configuracao Round Robin (card inferior), filtrar a lista de corretores para mostrar apenas os participantes da regra round_robin ativa, ou todos se nenhum filtro foi definido
-
-**2. Frontend - Formulario**
-
-- Adicionar `participating_broker_ids: string[]` ao state do form
-- Na funcao `buildConditions()`, incluir `participating_broker_ids` quando houver selecao parcial
-- Na funcao `openEditDialog()`, carregar os `participating_broker_ids` existentes das conditions
-- Mostrar a secao apenas para tipos round_robin e workload (os que distribuem entre multiplos corretores)
-
-**3. Backend - apply-distribution-rules/index.ts**
-
-- Na funcao `getNextRoundRobinBroker`, aceitar um parametro opcional `participatingBrokerIds`
-- Quando fornecido, filtrar `brokerOrder` para incluir apenas os IDs participantes
-- Na funcao `resolveBroker`, extrair `participating_broker_ids` das conditions da regra e passar para `getNextRoundRobinBroker`
+Filtrar `orderedBrokers` com base nos `participating_broker_ids` da regra Round Robin ativa.
 
 ### Detalhes Tecnicos
 
-**State do formulario - novo campo:**
-```typescript
-participating_broker_ids: string[]  // vazio = todos participam
+**Arquivo: `src/components/DistributionRulesManager.tsx`**
+
+1. Encontrar a regra round_robin ativa nas `rules` carregadas e extrair seus `participating_broker_ids`
+2. Alterar o calculo de `orderedBrokers` (linha 521-523) para filtrar apenas os corretores participantes quando houver selecao parcial
+3. Adicionar um indicador visual informando que nem todos os corretores participam (ex: "Mostrando apenas corretores participantes da regra ativa")
+
+Logica da alteracao:
+
+```
+// Antes (mostra todos):
+const orderedBrokers = roundRobinConfig?.broker_order.length 
+  ? roundRobinConfig.broker_order.map(id => brokers.find(...)).filter(Boolean)
+  : brokers;
+
+// Depois (filtra por participantes):
+const activeRoundRobin = rules.find(r => r.rule_type === 'round_robin' && r.is_active);
+const participatingIds = activeRoundRobin?.conditions?.participating_broker_ids;
+
+const orderedBrokers = (roundRobinConfig?.broker_order.length 
+  ? roundRobinConfig.broker_order.map(id => brokers.find(...)).filter(Boolean)
+  : brokers
+).filter(b => !participatingIds?.length || participatingIds.includes(b.user_id));
 ```
 
-**UI da selecao (dentro do Dialog de criar/editar regra):**
-- Secao com titulo "Corretores Participantes"
-- Lista de checkboxes com nome de cada corretor
-- Texto auxiliar: "Desmarque corretores que nao devem receber leads por esta regra. Se nenhum for selecionado, todos participam."
-- Botao rapido "Todos" / "Nenhum"
-
-**Conditions salvas (exemplo):**
-```json
-{
-  "participating_broker_ids": ["uuid1", "uuid2", "uuid3"]
-}
-```
-
-**Edge function - alteracao em `getNextRoundRobinBroker`:**
-- Novo parametro: `participatingBrokerIds?: string[]`
-- Filtrar `brokerOrder` antes de iterar: `brokerOrder.filter(id => participatingBrokerIds.includes(id))`
-
-**Edge function - alteracao em `resolveBroker`:**
-- Extrair `rule.conditions.participating_broker_ids` e passar para `getNextRoundRobinBroker`
-
-### Compatibilidade
-- Regras existentes sem `participating_broker_ids` continuam funcionando normalmente (todos participam)
-- Nao requer migracao de banco - o campo `conditions` ja e JSONB flexivel
-- A configuracao visual do Round Robin (card de reordenacao) continua funcionando, mas indicara quais corretores estao ativos na regra
+Tambem sera adicionada uma nota visual abaixo do titulo informando quantos corretores estao participando quando houver filtro ativo.
 
