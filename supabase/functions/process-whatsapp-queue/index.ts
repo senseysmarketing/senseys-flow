@@ -459,6 +459,58 @@ Deno.serve(async (req) => {
             if (existingSequenceMsgs && existingSequenceMsgs.length > 0) {
               console.log(`[process-whatsapp-queue] Greeting sequence detected for lead ${msg.lead_id}, skipping follow-up scheduling`)
             } else {
+              // ── Safety net: enqueue missing greeting sequence steps ──────
+              const { data: sequenceSteps } = await supabase
+                .from('whatsapp_greeting_sequence_steps')
+                .select('*')
+                .eq('automation_rule_id', msg.automation_rule_id)
+                .eq('is_active', true)
+                .order('position')
+
+              if (sequenceSteps && sequenceSteps.length > 0) {
+                // Check if sequence messages already exist in queue for this lead+rule
+                const { data: existingSeqInQueue } = await supabase
+                  .from('whatsapp_message_queue')
+                  .select('id')
+                  .eq('lead_id', msg.lead_id)
+                  .eq('automation_rule_id', msg.automation_rule_id)
+                  .neq('id', msg.id)
+                  .limit(1)
+
+                if (!existingSeqInQueue || existingSeqInQueue.length === 0) {
+                  // No sequence messages found — enqueue positions 2+ as safety net
+                  const remainingSteps = sequenceSteps.filter((s: any) => s.position > 1)
+                  if (remainingSteps.length > 0) {
+                    const seqSchedule = await getScheduleForAccount(msg.account_id)
+                    const seqNow = Date.now()
+                    const seqInserts = remainingSteps.map((step: any) => {
+                      const rawMs = seqNow + step.delay_seconds * 1000
+                      const scheduledMs = seqSchedule?.is_enabled
+                        ? getNextValidSendTime(rawMs, seqSchedule)
+                        : rawMs
+                      return {
+                        account_id: msg.account_id,
+                        lead_id: msg.lead_id,
+                        phone: msg.phone,
+                        message: '',
+                        template_id: step.template_id,
+                        automation_rule_id: msg.automation_rule_id,
+                        scheduled_for: new Date(scheduledMs).toISOString(),
+                        status: 'pending',
+                      }
+                    })
+                    const { error: seqInsertErr } = await supabase
+                      .from('whatsapp_message_queue')
+                      .insert(seqInserts)
+                    if (seqInsertErr) {
+                      console.error(`[process-whatsapp-queue] Error enqueuing sequence safety-net for lead ${msg.lead_id}:`, seqInsertErr)
+                    } else {
+                      console.log(`[process-whatsapp-queue] Safety-net: enqueued ${remainingSteps.length} sequence steps for lead ${msg.lead_id}`)
+                    }
+                  }
+                }
+              }
+              // ── End safety net ──────────────────────────────────────────
 
               const { data: rule } = await supabase
                 .from('whatsapp_automation_rules')
@@ -480,13 +532,21 @@ Deno.serve(async (req) => {
                   // Fetch schedule once for follow-up calculations
                   const fuSchedule = await getScheduleForAccount(msg.account_id)
 
-                  const followUpInserts = followUpSteps.map((step: any) => {
-                    const rawScheduledMs = now + step.delay_minutes * 60 * 1000
+                  // Sequential calculation: each follow-up is based on the
+                  // adjusted time of the previous one, not independently from "now".
+                  // delay_minutes are absolute (1440, 2880, 4320), so we compute deltas.
+                  const followUpInserts: any[] = []
+                  let lastScheduledMs = now
+                  let previousDelayMinutes = 0
+
+                  for (const step of followUpSteps as any[]) {
+                    const deltaMinutes = step.delay_minutes - previousDelayMinutes
+                    const rawScheduledMs = lastScheduledMs + deltaMinutes * 60 * 1000
                     const scheduledMs = fuSchedule?.is_enabled
                       ? getNextValidSendTime(rawScheduledMs, fuSchedule)
                       : rawScheduledMs
 
-                    return {
+                    followUpInserts.push({
                       account_id: msg.account_id,
                       lead_id: msg.lead_id,
                       phone: msg.phone,
@@ -496,8 +556,11 @@ Deno.serve(async (req) => {
                       automation_rule_id: msg.automation_rule_id,
                       scheduled_for: new Date(scheduledMs).toISOString(),
                       status: 'pending',
-                    }
-                  })
+                    })
+
+                    lastScheduledMs = scheduledMs
+                    previousDelayMinutes = step.delay_minutes
+                  }
 
                   const { error: insertError } = await supabase
                     .from('whatsapp_message_queue')
@@ -506,7 +569,8 @@ Deno.serve(async (req) => {
                   if (insertError) {
                     console.error(`[process-whatsapp-queue] Error scheduling follow-ups for lead ${msg.lead_id}:`, insertError)
                   } else {
-                    console.log(`[process-whatsapp-queue] Scheduled ${followUpSteps.length} follow-ups for lead ${msg.lead_id}`)
+                    const scheduled = followUpInserts.map((f, i) => `FU${i+1}=${f.scheduled_for}`).join(', ')
+                    console.log(`[process-whatsapp-queue] Scheduled ${followUpSteps.length} sequential follow-ups for lead ${msg.lead_id}: ${scheduled}`)
                   }
                 }
               }
