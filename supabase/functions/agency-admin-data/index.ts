@@ -79,23 +79,28 @@ Deno.serve(async (req) => {
     // Get stats for each account
     const accountsWithStats = await Promise.all(
       (accounts || []).map(async (account) => {
-        // Get user count
-        const { count: userCount } = await adminClient
-          .from('profiles')
-          .select('*', { count: 'exact', head: true })
-          .eq('account_id', account.id);
-
         // Get lead count
         const { count: leadCount } = await adminClient
           .from('leads')
           .select('*', { count: 'exact', head: true })
           .eq('account_id', account.id);
 
-        // Get property count
-        const { count: propertyCount } = await adminClient
-          .from('properties')
-          .select('*', { count: 'exact', head: true })
-          .eq('account_id', account.id);
+        // Get WhatsApp session status
+        const { data: whatsappSession } = await adminClient
+          .from('whatsapp_sessions')
+          .select('status, phone_number')
+          .eq('account_id', account.id)
+          .single();
+
+        // Get last sent message
+        const { data: lastSentMessage } = await adminClient
+          .from('whatsapp_message_queue')
+          .select('sent_at')
+          .eq('account_id', account.id)
+          .eq('status', 'sent')
+          .order('sent_at', { ascending: false })
+          .limit(1)
+          .single();
 
         // Get last lead
         const { data: lastLead } = await adminClient
@@ -127,9 +132,10 @@ Deno.serve(async (req) => {
 
         return {
           ...account,
-          user_count: userCount || 0,
           lead_count: leadCount || 0,
-          property_count: propertyCount || 0,
+          whatsapp_connected: whatsappSession?.status === 'connected',
+          whatsapp_phone: whatsappSession?.phone_number || null,
+          last_message_sent_at: lastSentMessage?.sent_at || null,
           last_lead_at: lastLead?.created_at || null,
           last_activity_at: lastActivity?.created_at || lastLead?.created_at || null,
           days_since_activity: daysSinceActivity,
@@ -142,8 +148,7 @@ Deno.serve(async (req) => {
     const totals = {
       total_accounts: accountsWithStats.length,
       total_leads: accountsWithStats.reduce((sum, a) => sum + a.lead_count, 0),
-      total_users: accountsWithStats.reduce((sum, a) => sum + a.user_count, 0),
-      total_properties: accountsWithStats.reduce((sum, a) => sum + a.property_count, 0),
+      whatsapp_connected_count: accountsWithStats.filter(a => a.whatsapp_connected).length,
       active_accounts: accountsWithStats.filter(a => a.status === 'active').length,
       inactive_accounts: accountsWithStats.filter(a => a.status === 'inactive').length,
       dormant_accounts: accountsWithStats.filter(a => a.status === 'dormant').length,
