@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { Building2, Users, Target, Home, Activity, Clock, Plus, Key, Pencil, Trash2, Loader2, Facebook } from "lucide-react";
+import { Building2, Target, Activity, Clock, Plus, Key, Pencil, Trash2, Loader2, Facebook, Smartphone } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CreateClientModal } from "@/components/agency/CreateClientModal";
@@ -23,9 +23,10 @@ interface AccountData {
   name: string;
   company_name: string | null;
   created_at: string;
-  user_count: number;
   lead_count: number;
-  property_count: number;
+  whatsapp_connected: boolean;
+  whatsapp_phone: string | null;
+  last_message_sent_at: string | null;
   last_lead_at: string | null;
   last_activity_at: string | null;
   days_since_activity: number;
@@ -37,8 +38,7 @@ interface AgencyData {
   totals: {
     total_accounts: number;
     total_leads: number;
-    total_users: number;
-    total_properties: number;
+    whatsapp_connected_count: number;
     active_accounts: number;
     inactive_accounts: number;
     dormant_accounts: number;
@@ -218,7 +218,7 @@ const AgencyAdmin = () => {
         <TabsContent value="accounts" className="space-y-6">
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card className="bg-card/50 backdrop-blur border-border/50">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -246,22 +246,10 @@ const AgencyAdmin = () => {
         <Card className="bg-card/50 backdrop-blur border-border/50">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <Users className="h-5 w-5 text-purple-400" />
+              <Smartphone className="h-5 w-5 text-green-400" />
               <div>
-                <p className="text-2xl font-bold">{loading ? <Skeleton className="h-8 w-12" /> : data?.totals.total_users}</p>
-                <p className="text-xs text-muted-foreground">Usuários</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-card/50 backdrop-blur border-border/50">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <Home className="h-5 w-5 text-orange-400" />
-              <div>
-                <p className="text-2xl font-bold">{loading ? <Skeleton className="h-8 w-12" /> : data?.totals.total_properties}</p>
-                <p className="text-xs text-muted-foreground">Imóveis</p>
+                <p className="text-2xl font-bold text-green-400">{loading ? <Skeleton className="h-8 w-12" /> : data?.totals.whatsapp_connected_count}</p>
+                <p className="text-xs text-muted-foreground">WhatsApp Conectados</p>
               </div>
             </div>
           </CardContent>
@@ -328,35 +316,46 @@ const AgencyAdmin = () => {
               <Table>
                 <TableHeader>
                   <TableRow className="border-border/50">
-                    <TableHead>Nome / Empresa</TableHead>
-                    <TableHead className="text-center">Usuários</TableHead>
-                    <TableHead className="text-center">Leads</TableHead>
-                    <TableHead className="text-center">Imóveis</TableHead>
-                    <TableHead>Último Lead</TableHead>
-                    <TableHead className="text-center">Status</TableHead>
-                    <TableHead className="text-center">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data?.accounts.map((account) => (
-                    <TableRow key={account.id} className="border-border/30 hover:bg-muted/30">
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{account.company_name || account.name}</p>
-                          {account.company_name && account.company_name !== account.name && (
-                            <p className="text-xs text-muted-foreground">{account.name}</p>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className="font-medium">{account.user_count}</span>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className="font-medium text-blue-400">{account.lead_count}</span>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className="font-medium text-orange-400">{account.property_count}</span>
-                      </TableCell>
+                     <TableHead>Nome / Empresa</TableHead>
+                     <TableHead className="text-center">Leads</TableHead>
+                     <TableHead className="text-center">WhatsApp</TableHead>
+                     <TableHead>Última Msg</TableHead>
+                     <TableHead>Último Lead</TableHead>
+                     <TableHead className="text-center">Status</TableHead>
+                     <TableHead className="text-center">Ações</TableHead>
+                   </TableRow>
+                 </TableHeader>
+                 <TableBody>
+                   {data?.accounts.map((account) => (
+                     <TableRow key={account.id} className="border-border/30 hover:bg-muted/30">
+                       <TableCell>
+                         <div>
+                           <p className="font-medium">{account.company_name || account.name}</p>
+                           {account.company_name && account.company_name !== account.name && (
+                             <p className="text-xs text-muted-foreground">{account.name}</p>
+                           )}
+                         </div>
+                       </TableCell>
+                       <TableCell className="text-center">
+                         <span className="font-medium text-blue-400">{account.lead_count}</span>
+                       </TableCell>
+                       <TableCell className="text-center">
+                         {account.whatsapp_connected ? (
+                           <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                             <Smartphone className="h-3 w-3 mr-1" />
+                             Conectado
+                           </Badge>
+                         ) : (
+                           <Badge className="bg-red-500/20 text-red-400 border-red-500/30">
+                             Desconectado
+                           </Badge>
+                         )}
+                       </TableCell>
+                       <TableCell className="text-sm text-muted-foreground">
+                         {account.whatsapp_connected && account.last_message_sent_at
+                           ? formatDate(account.last_message_sent_at)
+                           : '—'}
+                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {formatDate(account.last_lead_at)}
                       </TableCell>
