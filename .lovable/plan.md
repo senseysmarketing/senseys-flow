@@ -1,55 +1,44 @@
 
-## Correcao: Automacao WhatsApp no meta-webhook desatualizada
+## Painel da Agencia: Trocar colunas e adicionar status WhatsApp
 
-### Problema
-A edge function `meta-webhook` usa um bloco de automacao WhatsApp simplificado e desatualizado (linhas 243-299) que:
+### Resumo
+Remover as colunas "Usuarios" e "Imoveis" da tabela e dos cards de totais. Adicionar duas novas colunas: "WhatsApp" (status de conexao) e "Ultima Msg" (data da ultima mensagem enviada com sucesso).
 
-1. **Nao suporta regras condicionais de saudacao** (`whatsapp_greeting_rules`) - apenas usa a tabela antiga `whatsapp_automation_rules`
-2. **Nao suporta sequencias de mensagens** (`whatsapp_greeting_sequence_steps`) - envia apenas 1 mensagem
-3. **Engole todos os erros** com `catch {}` vazio - impossivel diagnosticar falhas
-4. **Nao substitui a variavel `{imovel}`** no template
+### Alteracoes
 
-Enquanto isso, a funcao `webhook-leads` ja possui a implementacao completa e moderna com todas essas funcionalidades.
+**1. Edge Function `supabase/functions/agency-admin-data/index.ts`**
 
-### Solucao
+- Remover queries de `userCount` e `propertyCount` (linhas 83-98)
+- Adicionar query na tabela `whatsapp_sessions` para verificar se a conta tem sessao com `status = 'connected'`:
+```
+const { data: whatsappSession } = await adminClient
+  .from('whatsapp_sessions')
+  .select('status, phone_number')
+  .eq('account_id', account.id)
+  .single();
+```
+- Adicionar query na tabela `whatsapp_message_queue` para buscar a ultima mensagem enviada com sucesso (`status = 'sent'`):
+```
+const { data: lastMessage } = await adminClient
+  .from('whatsapp_message_queue')
+  .select('sent_at')
+  .eq('account_id', account.id)
+  .eq('status', 'sent')
+  .order('sent_at', { ascending: false })
+  .limit(1)
+  .single();
+```
+- Retornar `whatsapp_connected` (boolean), `whatsapp_phone` (string|null) e `last_message_sent_at` (string|null) em vez de `user_count` e `property_count`
+- Atualizar `totals`: remover `total_users` e `total_properties`, adicionar `whatsapp_connected_count`
 
-Substituir o bloco de automacao WhatsApp no `meta-webhook` (linhas 243-299) pela mesma logica presente no `webhook-leads` (linhas 533-743), adaptada ao contexto do meta-webhook.
+**2. Frontend `src/pages/AgencyAdmin.tsx`**
 
-### Detalhes Tecnicos
-
-**Arquivo: `supabase/functions/meta-webhook/index.ts`**
-
-Substituir o bloco inteiro (linhas 243-299) pela seguinte logica:
-
-1. Verificar sessao WhatsApp conectada
-2. Buscar regras condicionais de saudacao (`whatsapp_greeting_rules`) ordenadas por prioridade
-3. Buscar informacoes do imovel vinculado (preco, tipo, transacao) para matching de regras
-4. Avaliar regras condicionais na ordem de prioridade:
-   - `property` - imovel especifico
-   - `price_range` - faixa de preco
-   - `property_type` - tipo de imovel
-   - `transaction_type` - tipo de transacao
-   - `campaign` - campanha
-   - `origin` - origem
-   - `form_answer` - resposta de formulario Meta
-5. Se nenhuma regra condicional bater, usar fallback para `whatsapp_automation_rules` (comportamento atual), verificando se a fonte `meta` esta habilitada
-6. Verificar se ha sequencia de mensagens (`whatsapp_greeting_sequence_steps`) para a regra/automacao selecionada
-7. Se houver sequencia, enfileirar todas as mensagens com delays acumulados
-8. Se nao houver sequencia, enfileirar mensagem unica (comportamento atual)
-9. Substituir variaveis incluindo `{imovel}`
-10. Trocar `catch {}` por `catch (e) { console.error(...) }`
-
-Tambem corrigir os outros `catch {}` vazios nas linhas 241 e 316 para logar erros.
-
-**Variaveis ja disponiveis no contexto do meta-webhook:**
-- `cfg.account_id` - ID da conta
-- `newLead.id` - ID do lead criado
-- `name`, `phone`, `email` - dados do lead
-- `propId` - ID do imovel vinculado (pode ser null)
-- `campName` - nome da campanha
-- `isIg` - se e Instagram
-
-**Adaptacoes necessarias em relacao ao webhook-leads:**
-- A variavel de origem usa `isIg ? "Instagram" : "Facebook"` em vez de `leadData.origem`
-- A variavel de imovel precisa buscar `propertyName` via query (ja existe busca similar na linha 239)
-- O `callSource` sera fixo como `'meta'` (em vez de `'webhook'` ou `'olx'`)
+- Atualizar interface `AccountData`: remover `user_count` e `property_count`, adicionar `whatsapp_connected`, `whatsapp_phone` e `last_message_sent_at`
+- Atualizar interface `AgencyData.totals`: remover `total_users` e `total_properties`, adicionar `whatsapp_connected_count`
+- Remover os cards de "Usuarios" e "Imoveis" dos stats (reduzir grid de 7 para 5 colunas)
+- Adicionar card de "WhatsApp Conectados" com icone verde
+- Na tabela, substituir colunas:
+  - Remover "Usuarios" e "Imoveis"
+  - Adicionar "WhatsApp" com badge verde "Conectado" ou vermelho "Desconectado"
+  - Adicionar "Ultima Msg" mostrando data relativa (ex: "ha 2 horas") ou "—" se WhatsApp desconectado
+- Importar icone `MessageSquare` ou `Smartphone` do lucide-react para o card e colunas
