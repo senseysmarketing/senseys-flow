@@ -317,9 +317,9 @@ const AgencyAdmin = () => {
                 <TableHeader>
                   <TableRow className="border-border/50">
                      <TableHead>Nome / Empresa</TableHead>
-                     <TableHead className="text-center">Leads</TableHead>
                      <TableHead className="text-center">WhatsApp</TableHead>
                      <TableHead>Última Msg</TableHead>
+                     <TableHead className="text-center">Leads</TableHead>
                      <TableHead>Último Lead</TableHead>
                      <TableHead className="text-center">Status</TableHead>
                      <TableHead className="text-center">Ações</TableHead>
@@ -337,9 +337,6 @@ const AgencyAdmin = () => {
                          </div>
                        </TableCell>
                        <TableCell className="text-center">
-                         <span className="font-medium text-blue-400">{account.lead_count}</span>
-                       </TableCell>
-                       <TableCell className="text-center">
                          {account.whatsapp_connected ? (
                            <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
                              <Smartphone className="h-3 w-3 mr-1" />
@@ -355,6 +352,9 @@ const AgencyAdmin = () => {
                          {account.whatsapp_connected && account.last_message_sent_at
                            ? formatDate(account.last_message_sent_at)
                            : '—'}
+                       </TableCell>
+                       <TableCell className="text-center">
+                         <span className="font-medium text-blue-400">{account.lead_count}</span>
                        </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {formatDate(account.last_lead_at)}
