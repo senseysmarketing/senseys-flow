@@ -1,61 +1,85 @@
 
-## Correcao: Corretor vendo todos os leads
+## Correcao Critica: WhatsApp mostra "Desconectado" mesmo com Evolution API conectado
 
-### Problema
-Na funcao `fetchData()` do arquivo `src/pages/Leads.tsx` (linha 217), a query de leads busca **todos os leads** da conta sem nenhum filtro por `assigned_broker_id`. O sistema de permissoes (`leads.view_own` vs `leads.view_all`) existe na interface de configuracao, mas nunca e aplicado na query real de dados.
+### Problema Identificado
 
-### Causa raiz
-A query atual:
-```typescript
-const { data: leadsData } = await supabase
-  .from('leads')
-  .select('...')
-  .order('created_at', { ascending: false });
-```
-Nao possui nenhum `.eq('assigned_broker_id', user.id)` condicional. O RLS filtra apenas por `account_id`, entao todos os usuarios da mesma conta veem todos os leads.
+O sistema depende **exclusivamente** da tabela `whatsapp_sessions` no banco de dados para determinar se o WhatsApp esta conectado. O campo `status` so e atualizado em dois momentos:
+
+1. Quando o webhook recebe um evento `CONNECTION_UPDATE` com `state: open` ou `state: close`
+2. Quando o usuario abre a pagina de Configuracoes (acao `status` na edge function `whatsapp-connect`)
+
+**Se o webhook falhar** (timeout, erro de rede, evento perdido) ou se a instancia reconectar automaticamente sem disparar um novo evento, o banco permanece com `status = 'disconnected'` enquanto a Evolution API esta **realmente conectada**. Isso causa:
+
+- Mensagens automaticas marcadas como "failed" com erro "WhatsApp nao conectado"
+- Painel da agencia mostrando "Desconectado" incorretamente
+- Envios manuais tambem bloqueados
 
 ### Solucao
 
-**Arquivo: `src/pages/Leads.tsx`**
+Adicionar uma **verificacao direta com a Evolution API** nos dois pontos criticos antes de desistir e marcar como falha. Se a API confirmar que a instancia esta conectada, atualizar o banco e prosseguir normalmente.
 
-Modificar a funcao `fetchData()` para verificar as permissoes do usuario antes de executar a query:
+### Alteracoes
 
-1. Verificar se o usuario tem permissao `leads.view_all` ou e Owner
-2. Se **sim** -> manter query atual (sem filtro de broker)
-3. Se **nao** (tem apenas `leads.view_own`) -> adicionar `.eq('assigned_broker_id', user.id)` na query
+**1. Edge Function `supabase/functions/process-whatsapp-queue/index.ts` (linhas 217-238)**
 
-### Detalhes Tecnicos
-
-No bloco de fetch de leads (linha 217), alterar de:
-
-```typescript
-const { data: leadsData } = await supabase
-  .from('leads')
-  .select('...')
-  .order('created_at', { ascending: false });
-```
-
-Para:
+Quando nao encontrar sessao conectada no banco:
+- Buscar o `instance_name` da sessao (mesmo desconectada)
+- Consultar `GET /instance/connectionState/{instanceName}` na Evolution API
+- Se `state === 'open'`: atualizar `whatsapp_sessions.status` para `'connected'` e continuar o envio normalmente
+- Se realmente desconectado: manter comportamento atual (marcar como failed)
 
 ```typescript
-let leadsQuery = supabase
-  .from('leads')
-  .select('...')
-  .order('created_at', { ascending: false });
+// Buscar sessao independente do status
+const { data: session } = await supabase
+  .from('whatsapp_sessions')
+  .select('status, instance_name')
+  .eq('account_id', msg.account_id)
+  .maybeSingle()
 
-// Se usuario NAO tem permissao de ver todos, filtrar apenas os atribuidos a ele
-const canViewAll = hasPermission('leads.view_all') || isOwner;
-if (!canViewAll) {
-  leadsQuery = leadsQuery.eq('assigned_broker_id', user.id);
+if (!session) {
+  // Nenhuma sessao existe - marcar como failed
+  ...
+  continue
 }
 
-const { data: leadsData, error: leadsError } = await leadsQuery;
+// Se status no banco nao e 'connected', verificar na Evolution API
+if (session.status !== 'connected') {
+  const apiUrl = EVOLUTION_API_URL.startsWith('http') ? EVOLUTION_API_URL : `https://${EVOLUTION_API_URL}`
+  const statusResp = await fetch(
+    `${apiUrl}/instance/connectionState/${session.instance_name}`,
+    { headers: { 'apikey': EVOLUTION_API_KEY } }
+  )
+  if (statusResp.ok) {
+    const statusData = await statusResp.json()
+    if (statusData.instance?.state === 'open') {
+      // API conectada! Atualizar banco e continuar
+      await supabase.from('whatsapp_sessions')
+        .update({ status: 'connected', updated_at: new Date().toISOString() })
+        .eq('account_id', msg.account_id)
+      console.log('[process-whatsapp-queue] Session was stale - API confirms connected, updated DB')
+    } else {
+      // Realmente desconectado
+      await supabase.from('whatsapp_message_queue')
+        .update({ status: 'failed', error_message: 'WhatsApp nao conectado' })
+        .eq('id', msg.id)
+      errorCount++
+      continue
+    }
+  }
+}
 ```
 
-Tambem aplicar o mesmo filtro no hook `use-lead-priorities.tsx` que tambem busca leads, e no componente `BrokerRanking.tsx` caso seja relevante.
+**2. Edge Function `supabase/functions/whatsapp-send/index.ts` (linhas ~155-170)**
 
-**Arquivos a editar:**
-- `src/pages/Leads.tsx` - Filtro principal na query de leads
-- `src/hooks/use-lead-priorities.tsx` - Mesmo filtro para o painel de prioridades (se aplicavel)
+Mesma logica: quando nao encontrar sessao conectada, verificar na Evolution API antes de retornar erro. Se conectada, atualizar DB e prosseguir com o envio.
 
-**Nota:** O RLS no Supabase ja filtra por `account_id`. Esta mudanca adiciona a camada de filtragem por broker no nivel da aplicacao, respeitando a permissao `leads.view_own` configurada para o papel de Corretor.
+**3. Adicionar variaveis EVOLUTION_API no `process-whatsapp-queue`**
+
+O `process-whatsapp-queue` ja usa `EVOLUTION_API_URL` e `EVOLUTION_API_KEY` mais abaixo no codigo (linha ~339), entao basta reutilizar no topo do loop.
+
+### Arquivos a editar
+- `supabase/functions/process-whatsapp-queue/index.ts` - Verificacao de fallback com Evolution API antes de falhar
+- `supabase/functions/whatsapp-send/index.ts` - Mesma verificacao de fallback
+
+### Impacto
+Esta mudanca garante que mesmo se um webhook de `CONNECTION_UPDATE` for perdido, o sistema **nunca** marcara mensagens como falhas enquanto a Evolution API estiver realmente conectada. A sincronizacao do status no banco sera feita automaticamente quando detectada a divergencia.
