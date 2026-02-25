@@ -185,22 +185,57 @@ Deno.serve(async (req) => {
     const formattedPhone = formatPhoneForEvolution(phone)
     console.log(`[whatsapp-send] Sending message to ${phone} -> formatted: ${formattedPhone} for account ${accountId}`)
 
+    // Fetch session regardless of status
     const { data: session, error: sessionError } = await supabase
       .from('whatsapp_sessions')
       .select('*')
       .eq('account_id', accountId)
-      .eq('status', 'connected')
       .maybeSingle()
 
     if (sessionError || !session) {
-      console.log('[whatsapp-send] No connected session found')
+      console.log('[whatsapp-send] No session found at all')
       return new Response(JSON.stringify({ 
-        error: 'WhatsApp não conectado. Reconecte nas configurações.',
+        error: 'Sessão do WhatsApp não encontrada. Configure nas configurações.',
         connected: false
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
+    }
+
+    // If DB says not connected, verify directly with Evolution API before giving up
+    if (session.status !== 'connected') {
+      console.log(`[whatsapp-send] DB status is '${session.status}', verifying with Evolution API...`)
+      let apiConfirmsConnected = false
+      try {
+        const statusResp = await fetch(
+          `${EVOLUTION_API_URL}/instance/connectionState/${session.instance_name}`,
+          { headers: { 'apikey': EVOLUTION_API_KEY } }
+        )
+        if (statusResp.ok) {
+          const statusData = await statusResp.json()
+          if (statusData.instance?.state === 'open') {
+            apiConfirmsConnected = true
+            await supabase.from('whatsapp_sessions')
+              .update({ status: 'connected', updated_at: new Date().toISOString() })
+              .eq('account_id', accountId)
+            console.log(`[whatsapp-send] ✅ Session was stale - Evolution API confirms CONNECTED. Updated DB.`)
+          }
+        }
+      } catch (apiErr) {
+        console.error('[whatsapp-send] Error checking Evolution API status:', apiErr)
+      }
+
+      if (!apiConfirmsConnected) {
+        console.log('[whatsapp-send] Session truly disconnected')
+        return new Response(JSON.stringify({ 
+          error: 'WhatsApp não conectado. Reconecte nas configurações.',
+          connected: false
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
     }
 
     // Send message via Evolution API with automatic retry
