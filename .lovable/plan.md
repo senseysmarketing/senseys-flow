@@ -1,44 +1,61 @@
 
-## Painel da Agencia: Trocar colunas e adicionar status WhatsApp
+## Correcao: Corretor vendo todos os leads
 
-### Resumo
-Remover as colunas "Usuarios" e "Imoveis" da tabela e dos cards de totais. Adicionar duas novas colunas: "WhatsApp" (status de conexao) e "Ultima Msg" (data da ultima mensagem enviada com sucesso).
+### Problema
+Na funcao `fetchData()` do arquivo `src/pages/Leads.tsx` (linha 217), a query de leads busca **todos os leads** da conta sem nenhum filtro por `assigned_broker_id`. O sistema de permissoes (`leads.view_own` vs `leads.view_all`) existe na interface de configuracao, mas nunca e aplicado na query real de dados.
 
-### Alteracoes
-
-**1. Edge Function `supabase/functions/agency-admin-data/index.ts`**
-
-- Remover queries de `userCount` e `propertyCount` (linhas 83-98)
-- Adicionar query na tabela `whatsapp_sessions` para verificar se a conta tem sessao com `status = 'connected'`:
+### Causa raiz
+A query atual:
+```typescript
+const { data: leadsData } = await supabase
+  .from('leads')
+  .select('...')
+  .order('created_at', { ascending: false });
 ```
-const { data: whatsappSession } = await adminClient
-  .from('whatsapp_sessions')
-  .select('status, phone_number')
-  .eq('account_id', account.id)
-  .single();
-```
-- Adicionar query na tabela `whatsapp_message_queue` para buscar a ultima mensagem enviada com sucesso (`status = 'sent'`):
-```
-const { data: lastMessage } = await adminClient
-  .from('whatsapp_message_queue')
-  .select('sent_at')
-  .eq('account_id', account.id)
-  .eq('status', 'sent')
-  .order('sent_at', { ascending: false })
-  .limit(1)
-  .single();
-```
-- Retornar `whatsapp_connected` (boolean), `whatsapp_phone` (string|null) e `last_message_sent_at` (string|null) em vez de `user_count` e `property_count`
-- Atualizar `totals`: remover `total_users` e `total_properties`, adicionar `whatsapp_connected_count`
+Nao possui nenhum `.eq('assigned_broker_id', user.id)` condicional. O RLS filtra apenas por `account_id`, entao todos os usuarios da mesma conta veem todos os leads.
 
-**2. Frontend `src/pages/AgencyAdmin.tsx`**
+### Solucao
 
-- Atualizar interface `AccountData`: remover `user_count` e `property_count`, adicionar `whatsapp_connected`, `whatsapp_phone` e `last_message_sent_at`
-- Atualizar interface `AgencyData.totals`: remover `total_users` e `total_properties`, adicionar `whatsapp_connected_count`
-- Remover os cards de "Usuarios" e "Imoveis" dos stats (reduzir grid de 7 para 5 colunas)
-- Adicionar card de "WhatsApp Conectados" com icone verde
-- Na tabela, substituir colunas:
-  - Remover "Usuarios" e "Imoveis"
-  - Adicionar "WhatsApp" com badge verde "Conectado" ou vermelho "Desconectado"
-  - Adicionar "Ultima Msg" mostrando data relativa (ex: "ha 2 horas") ou "—" se WhatsApp desconectado
-- Importar icone `MessageSquare` ou `Smartphone` do lucide-react para o card e colunas
+**Arquivo: `src/pages/Leads.tsx`**
+
+Modificar a funcao `fetchData()` para verificar as permissoes do usuario antes de executar a query:
+
+1. Verificar se o usuario tem permissao `leads.view_all` ou e Owner
+2. Se **sim** -> manter query atual (sem filtro de broker)
+3. Se **nao** (tem apenas `leads.view_own`) -> adicionar `.eq('assigned_broker_id', user.id)` na query
+
+### Detalhes Tecnicos
+
+No bloco de fetch de leads (linha 217), alterar de:
+
+```typescript
+const { data: leadsData } = await supabase
+  .from('leads')
+  .select('...')
+  .order('created_at', { ascending: false });
+```
+
+Para:
+
+```typescript
+let leadsQuery = supabase
+  .from('leads')
+  .select('...')
+  .order('created_at', { ascending: false });
+
+// Se usuario NAO tem permissao de ver todos, filtrar apenas os atribuidos a ele
+const canViewAll = hasPermission('leads.view_all') || isOwner;
+if (!canViewAll) {
+  leadsQuery = leadsQuery.eq('assigned_broker_id', user.id);
+}
+
+const { data: leadsData, error: leadsError } = await leadsQuery;
+```
+
+Tambem aplicar o mesmo filtro no hook `use-lead-priorities.tsx` que tambem busca leads, e no componente `BrokerRanking.tsx` caso seja relevante.
+
+**Arquivos a editar:**
+- `src/pages/Leads.tsx` - Filtro principal na query de leads
+- `src/hooks/use-lead-priorities.tsx` - Mesmo filtro para o painel de prioridades (se aplicavel)
+
+**Nota:** O RLS no Supabase ja filtra por `account_id`. Esta mudanca adiciona a camada de filtragem por broker no nivel da aplicacao, respeitando a permissao `leads.view_own` configurada para o papel de Corretor.
