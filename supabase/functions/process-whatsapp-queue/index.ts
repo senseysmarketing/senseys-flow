@@ -214,27 +214,59 @@ Deno.serve(async (req) => {
         }
         // ────────────────────────────────────────────────────────────────────
 
-        // Check if WhatsApp session is still connected for this account
+        // Check if WhatsApp session exists for this account (regardless of status)
         const { data: session } = await supabase
           .from('whatsapp_sessions')
           .select('status, instance_name')
           .eq('account_id', msg.account_id)
-          .eq('status', 'connected')
-          .single()
+          .maybeSingle()
 
         if (!session) {
-          console.log(`[process-whatsapp-queue] No connected session for account ${msg.account_id}, skipping message ${msg.id}`)
-          
+          console.log(`[process-whatsapp-queue] No session at all for account ${msg.account_id}, skipping message ${msg.id}`)
           await supabase
             .from('whatsapp_message_queue')
-            .update({ 
-              status: 'failed',
-              error_message: 'WhatsApp não conectado'
-            })
+            .update({ status: 'failed', error_message: 'Sessão do WhatsApp não encontrada' })
             .eq('id', msg.id)
-          
           errorCount++
           continue
+        }
+
+        // If DB says not connected, verify directly with Evolution API before giving up
+        if (session.status !== 'connected') {
+          const EVOLUTION_API_URL_RAW = Deno.env.get('EVOLUTION_API_URL') || ''
+          const EVOLUTION_API_KEY_VAL = Deno.env.get('EVOLUTION_API_KEY') || ''
+          const apiUrl = EVOLUTION_API_URL_RAW.startsWith('http') ? EVOLUTION_API_URL_RAW : `https://${EVOLUTION_API_URL_RAW}`
+
+          let apiConfirmsConnected = false
+          try {
+            const statusResp = await fetch(
+              `${apiUrl}/instance/connectionState/${session.instance_name}`,
+              { headers: { 'apikey': EVOLUTION_API_KEY_VAL } }
+            )
+            if (statusResp.ok) {
+              const statusData = await statusResp.json()
+              if (statusData.instance?.state === 'open') {
+                apiConfirmsConnected = true
+                // Sync DB with real status
+                await supabase.from('whatsapp_sessions')
+                  .update({ status: 'connected', updated_at: new Date().toISOString() })
+                  .eq('account_id', msg.account_id)
+                console.log(`[process-whatsapp-queue] ✅ Session was stale (DB: ${session.status}) - Evolution API confirms CONNECTED. Updated DB.`)
+              }
+            }
+          } catch (apiErr) {
+            console.error(`[process-whatsapp-queue] Error checking Evolution API status:`, apiErr)
+          }
+
+          if (!apiConfirmsConnected) {
+            console.log(`[process-whatsapp-queue] Session truly disconnected for account ${msg.account_id}, skipping message ${msg.id}`)
+            await supabase
+              .from('whatsapp_message_queue')
+              .update({ status: 'failed', error_message: 'WhatsApp não conectado' })
+              .eq('id', msg.id)
+            errorCount++
+            continue
+          }
         }
 
         // Before sending follow-up messages, check if lead has responded
