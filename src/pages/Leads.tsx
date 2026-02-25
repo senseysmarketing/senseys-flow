@@ -214,7 +214,7 @@ const Leads = () => {
       setStatuses(statusData || []);
 
       // Fetch leads
-      const { data: leadsData, error: leadsError } = await supabase
+      let leadsQuery = supabase
         .from('leads')
         .select(`
           *,
@@ -228,6 +228,14 @@ const Leads = () => {
           )
         `)
         .order('created_at', { ascending: false });
+
+      // Se usuário NÃO tem permissão de ver todos, filtrar apenas os atribuídos a ele
+      const canViewAll = hasPermission('leads.view_all') || isOwner;
+      if (!canViewAll) {
+        leadsQuery = leadsQuery.eq('assigned_broker_id', user.id);
+      }
+
+      const { data: leadsData, error: leadsError } = await leadsQuery;
 
       console.log('Leads fetch result:', { count: leadsData?.length, error: leadsError });
       

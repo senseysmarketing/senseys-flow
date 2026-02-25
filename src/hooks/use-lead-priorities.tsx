@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./use-auth";
+import { usePermissions } from "./use-permissions";
 
 export interface PriorityLead {
   id: string;
@@ -33,6 +34,7 @@ interface UseLeadPrioritiesReturn {
 
 export const useLeadPriorities = (limit: number = 10): UseLeadPrioritiesReturn => {
   const { user } = useAuth();
+  const { hasPermission, isOwner } = usePermissions();
   const [priorityLeads, setPriorityLeads] = useState<PriorityLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -49,7 +51,7 @@ export const useLeadPriorities = (limit: number = 10): UseLeadPrioritiesReturn =
       setLoading(true);
 
       try {
-        const { data: leads, error } = await supabase
+        let query = supabase
           .from("leads")
           .select(`
             id,
@@ -67,6 +69,14 @@ export const useLeadPriorities = (limit: number = 10): UseLeadPrioritiesReturn =
             broker:profiles!leads_assigned_broker_id_fkey(full_name)
           `)
           .order("updated_at", { ascending: true });
+
+        // Filtrar por broker se não tem permissão de ver todos
+        const canViewAll = hasPermission('leads.view_all') || isOwner;
+        if (!canViewAll && user) {
+          query = query.eq('assigned_broker_id', user.id);
+        }
+
+        const { data: leads, error } = await query;
 
         if (error) throw error;
 
