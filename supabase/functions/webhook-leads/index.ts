@@ -530,15 +530,14 @@ serve(async (req) => {
       }
     }
 
-    // Check for WhatsApp greeting (conditional rules first, then default automation rule)
+    // Check for WhatsApp greeting automation (NEW: state machine via whatsapp_automation_control)
     try {
-      // Check if WhatsApp is connected
+      // Check if WhatsApp session exists (don't filter strictly by connected — auto-repair handles it)
       const { data: whatsappSession } = await supabase
         .from('whatsapp_sessions')
         .select('status')
         .eq('account_id', accountId)
-        .eq('status', 'connected')
-        .single()
+        .maybeSingle()
 
       if (whatsappSession) {
         // Fetch all active greeting rules ordered by priority
@@ -567,9 +566,7 @@ serve(async (req) => {
         for (const rule of (greetingRules || [])) {
           switch (rule.condition_type) {
             case 'property':
-              if (validPropertyId && rule.condition_property_id === validPropertyId) {
-                matchedRule = rule
-              }
+              if (validPropertyId && rule.condition_property_id === validPropertyId) matchedRule = rule
               break
             case 'price_range': {
               const price = propertyInfo?.sale_price || propertyInfo?.rent_price
@@ -582,26 +579,18 @@ serve(async (req) => {
             }
             case 'property_type':
               if (propertyInfo?.type && rule.condition_property_type &&
-                  propertyInfo.type.toLowerCase() === rule.condition_property_type.toLowerCase()) {
-                matchedRule = rule
-              }
+                  propertyInfo.type.toLowerCase() === rule.condition_property_type.toLowerCase()) matchedRule = rule
               break
             case 'transaction_type':
               if (propertyInfo?.transaction_type && rule.condition_transaction_type &&
-                  propertyInfo.transaction_type.toLowerCase() === rule.condition_transaction_type.toLowerCase()) {
-                matchedRule = rule
-              }
+                  propertyInfo.transaction_type.toLowerCase() === rule.condition_transaction_type.toLowerCase()) matchedRule = rule
               break
             case 'campaign':
               if (rule.condition_campaign && leadData.campanha &&
-                  leadData.campanha.toLowerCase().includes(rule.condition_campaign.toLowerCase())) {
-                matchedRule = rule
-              }
+                  leadData.campanha.toLowerCase().includes(rule.condition_campaign.toLowerCase())) matchedRule = rule
               break
             case 'origin':
-              if (rule.condition_origin && leadOriginNormalized.includes(rule.condition_origin.toLowerCase())) {
-                matchedRule = rule
-              }
+              if (rule.condition_origin && leadOriginNormalized.includes(rule.condition_origin.toLowerCase())) matchedRule = rule
               break
             case 'form_answer':
               if (rule.condition_form_question && rule.condition_form_answer) {
@@ -609,16 +598,11 @@ serve(async (req) => {
                   .from('lead_form_field_values')
                   .select('field_name, field_value')
                   .eq('lead_id', lead.id)
-
                 if (formFieldValues && formFieldValues.length > 0) {
                   const normalize = (s: string) => s.toLowerCase().replace(/\?/g, '').replace(/_/g, ' ').trim()
-                  const targetQuestion = normalize(rule.condition_form_question)
-                  const targetAnswer = normalize(rule.condition_form_answer)
-
-                  const found = formFieldValues.find(fv =>
-                    normalize(fv.field_name) === targetQuestion &&
-                    fv.field_value !== null &&
-                    normalize(fv.field_value) === targetAnswer
+                  const found = formFieldValues.find((fv: any) =>
+                    normalize(fv.field_name) === normalize(rule.condition_form_question) &&
+                    fv.field_value !== null && normalize(fv.field_value) === normalize(rule.condition_form_answer)
                   )
                   if (found) matchedRule = rule
                 }
@@ -628,7 +612,7 @@ serve(async (req) => {
           if (matchedRule) break
         }
 
-        // If a conditional rule matched, use it; otherwise fall back to default automation rule
+        // Determine template and rule
         let templateId: string | null = null
         let delaySeconds = 0
         let ruleId: string | null = null
@@ -638,7 +622,6 @@ serve(async (req) => {
           delaySeconds = matchedRule.delay_seconds || 0
           console.log(`Conditional greeting rule matched: ${matchedRule.name} (type: ${matchedRule.condition_type})`)
         } else {
-          // Fallback: default whatsapp_automation_rules
           const { data: automationRule } = await supabase
             .from('whatsapp_automation_rules')
             .select('*')
@@ -648,7 +631,6 @@ serve(async (req) => {
             .single()
 
           if (automationRule) {
-            // Detect the real call source: 'olx' if forwarded by olx-webhook, otherwise 'webhook'
             const callSource = (body as Record<string, unknown>)._source === 'olx' ? 'olx' : 'webhook'
             const sources = automationRule.trigger_sources || { webhook: true }
             const sourceEnabled = typeof sources === 'object' && sources !== null
@@ -665,10 +647,10 @@ serve(async (req) => {
         }
 
         if (templateId) {
-          // Check for sequence steps configured for this rule
-          console.log(`[webhook-leads] Checking sequence steps. matchedRule=${matchedRule?.id || 'none'}, ruleId=${ruleId}`)
+          // ═══ Build steps_snapshot for automation control ═══
+          const stepsSnapshot: { greeting: any[]; followup: any[] } = { greeting: [], followup: [] }
 
-          // Use (supabase as any) to avoid TypeScript cast issues with the new table
+          // Get greeting sequence steps
           const seqQuery = (supabase as any)
             .from('whatsapp_greeting_sequence_steps')
             .select('*')
@@ -679,62 +661,81 @@ serve(async (req) => {
             ? seqQuery.eq('greeting_rule_id', matchedRule.id)
             : (ruleId ? seqQuery.eq('automation_rule_id', ruleId) : null)
 
-          const { data: seqSteps, error: seqError } = seqFilter
-            ? await seqFilter
-            : { data: null, error: null }
-
-          if (seqError) console.error('[webhook-leads] Sequence query error:', seqError)
-          console.log(`[webhook-leads] Sequence steps found: ${seqSteps?.length || 0} for ${matchedRule ? 'greeting_rule ' + matchedRule.id : 'automation_rule ' + ruleId}`)
+          const { data: seqSteps } = seqFilter ? await seqFilter : { data: null }
 
           if (seqSteps && seqSteps.length > 0) {
-            // Enqueue multiple messages in sequence with accumulated delays
-            let accumulatedDelay = delaySeconds
-            const inserts = seqSteps.map((step: { template_id: string; delay_seconds: number }) => {
-              accumulatedDelay += (step.delay_seconds || 0)
-              return {
-                account_id: accountId,
-                lead_id: lead.id,
-                phone: lead.phone,
-                message: '',
+            // Build greeting snapshot from sequence steps
+            for (const step of seqSteps) {
+              const { data: tmpl } = await supabase
+                .from('whatsapp_templates')
+                .select('template')
+                .eq('id', step.template_id)
+                .single()
+              stepsSnapshot.greeting.push({
+                delay_seconds: step.delay_seconds || 0,
                 template_id: step.template_id,
-                automation_rule_id: ruleId,
-                scheduled_for: new Date(Date.now() + accumulatedDelay * 1000).toISOString(),
-                status: 'pending'
-              }
-            })
-            await supabase.from('whatsapp_message_queue').insert(inserts)
-            console.log(`WhatsApp greeting SEQUENCE (${seqSteps.length} msgs) scheduled for lead ${lead.id} (rule: ${matchedRule?.name || 'default'})`)
-          } else {
-            // Fallback: single message (existing behaviour)
-            const { data: template } = await supabase
+                template_content: tmpl?.template || '',
+              })
+            }
+          } else if (templateId) {
+            // Single template as greeting
+            const { data: tmpl } = await supabase
               .from('whatsapp_templates')
               .select('template')
               .eq('id', templateId)
               .single()
+            stepsSnapshot.greeting.push({
+              delay_seconds: 0,
+              template_id: templateId,
+              template_content: tmpl?.template || '',
+            })
+          }
 
-            if (template) {
-              const scheduledFor = new Date(Date.now() + (delaySeconds * 1000))
-              const message = template.template
-                .replace(/{nome}/gi, lead.name || '')
-                .replace(/{telefone}/gi, lead.phone || '')
-                .replace(/{email}/gi, lead.email || '')
-                .replace(/{imovel}/gi, propertyName || '')
+          // Get followup steps
+          const { data: followUpSteps } = await supabase
+            .from('whatsapp_followup_steps')
+            .select('*')
+            .eq('account_id', accountId)
+            .eq('is_active', true)
+            .order('position')
 
-              await supabase.from('whatsapp_message_queue').insert({
-                account_id: accountId,
-                lead_id: lead.id,
-                phone: lead.phone,
-                message: message,
-                template_id: templateId,
-                automation_rule_id: ruleId,
-                scheduled_for: scheduledFor.toISOString(),
-                status: 'pending'
+          if (followUpSteps && followUpSteps.length > 0) {
+            for (const step of followUpSteps as any[]) {
+              const { data: tmpl } = await supabase
+                .from('whatsapp_templates')
+                .select('template')
+                .eq('id', step.template_id)
+                .single()
+              stepsSnapshot.followup.push({
+                delay_minutes: step.delay_minutes,
+                template_id: step.template_id,
+                template_content: tmpl?.template || '',
               })
-
-              console.log(`WhatsApp greeting scheduled for lead ${lead.id} at ${scheduledFor.toISOString()} (rule: ${matchedRule?.name || 'default'})`)
             }
           }
 
+          // Insert automation control record
+          const { error: controlError } = await supabase
+            .from('whatsapp_automation_control')
+            .insert({
+              account_id: accountId,
+              lead_id: lead.id,
+              automation_rule_id: ruleId,
+              phone: lead.phone,
+              current_phase: 'greeting',
+              current_step_position: 0,
+              status: 'active',
+              next_execution_at: new Date(Date.now() + delaySeconds * 1000).toISOString(),
+              steps_snapshot: stepsSnapshot,
+            })
+
+          if (controlError) {
+            console.error('Error creating automation control:', controlError)
+          } else {
+            console.log(`✅ Automation control created for lead ${lead.id} (greeting: ${stepsSnapshot.greeting.length} steps, followup: ${stepsSnapshot.followup.length} steps)`)
+          }
+
+          // Trigger worker
           supabase.functions.invoke('process-whatsapp-queue').catch(() => {})
         }
       }

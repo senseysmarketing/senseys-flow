@@ -420,6 +420,13 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any, inst
         if (cancelledMsgs?.length > 0) {
           console.log(`[whatsapp-webhook] Cancelled ${cancelledMsgs.length} follow-up(s) for lead ${leadId} (via @lid name resolution)`)
         }
+
+        // NEW: Mark automation control as responded (state machine)
+        await supabase
+          .from('whatsapp_automation_control')
+          .update({ status: 'responded', updated_at: new Date().toISOString() })
+          .eq('lead_id', leadId)
+          .in('status', ['active', 'processing'])
       }
     } else {
       leadId = await findLeadByPhone(supabase, session.account_id, finalPhone)
@@ -532,6 +539,18 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any, inst
 
         if (cancelledMsgs?.length > 0) {
           console.log(`[whatsapp-webhook] Cancelled ${cancelledMsgs.length} follow-up(s) for lead ${lead.id}`)
+        }
+
+        // NEW: Mark automation control as responded (state machine)
+        const { data: controlUpdated } = await supabase
+          .from('whatsapp_automation_control')
+          .update({ status: 'responded', updated_at: new Date().toISOString() })
+          .eq('lead_id', lead.id)
+          .in('status', ['active', 'processing'])
+          .select('id')
+
+        if (controlUpdated?.length > 0) {
+          console.log(`[whatsapp-webhook] Marked ${controlUpdated.length} automation control(s) as responded for lead ${lead.id}`)
         }
       }
 

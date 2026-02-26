@@ -1471,6 +1471,88 @@ export type Database = {
           },
         ]
       }
+      whatsapp_automation_control: {
+        Row: {
+          account_id: string
+          automation_rule_id: string | null
+          created_at: string | null
+          current_phase: string
+          current_step_position: number
+          id: string
+          jid_locked: boolean | null
+          last_sent_message_id: string | null
+          lead_id: string
+          next_execution_at: string | null
+          phone: string
+          remote_jid: string | null
+          started_at: string
+          status: string
+          steps_snapshot: Json
+          total_messages_sent: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          account_id: string
+          automation_rule_id?: string | null
+          created_at?: string | null
+          current_phase?: string
+          current_step_position?: number
+          id?: string
+          jid_locked?: boolean | null
+          last_sent_message_id?: string | null
+          lead_id: string
+          next_execution_at?: string | null
+          phone: string
+          remote_jid?: string | null
+          started_at?: string
+          status?: string
+          steps_snapshot?: Json
+          total_messages_sent?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          account_id?: string
+          automation_rule_id?: string | null
+          created_at?: string | null
+          current_phase?: string
+          current_step_position?: number
+          id?: string
+          jid_locked?: boolean | null
+          last_sent_message_id?: string | null
+          lead_id?: string
+          next_execution_at?: string | null
+          phone?: string
+          remote_jid?: string | null
+          started_at?: string
+          status?: string
+          steps_snapshot?: Json
+          total_messages_sent?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_automation_control_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_automation_control_automation_rule_id_fkey"
+            columns: ["automation_rule_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_automation_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_automation_control_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_automation_rules: {
         Row: {
           account_id: string
