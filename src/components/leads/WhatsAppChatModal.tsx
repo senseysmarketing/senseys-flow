@@ -34,7 +34,7 @@ export function WhatsAppChatModal({ open, onClose, leadName, leadId, phone, prop
     isConnected && conversation ? (conversation.lead_id || leadId || null) : null
   );
 
-  // Check WhatsApp connection status
+  // Check WhatsApp connection status with verification fallback
   useEffect(() => {
     if (!open || !account?.id) return;
     
@@ -44,10 +44,31 @@ export function WhatsAppChatModal({ open, onClose, leadName, leadId, phone, prop
         .from('whatsapp_sessions')
         .select('status')
         .eq('account_id', account.id)
-        .eq('status', 'connected')
         .maybeSingle();
       
-      setIsConnected(!!session);
+      if (!session) {
+        setIsConnected(false);
+        setLoadingConnection(false);
+        return;
+      }
+
+      if (session.status === 'connected') {
+        setIsConnected(true);
+        setLoadingConnection(false);
+        return;
+      }
+
+      // DB says not connected — verify with Evolution API
+      try {
+        const response = await supabase.functions.invoke('whatsapp-connect?action=status');
+        if (!response.error && response.data?.connected) {
+          setIsConnected(true);
+        } else {
+          setIsConnected(false);
+        }
+      } catch {
+        setIsConnected(false);
+      }
       setLoadingConnection(false);
     };
     

@@ -63,7 +63,20 @@ export function useConversations() {
       .eq('account_id', accountId)
       .maybeSingle();
 
-    const connected = session?.status === 'connected';
+    let connected = session?.status === 'connected';
+    
+    // If DB says not connected, verify with Evolution API to avoid stale status
+    if (session && !connected) {
+      try {
+        const response = await supabase.functions.invoke('whatsapp-connect?action=status');
+        if (!response.error && response.data?.connected) {
+          connected = true;
+        }
+      } catch {
+        // trust DB
+      }
+    }
+
     setIsWhatsAppConnected(connected);
     setSessionPhone(session?.phone_number || null);
 
