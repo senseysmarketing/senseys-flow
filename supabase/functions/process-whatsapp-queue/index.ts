@@ -194,9 +194,32 @@ Deno.serve(async (req) => {
 
     let processedCount = 0
     let errorCount = 0
+    const respondedLeads = new Set<string>()
 
     for (const msg of pendingMessages) {
       try {
+        // ── Layer 0: Skip if lead already responded in this batch ─────────
+        if (msg.lead_id && respondedLeads.has(msg.lead_id)) {
+          console.log(`[process-whatsapp-queue] Lead ${msg.lead_id} already responded (cached in batch), cancelling ${msg.id}`)
+          await supabase
+            .from('whatsapp_message_queue')
+            .update({ status: 'cancelled', error_message: 'Cancelado: lead respondeu (detectado no mesmo lote)' })
+            .eq('id', msg.id)
+          continue
+        }
+
+        // ── Layer 1: Re-check status in DB (may have been cancelled by previous iteration) ──
+        const { data: freshMsg } = await supabase
+          .from('whatsapp_message_queue')
+          .select('status')
+          .eq('id', msg.id)
+          .single()
+
+        if (freshMsg?.status !== 'pending') {
+          console.log(`[process-whatsapp-queue] Message ${msg.id} is no longer pending (${freshMsg?.status}), skipping`)
+          continue
+        }
+
         // ── Business Hours Check ─────────────────────────────────────────────
         const schedule = await getScheduleForAccount(msg.account_id)
         if (schedule?.is_enabled) {
@@ -269,8 +292,8 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Before sending follow-up messages, check if lead has responded
-        if (msg.followup_step_id && msg.lead_id) {
+        // Before sending, check if lead has responded (expanded: any msg with lead_id)
+        if (msg.lead_id) {
           const phoneSuffix = (msg.phone || '').replace(/\D/g, '').slice(-9)
           
           const { data: incomingByPhone } = await supabase
@@ -487,8 +510,12 @@ Deno.serve(async (req) => {
           // ── End Evolution API fallback ──────────────────────────────────────
 
           if (leadHasResponded) {
-            console.log(`[process-whatsapp-queue] Lead ${msg.lead_id} already responded (detected by ${detectedBy}), cancelling follow-up ${msg.id}`)
+            // Add to in-memory set so subsequent messages in this batch are skipped instantly
+            respondedLeads.add(msg.lead_id)
+
+            console.log(`[process-whatsapp-queue] Lead ${msg.lead_id} already responded (detected by ${detectedBy}), cancelling message ${msg.id}`)
             
+            // Cancel ALL pending follow-ups for this lead
             await supabase
               .from('whatsapp_message_queue')
               .update({ 
@@ -498,6 +525,17 @@ Deno.serve(async (req) => {
               .eq('lead_id', msg.lead_id)
               .eq('status', 'pending')
               .not('followup_step_id', 'is', null)
+
+            // Also cancel pending greeting sequence steps (non-followup)
+            if (msg.followup_step_id) {
+              // Current message is a follow-up, just continue (already cancelled above)
+            } else {
+              // Current message is a greeting step - cancel only this one, not the whole greeting
+              await supabase
+                .from('whatsapp_message_queue')
+                .update({ status: 'cancelled', error_message: `Cancelado: lead respondeu (detectado por ${detectedBy})` })
+                .eq('id', msg.id)
+            }
             
             continue
           }
@@ -773,7 +811,7 @@ Deno.serve(async (req) => {
                   let previousDelayMinutes = 0
 
                   for (const step of followUpSteps as any[]) {
-                    const deltaMinutes = step.delay_minutes - previousDelayMinutes
+                    const deltaMinutes = Math.max(step.delay_minutes - previousDelayMinutes, 60)
                     const rawScheduledMs = lastScheduledMs + deltaMinutes * 60 * 1000
                     const scheduledMs = fuSchedule?.is_enabled
                       ? getNextValidSendTime(rawScheduledMs, fuSchedule)
