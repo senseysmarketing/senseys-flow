@@ -38,16 +38,37 @@ export function useWhatsAppConnected(accountId?: string) {
       return;
     }
 
-    supabase
-      .from('whatsapp_sessions')
-      .select('status')
-      .eq('account_id', accountId)
-      .eq('status', 'connected')
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => {
-        setIsConnected(!!data);
-      });
+    const check = async () => {
+      const { data: session } = await supabase
+        .from('whatsapp_sessions')
+        .select('status')
+        .eq('account_id', accountId)
+        .maybeSingle();
+
+      if (!session) {
+        setIsConnected(false);
+        return;
+      }
+
+      if (session.status === 'connected') {
+        setIsConnected(true);
+        return;
+      }
+
+      // DB says not connected — verify with Evolution API to avoid stale status
+      try {
+        const response = await supabase.functions.invoke('whatsapp-connect?action=status');
+        if (!response.error && response.data?.connected) {
+          setIsConnected(true);
+          return;
+        }
+      } catch {
+        // fall through
+      }
+      setIsConnected(false);
+    };
+
+    check();
   }, [accountId]);
 
   return isConnected;

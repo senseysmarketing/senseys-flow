@@ -404,13 +404,12 @@ const Leads = () => {
             : true;
 
           if (manualEnabled) {
-            // Check if WhatsApp is connected
+            // Check if WhatsApp is connected (don't filter strictly by 'connected' — session may be stale)
             const { data: session } = await supabase
               .from('whatsapp_sessions')
               .select('status')
               .eq('account_id', profile.account_id)
-              .eq('status', 'connected')
-              .single();
+              .maybeSingle();
 
             if (session) {
               // Check if there are greeting sequence steps for this automation rule

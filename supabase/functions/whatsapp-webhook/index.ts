@@ -59,9 +59,34 @@ async function handleConnectionUpdate(supabase: any, session: any, data: any, in
     
     console.log(`[whatsapp-webhook] Session connected, phone: ${phoneNumber}`)
   } else if (state === 'close' || state === 'connecting') {
+    // Guard: if session is already 'connected' and we get 'connecting', 
+    // verify with Evolution before downgrading (avoids stale status from transient events)
+    if (state === 'connecting' && session.status === 'connected') {
+      const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL') || ''
+      const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || ''
+      if (EVOLUTION_API_URL && EVOLUTION_API_KEY) {
+        try {
+          const apiUrl = EVOLUTION_API_URL.startsWith('http') ? EVOLUTION_API_URL : `https://${EVOLUTION_API_URL}`
+          const stateResp = await fetch(
+            `${apiUrl}/instance/connectionState/${instance}`,
+            { headers: { 'apikey': EVOLUTION_API_KEY } }
+          )
+          const stateData = await stateResp.json()
+          const realState = stateData?.instance?.state || stateData?.state
+          if (realState === 'open') {
+            console.log(`[whatsapp-webhook] Ignoring transient 'connecting' for ${instance} — Evolution confirms 'open'`)
+            return // Don't downgrade
+          }
+        } catch (e) {
+          console.log(`[whatsapp-webhook] Could not verify state for ${instance}, allowing downgrade:`, e)
+        }
+      }
+    }
+
     newStatus = state === 'connecting' ? 'connecting' : 'disconnected'
     
     if (newStatus !== session.status) {
+      console.log(`[whatsapp-webhook] Session ${instance} status transition: ${session.status} -> ${newStatus}`)
       await supabase
         .from('whatsapp_sessions')
         .update({ 
@@ -228,6 +253,19 @@ async function resolveLidToPhone(instanceName: string, lidJid: string): Promise<
 
 async function handleMessagesUpsert(supabase: any, session: any, data: any, instanceName: string) {
   console.log('[whatsapp-webhook] messages.upsert raw data:', JSON.stringify(data).substring(0, 2000))
+
+  // Auto-repair: if messages are flowing but session status is not 'connected', fix it
+  if (session.status !== 'connected') {
+    console.log(`[whatsapp-webhook] Message traffic on ${instanceName} but status is '${session.status}' — auto-syncing to 'connected'`)
+    await supabase
+      .from('whatsapp_sessions')
+      .update({ 
+        status: 'connected',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', session.id)
+    session.status = 'connected'
+  }
   
   let messages: any[] = []
   if (Array.isArray(data)) {

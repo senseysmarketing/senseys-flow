@@ -158,36 +158,44 @@ export function WhatsAppIntegrationSettings() {
     if (!error && data) {
       setSession(data);
       
-      if (data.status === 'connected') {
-        try {
-          const response = await supabase.functions.invoke('whatsapp-connect?action=status');
-          
-          if (response.error) {
-            const { error: refreshError } = await supabase.auth.refreshSession();
-            if (!refreshError) {
-              const retryResponse = await supabase.functions.invoke('whatsapp-connect?action=status');
-              if (!retryResponse.error && retryResponse.data) {
-                if (!retryResponse.data.connected) {
-                  setSession(prev => prev ? { ...prev, status: 'disconnected', connected_at: null } : null);
-                } else if (retryResponse.data.phoneNumber && !data.phone_number) {
-                  setSession(prev => prev ? { ...prev, phone_number: retryResponse.data.phoneNumber } : null);
-                }
+      // Always verify real status via Evolution API when a session exists,
+      // not just when DB says 'connected'. This fixes stale 'connecting' states.
+      try {
+        const response = await supabase.functions.invoke('whatsapp-connect?action=status');
+        
+        if (response.error) {
+          const { error: refreshError } = await supabase.auth.refreshSession();
+          if (!refreshError) {
+            const retryResponse = await supabase.functions.invoke('whatsapp-connect?action=status');
+            if (!retryResponse.error && retryResponse.data) {
+              if (retryResponse.data.connected) {
+                setSession(prev => prev ? { ...prev, status: 'connected', phone_number: retryResponse.data.phoneNumber || prev.phone_number } : null);
+              } else if (data.status === 'connected') {
+                // Only show disconnect toast on real transition from connected
+                setSession(prev => prev ? { ...prev, status: 'disconnected', connected_at: null } : null);
+                toast({ variant: 'destructive', title: 'WhatsApp Desconectado', description: 'A conexão com o WhatsApp foi perdida. Reconecte para continuar enviando mensagens.' });
+              } else {
+                setSession(prev => prev ? { ...prev, status: 'disconnected' } : null);
               }
-            } else {
-              toast({ variant: 'destructive', title: 'Sessão expirada', description: 'Faça login novamente para gerenciar o WhatsApp.' });
             }
-            return;
+          } else {
+            toast({ variant: 'destructive', title: 'Sessão expirada', description: 'Faça login novamente para gerenciar o WhatsApp.' });
           }
-          
-          if (response.data && !response.data.connected) {
-            setSession(prev => prev ? { ...prev, status: 'disconnected', connected_at: null } : null);
-            toast({ variant: 'destructive', title: 'WhatsApp Desconectado', description: 'A conexão com o WhatsApp foi perdida. Reconecte para continuar enviando mensagens.' });
-          } else if (response.data?.phoneNumber && response.data.phoneNumber !== data.phone_number) {
-            setSession(prev => prev ? { ...prev, phone_number: response.data.phoneNumber } : null);
-          }
-        } catch (e) {
-          console.log('Error checking real status:', e);
+          return;
         }
+        
+        if (response.data?.connected) {
+          // Reconcile: Evolution says connected, update local state regardless of DB status
+          setSession(prev => prev ? { ...prev, status: 'connected', phone_number: response.data.phoneNumber || prev.phone_number } : null);
+        } else if (data.status === 'connected') {
+          // Only show disconnect toast on real transition from connected -> disconnected
+          setSession(prev => prev ? { ...prev, status: 'disconnected', connected_at: null } : null);
+          toast({ variant: 'destructive', title: 'WhatsApp Desconectado', description: 'A conexão com o WhatsApp foi perdida. Reconecte para continuar enviando mensagens.' });
+        } else {
+          setSession(prev => prev ? { ...prev, status: 'disconnected' } : null);
+        }
+      } catch (e) {
+        console.log('Error checking real status:', e);
       }
     } else {
       setSession(null);
