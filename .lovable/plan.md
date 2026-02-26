@@ -1,34 +1,69 @@
 
+Objetivo: eliminar falso “Desconectado” para WhatsApp (caso Braz Imóveis) mesmo quando a instância está aberta na Evolution, e impedir recorrência.
 
-## Forcar Atualizacao Instantanea do Service Worker (PWA)
+Diagnóstico confirmado
+- A sessão da conta `7629c620-65a5-4e89-afbf-599cd221db5d` está no banco como `connecting` (updated_at antigo), mas há mensagens recentes trafegando normalmente, o que comprova conexão real ativa.
+- Na tela de Integrações, `fetchSession()` só chama `whatsapp-connect?action=status` quando o banco já está `connected`. Se estiver `connecting`/`disconnected`, não há reconciliação com a Evolution.
+- Resultado: status stale no banco vira “verdade” na UI e o CRM mostra desconectado incorretamente.
 
-### Problema
-O `vite-plugin-pwa` com `registerType: "autoUpdate"` detecta novas versoes, mas o Workbox por padrao **espera todas as abas serem fechadas** antes de ativar o novo Service Worker. Usuarios que mantem o CRM aberto o dia inteiro (comum em imobiliarias) continuam rodando codigo antigo por horas ou dias apos um deploy.
+Plano de correção (em camadas)
 
-### Solucao
-Adicionar `skipWaiting: true` e `clientsClaim: true` na configuracao do Workbox, forcando o novo Service Worker a assumir o controle imediatamente apos o download, sem esperar o fechamento de abas.
+1) Correção imediata da tela crítica (Integrações)
+Arquivo:
+- `src/components/whatsapp/WhatsAppIntegrationSettings.tsx`
 
-### Alteracoes
+Mudanças:
+- Ajustar `fetchSession()` para revalidar status real via `whatsapp-connect?action=status` sempre que existir sessão (não apenas quando `data.status === 'connected'`).
+- Reconciliar estado local com retorno da function:
+  - Se `connected=true`: forçar `session.status='connected'` e sincronizar `phone_number` quando vier da API.
+  - Se `connected=false`: manter `disconnected`.
+- Manter fallback de `auth.refreshSession()` em 401, mas sem toast destrutivo indevido em casos transitórios.
+- Mostrar toast de desconexão apenas em transição real de conectado -> desconectado (evitar alarmes falsos).
 
-**Arquivo: `vite.config.ts`**
+2) Blindagem para não voltar a ficar stale (backend)
+Arquivo:
+- `supabase/functions/whatsapp-webhook/index.ts`
 
-Adicionar duas propriedades na secao `workbox`:
+Mudanças:
+- Em `handleConnectionUpdate`, tratar `state='connecting'` como transitório:
+  - Antes de rebaixar status de sessão já conectada, confirmar estado real na Evolution (`connectionState`).
+  - Só persistir `connecting/disconnected` quando houver confirmação.
+- Em `handleMessagesUpsert`, se chegar tráfego e sessão não estiver `connected`, auto-sincronizar para `connected` (com `updated_at` e preservando `connected_at`), pois tráfego é evidência de sessão ativa.
+- Adicionar logs de transição com `instance`, `status antigo`, `status novo`, para auditoria.
 
-```
-workbox: {
-  skipWaiting: true,       // NOVO - Ativa o SW novo imediatamente
-  clientsClaim: true,      // NOVO - Assume controle de todas as abas abertas
-  maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-  // ... resto da config existente
-}
-```
+3) Aplicar a mesma lógica nos outros pontos de UI que hoje confiam só no banco
+Arquivos:
+- `src/components/leads/WhatsAppChatModal.tsx`
+- `src/hooks/use-conversations.tsx`
+- `src/pages/Leads.tsx`
+- `src/hooks/use-whatsapp-failures.tsx`
 
-### Detalhes tecnicos
-- `skipWaiting`: Faz o novo SW chamar `self.skipWaiting()` automaticamente, pulando o estado "waiting"
-- `clientsClaim`: Faz o novo SW chamar `self.clients.claim()`, tomando controle das abas que estavam sendo servidas pelo SW antigo
-- Combinado com `registerType: "autoUpdate"` (ja configurado), isso garante que novos deploys sejam aplicados em segundos, sem interacao do usuario
-- Nenhuma alteracao necessaria no `firebase-messaging-sw.js` (ele ja tem `skipWaiting` e `clients.claim` proprios)
+Mudanças:
+- Onde hoje faz `.eq('status','connected')` direto, incluir fallback de verificação real via `whatsapp-connect?action=status` quando vier `connecting/disconnected`.
+- Evitar bloquear fluxo (chat, automações manuais, indicadores de falha) por status stale.
 
-### Arquivo a editar
-- `vite.config.ts` - Adicionar 2 linhas na secao workbox
+4) Padronização para manutenção (evitar regressão)
+Arquivos:
+- Novo hook utilitário (ex.: `src/hooks/use-whatsapp-connection-status.ts`) ou helper em `src/lib/`
+- Reuso nos arquivos acima
 
+Mudanças:
+- Centralizar função de “status verificado” para não duplicar lógica de refresh token + invoke + reconciliação.
+- Reduzir chamadas desnecessárias (só acionar fallback quando status local não for confiável).
+
+Validação (obrigatória)
+1. Abrir `/integrations` na conta Braz com sessão no banco em `connecting` e instância aberta na Evolution:
+   - Esperado: UI corrigir para “Conectado” automaticamente.
+2. Validar rota de Conversas:
+   - Esperado: não esconder conversas por falso desconectado.
+3. Validar criação de lead manual com automação ativa:
+   - Esperado: não bloquear envio por status stale.
+4. Testar cenário realmente desconectado:
+   - Esperado: continuar mostrando “Desconectado” corretamente.
+5. Conferir logs da `whatsapp-webhook` para garantir transições coerentes e sem flapping.
+
+Ordem de execução recomendada
+1. Ajuste imediato em `WhatsAppIntegrationSettings.tsx`.
+2. Hardening em `whatsapp-webhook` e deploy da function.
+3. Propagação para Chat/Conversations/Leads/hooks.
+4. Validação end-to-end completa em conta de suporte (Braz) e ao menos outra conta ativa.
