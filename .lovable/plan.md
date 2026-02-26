@@ -1,85 +1,101 @@
 
-## Correcao Critica: WhatsApp mostra "Desconectado" mesmo com Evolution API conectado
 
-### Problema Identificado
+## Correcao: Follow-ups enviados simultaneamente sem cancelamento
 
-O sistema depende **exclusivamente** da tabela `whatsapp_sessions` no banco de dados para determinar se o WhatsApp esta conectado. O campo `status` so e atualizado em dois momentos:
+### Problema Raiz (3 bugs combinados)
 
-1. Quando o webhook recebe um evento `CONNECTION_UPDATE` com `state: open` ou `state: close`
-2. Quando o usuario abre a pagina de Configuracoes (acao `status` na edge function `whatsapp-connect`)
+**Bug 1 - Resposta do lead nao armazenada no banco:**
+O audio enviado pela lead Karla Teodoro nunca foi registrado na tabela `whatsapp_messages`. O webhook falhou ou a mensagem chegou via @lid sem mapeamento. Sem registro no banco, a verificacao de resposta (linha 273-503) retorna falso e os follow-ups sao enviados.
 
-**Se o webhook falhar** (timeout, erro de rede, evento perdido) ou se a instancia reconectar automaticamente sem disparar um novo evento, o banco permanece com `status = 'disconnected'` enquanto a Evolution API esta **realmente conectada**. Isso causa:
+**Bug 2 - Follow-ups agendados no mesmo horario:**
+Os `whatsapp_followup_steps` tem delay_minutes de 120, 1440, 1440 (posicoes 0, 1, 2). O calculo de delta (linha 776) faz `1440 - 1440 = 0`, agendando steps 2 e 3 no mesmo momento. Combinado com business hours, todos os 3 acabam no mesmo slot horario.
 
-- Mensagens automaticas marcadas como "failed" com erro "WhatsApp nao conectado"
-- Painel da agencia mostrando "Desconectado" incorretamente
-- Envios manuais tambem bloqueados
+**Bug 3 - Sem protecao de lote no loop:**
+Quando o cron carrega 50 mensagens pendentes de uma vez (linha 154-164), todas ficam no array em memoria. Mesmo que a mensagem #1 cancele #2 e #3 no banco, as mensagens #2 e #3 ja estao no array e sao processadas sem re-verificar seu status atual no banco.
 
-### Solucao
+### Solucao (3 camadas de protecao)
 
-Adicionar uma **verificacao direta com a Evolution API** nos dois pontos criticos antes de desistir e marcar como falha. Se a API confirmar que a instancia esta conectada, atualizar o banco e prosseguir normalmente.
+**Camada 1 - Re-check do status no banco antes de processar (CRITICO)**
 
-### Alteracoes
+No inicio do loop `for (const msg of pendingMessages)`, antes de qualquer processamento, re-verificar se a mensagem ainda esta `pending` no banco. Isso garante que cancelamentos feitos pela mensagem anterior no mesmo lote sejam respeitados.
 
-**1. Edge Function `supabase/functions/process-whatsapp-queue/index.ts` (linhas 217-238)**
+```text
+Arquivo: supabase/functions/process-whatsapp-queue/index.ts
+Local: Inicio do loop (apos linha 198)
 
-Quando nao encontrar sessao conectada no banco:
-- Buscar o `instance_name` da sessao (mesmo desconectada)
-- Consultar `GET /instance/connectionState/{instanceName}` na Evolution API
-- Se `state === 'open'`: atualizar `whatsapp_sessions.status` para `'connected'` e continuar o envio normalmente
-- Se realmente desconectado: manter comportamento atual (marcar como failed)
+Adicionar:
+  // Re-check: message may have been cancelled by a previous iteration
+  const { data: freshMsg } = await supabase
+    .from('whatsapp_message_queue')
+    .select('status')
+    .eq('id', msg.id)
+    .single()
 
-```typescript
-// Buscar sessao independente do status
-const { data: session } = await supabase
-  .from('whatsapp_sessions')
-  .select('status, instance_name')
-  .eq('account_id', msg.account_id)
-  .maybeSingle()
-
-if (!session) {
-  // Nenhuma sessao existe - marcar como failed
-  ...
-  continue
-}
-
-// Se status no banco nao e 'connected', verificar na Evolution API
-if (session.status !== 'connected') {
-  const apiUrl = EVOLUTION_API_URL.startsWith('http') ? EVOLUTION_API_URL : `https://${EVOLUTION_API_URL}`
-  const statusResp = await fetch(
-    `${apiUrl}/instance/connectionState/${session.instance_name}`,
-    { headers: { 'apikey': EVOLUTION_API_KEY } }
-  )
-  if (statusResp.ok) {
-    const statusData = await statusResp.json()
-    if (statusData.instance?.state === 'open') {
-      // API conectada! Atualizar banco e continuar
-      await supabase.from('whatsapp_sessions')
-        .update({ status: 'connected', updated_at: new Date().toISOString() })
-        .eq('account_id', msg.account_id)
-      console.log('[process-whatsapp-queue] Session was stale - API confirms connected, updated DB')
-    } else {
-      // Realmente desconectado
-      await supabase.from('whatsapp_message_queue')
-        .update({ status: 'failed', error_message: 'WhatsApp nao conectado' })
-        .eq('id', msg.id)
-      errorCount++
-      continue
-    }
+  if (freshMsg?.status !== 'pending') {
+    console.log(`[process-whatsapp-queue] Message ${msg.id} is no longer pending (${freshMsg?.status}), skipping`)
+    continue
   }
-}
 ```
 
-**2. Edge Function `supabase/functions/whatsapp-send/index.ts` (linhas ~155-170)**
+**Camada 2 - Set de leads respondidos em memoria**
 
-Mesma logica: quando nao encontrar sessao conectada, verificar na Evolution API antes de retornar erro. Se conectada, atualizar DB e prosseguir com o envio.
+Manter um `Set<string>` de lead_ids que ja foram detectados como respondidos durante o lote atual. Se um lead ja esta no set, pular imediatamente sem precisar consultar o banco novamente.
 
-**3. Adicionar variaveis EVOLUTION_API no `process-whatsapp-queue`**
+```text
+Arquivo: supabase/functions/process-whatsapp-queue/index.ts
+Local: Antes do loop (linha 197) e dentro da verificacao de resposta
 
-O `process-whatsapp-queue` ja usa `EVOLUTION_API_URL` e `EVOLUTION_API_KEY` mais abaixo no codigo (linha ~339), entao basta reutilizar no topo do loop.
+Adicionar antes do loop:
+  const respondedLeads = new Set<string>()
+
+Adicionar no inicio do loop:
+  if (msg.lead_id && respondedLeads.has(msg.lead_id)) {
+    console.log(`[process-whatsapp-queue] Lead ${msg.lead_id} already responded (cached), skipping ${msg.id}`)
+    continue
+  }
+
+Adicionar quando detectar resposta (linha 489):
+  respondedLeads.add(msg.lead_id)
+```
+
+**Camada 3 - Expandir verificacao de resposta para TODAS as mensagens com lead_id**
+
+Atualmente a verificacao so roda para mensagens com `followup_step_id` (linha 273). Mudar para rodar para QUALQUER mensagem que tenha `lead_id`, independente de ter followup_step_id ou nao. Isso protege tambem mensagens de sequencia de saudacao.
+
+```text
+Arquivo: supabase/functions/process-whatsapp-queue/index.ts
+Local: Linha 273
+
+Mudar de:
+  if (msg.followup_step_id && msg.lead_id) {
+
+Para:
+  if (msg.lead_id) {
+```
+
+Porem, manter a logica interna de cancelamento em massa apenas para follow-ups (com followup_step_id), para nao cancelar saudacoes iniciais caso o lead responda a algo anterior.
+
+**Camada 4 - Garantir delta minimo entre follow-ups**
+
+Adicionar um delta minimo de 60 minutos entre follow-ups sequenciais para evitar envios simultaneos mesmo com configuracao incorreta.
+
+```text
+Arquivo: supabase/functions/process-whatsapp-queue/index.ts  
+Local: Calculo do delta (linha 776)
+
+Mudar de:
+  const deltaMinutes = step.delay_minutes - previousDelayMinutes
+
+Para:
+  const deltaMinutes = Math.max(step.delay_minutes - previousDelayMinutes, 60)
+```
 
 ### Arquivos a editar
-- `supabase/functions/process-whatsapp-queue/index.ts` - Verificacao de fallback com Evolution API antes de falhar
-- `supabase/functions/whatsapp-send/index.ts` - Mesma verificacao de fallback
+- `supabase/functions/process-whatsapp-queue/index.ts` - Todas as 4 camadas de protecao
 
-### Impacto
-Esta mudanca garante que mesmo se um webhook de `CONNECTION_UPDATE` for perdido, o sistema **nunca** marcara mensagens como falhas enquanto a Evolution API estiver realmente conectada. A sincronizacao do status no banco sera feita automaticamente quando detectada a divergencia.
+### Resumo do impacto
+1. **Re-check de status** impede que mensagens ja canceladas no banco sejam enviadas
+2. **Set em memoria** evita consultas repetidas e garante consistencia dentro do lote
+3. **Verificacao expandida** protege sequencias de saudacao alem de follow-ups
+4. **Delta minimo** impede 3+ mensagens no mesmo segundo mesmo com config errada
+
