@@ -292,9 +292,9 @@ Deno.serve(async (req) => {
       delivery_status: 'sent',
     })
 
-    // Store in whatsapp_messages for conversation view
+    // Store in whatsapp_messages for conversation view (idempotent)
     const remoteJid = `${formattedPhone}@s.whatsapp.net`
-    await supabase.from('whatsapp_messages').insert({
+    await supabase.from('whatsapp_messages').upsert({
       account_id: accountId,
       remote_jid: remoteJid,
       phone: formattedPhone,
@@ -305,7 +305,8 @@ Deno.serve(async (req) => {
       status: 'sent',
       timestamp: new Date().toISOString(),
       lead_id: lead_id || null,
-    })
+      session_phone: session.phone_number || null,
+    }, { onConflict: 'account_id,message_id', ignoreDuplicates: true })
 
     // Update conversation
     const { data: existingConv } = await supabase
@@ -315,13 +316,15 @@ Deno.serve(async (req) => {
       .eq('remote_jid', remoteJid)
       .maybeSingle()
 
+    const now = new Date().toISOString()
     if (existingConv) {
       await supabase.from('whatsapp_conversations').update({
         last_message: message.substring(0, 500),
-        last_message_at: new Date().toISOString(),
+        last_message_at: now,
         last_message_is_from_me: true,
-        updated_at: new Date().toISOString(),
+        updated_at: now,
         lead_id: lead_id || undefined,
+        session_phone: session.phone_number || null,
       }).eq('id', existingConv.id)
     } else {
       await supabase.from('whatsapp_conversations').insert({
@@ -329,9 +332,10 @@ Deno.serve(async (req) => {
         remote_jid: remoteJid,
         phone: formattedPhone,
         last_message: message.substring(0, 500),
-        last_message_at: new Date().toISOString(),
+        last_message_at: now,
         last_message_is_from_me: true,
         lead_id: lead_id || null,
+        session_phone: session.phone_number || null,
       })
     }
 

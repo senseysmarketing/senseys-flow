@@ -167,7 +167,7 @@ function extractMessageContent(msg: any): { content: string | null, mediaType: s
   return { content: null, mediaType: 'text', mediaUrl: null }
 }
 
-async function upsertConversation(supabase: any, accountId: string, remoteJid: string, phone: string, contactName: string | null, lastMessage: string | null, isFromMe: boolean, leadId: string | null, lidJid?: string | null, sessionPhone?: string | null) {
+async function upsertConversation(supabase: any, accountId: string, remoteJid: string, phone: string, contactName: string | null, lastMessage: string | null, isFromMe: boolean, leadId: string | null, lidJid?: string | null, sessionPhone?: string | null, wasInserted: boolean = true) {
   const { data: existing } = await supabase
     .from('whatsapp_conversations')
     .select('id, unread_count')
@@ -186,7 +186,7 @@ async function upsertConversation(supabase: any, accountId: string, remoteJid: s
     }
     if (contactName) updateData.contact_name = contactName
     if (leadId) updateData.lead_id = leadId
-    if (!isFromMe) updateData.unread_count = (existing.unread_count || 0) + 1
+    if (!isFromMe && wasInserted) updateData.unread_count = (existing.unread_count || 0) + 1
     if (lidJid) updateData.lid_jid = lidJid
     if (sessionPhone) updateData.session_phone = sessionPhone
     
@@ -432,34 +432,12 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any, inst
       leadId = await findLeadByPhone(supabase, session.account_id, finalPhone)
     }
 
-    // Check for existing message to prevent duplicates
-    if (messageId) {
-      const { data: existing } = await supabase
-        .from('whatsapp_messages')
-        .select('id')
-        .eq('account_id', session.account_id)
-        .eq('message_id', messageId)
-        .maybeSingle()
-
-      if (existing) {
-        console.log('[whatsapp-webhook] Message already exists, skipping:', messageId)
-        // Still update conversation metadata if we resolved
-        if (!isLid || resolvedJid) {
-          await upsertConversation(
-            supabase, session.account_id, isLid && resolvedJid ? resolvedJid : finalJid, finalPhone,
-            contactName, content, isFromMe, leadId, lidJidForConversation, session.phone_number || null
-          )
-        }
-        continue
-      }
-    }
-
-    // Store the message with the resolved JID (not the @lid)
+    // Store the message with the resolved JID (not the @lid) — atomic idempotent insert
     const storeJid = (isLid && resolvedJid) ? resolvedJid : finalJid
     
-    await supabase
+    const { data: inserted } = await supabase
       .from('whatsapp_messages')
-      .insert({
+      .upsert({
         account_id: session.account_id,
         remote_jid: storeJid,
         phone: finalPhone,
@@ -475,13 +453,20 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any, inst
         lead_id: leadId,
         contact_name: contactName,
         session_phone: session.phone_number || null,
-      })
+      }, { onConflict: 'account_id,message_id', ignoreDuplicates: true })
+      .select('id')
+
+    const wasInserted = (inserted?.length ?? 0) > 0
+
+    if (!wasInserted && messageId) {
+      console.log('[whatsapp-webhook] Duplicate message skipped (ON CONFLICT):', messageId)
+    }
 
     // Update/create conversation — skip if @lid couldn't be resolved (avoid ghost conversations)
     if (!isLid || resolvedJid) {
       await upsertConversation(
         supabase, session.account_id, storeJid, finalPhone,
-        contactName, content, isFromMe, leadId, lidJidForConversation, session.phone_number || null
+        contactName, content, isFromMe, leadId, lidJidForConversation, session.phone_number || null, wasInserted
       )
     } else {
       console.log(`[whatsapp-webhook] Skipping conversation upsert for unresolved @lid: ${rawRemoteJid}`)
