@@ -92,7 +92,7 @@ export function useConversations() {
       .from('whatsapp_conversations')
       .select('*')
       .eq('account_id', accountId)
-      .eq('session_phone', currentPhone)
+      .or(`session_phone.eq.${currentPhone},session_phone.is.null`)
       .not('remote_jid', 'like', '%@lid')
       .order('last_message_at', { ascending: false });
 
