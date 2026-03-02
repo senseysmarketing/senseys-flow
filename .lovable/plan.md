@@ -1,57 +1,53 @@
 
+Diagnóstico concluído para o formulário **“R$ 530 Mil | Fazenda Rio Grande v2”**:
 
-## Correção: Badge "Pendente" persiste + campo REF não aparece nos dados do lead
+### O que eu validei no banco (dados reais)
 
-### Problema 1: Badge "Pendente" não atualiza ao salvar (RLS)
+1. **Form config do formulário**
+   - `form_id`: `1504091144275936`
+   - `is_configured`: **false** (ainda pendente)
+   - `reference_field_name`: `null`
 
-**Causa raiz**: A policy de UPDATE na tabela `meta_form_configs` exige `account_id = get_user_account_id()`. Quando um super admin da agencia Senseys (conta `05f41011...`) edita configs de um cliente como Rodrigo Lima (conta `58140b79...`), o UPDATE do Supabase retorna sucesso mas afeta **0 linhas**, pois a conta não coincide. O código não detecta essa falha silenciosa.
+2. **Leads desse formulário**
+   - Existem leads recentes desse form, porém **todos anteriores ao último deploy do `meta-webhook`**.
+   - Após o deploy de correção (boot em `2026-03-02T17:24:07Z`), esse formulário teve:
+     - **0 leads novos**
 
-Os dados confirmam: todos os 7 formulários do Rodrigo Lima continuam com `is_configured: false` no banco, apesar de o toast "Configuração salva" ter aparecido.
+3. **Campo REF salvo em `lead_form_field_values` para esse formulário**
+   - Resultado: **nenhum registro** (`ref`, `reference_code`, `codigo_referencia`, etc.) para os leads desse form.
 
-**Solução**: Adicionar uma policy RLS que permita super admins fazerem UPDATE em `meta_form_configs`:
+4. **Se o sistema está recebendo a referência**
+   - Para esse form, os leads já chegam com `property_id` preenchido.
+   - Isso indica que a referência está sendo usada para vínculo do imóvel no webhook.
+   - Em outro formulário com lead pós-deploy, já existe `field_name = 'ref'` salvo em `lead_form_field_values`, provando que a correção nova está funcionando para novos eventos.
 
-```sql
-CREATE POLICY "Super admins can update form configs"
-ON public.meta_form_configs
-FOR UPDATE
-TO authenticated
-USING (is_super_admin(auth.uid()))
-WITH CHECK (is_super_admin(auth.uid()));
-```
+### Conclusão objetiva
 
-Nota: Já existe uma policy `Service role can manage form configs` para o service_role, mas super admins autenticados via client-side (anon key) não têm esse privilégio. A policy existente para SELECT já permite visualizar, mas o UPDATE falha silenciosamente.
+- Para o formulário **R$ 530 Mil | Fazenda Rio Grande v2**, o REF **não aparece ainda** porque:
+  1) os leads existentes foram processados antes da correção de persistência, e  
+  2) **não entrou lead novo desse form** depois do deploy para gerar dados já no formato corrigido.
 
-### Problema 2: Campo REF não aparece nos dados do formulário
+- Além disso, no frontend de qualificação, a lista de “Campo de Código de Referência” depende majoritariamente de `meta_form_scoring_rules` (perguntas com opções), então campo REF textual/hidden pode não aparecer nessa lista mesmo quando existe no payload.
 
-**Causa raiz**: No `meta-webhook/index.ts`, linha 39, o campo `"ref"` está na lista `EXCLUDED_FIELDS`:
+### Plano de implementação recomendado
 
-```typescript
-const EXCLUDED_FIELDS = new Set([...BASIC_FIELDS, "reference_code", "ref", "codigo_referencia", "codigo_imovel"]);
-```
+1. **Backfill dos leads antigos desse formulário**
+   - Popular `lead_form_field_values` para leads antigos com um valor de referência consistente (ex.: via `properties.reference_code` quando `property_id` já está vinculado).
+   - Isso resolve imediatamente a visualização histórica no modal do lead.
 
-Isso faz com que na linha 222, quando os campos do formulário são salvos em `lead_form_field_values`, o campo `ref` seja pulado. O valor é usado corretamente para vincular o lead ao imóvel (linha 141-167), mas nunca é armazenado para visualização no painel do lead.
+2. **Melhorar detecção de campo de referência no frontend**
+   - Em `MetaFormScoringManager`, buscar candidatos de referência também de `lead_form_field_values` (distinct por formulário), não só de `meta_form_scoring_rules`.
+   - Assim, REF aparece no seletor mesmo se vier como campo textual/hidden.
 
-**Solução**: Remover os campos de referência do `EXCLUDED_FIELDS` e em vez disso salvá-los normalmente em `lead_form_field_values`. O campo continuará sendo usado para vinculação de imóvel (linha 141), e agora também ficará visível nos dados do formulário no modal do lead.
+3. **Ajustar sincronização de formulários Meta**
+   - No `sync-meta-forms`, manter exclusão de REF para pontuação, mas registrar/propagar REF como **campo elegível para vinculação**.
+   - Separar claramente:
+     - campos de pontuação (múltipla escolha),
+     - campos de referência (texto/código).
 
-Alterar linha 39:
-```typescript
-const EXCLUDED_FIELDS = new Set([...BASIC_FIELDS]);
-```
-
-Os campos de referência (`ref`, `reference_code`, etc.) ainda serão processados para vinculação de imóvel na linha 141, mas agora também serão armazenados em `lead_form_field_values` para exibição.
-
-Também precisamos garantir que esses campos de referência **não apareçam** nas regras de pontuação do frontend (eles já estão na lista `EXCLUDED_FIELD_NAMES` do `MetaFormScoringManager.tsx` linha 322, então isso já funciona corretamente).
-
-### Arquivos a modificar
-
-| Recurso | Mudança |
-|---------|---------|
-| Migration SQL | Adicionar policy RLS para super admins no UPDATE de `meta_form_configs` |
-| `supabase/functions/meta-webhook/index.ts` | Remover campos ref do `EXCLUDED_FIELDS` |
-
-### Resultado esperado
-
-1. Super admins conseguem salvar configurações de qualificação de qualquer conta, e o badge atualiza para "Configurado" imediatamente
-2. O campo REF do formulário Meta aparece nos dados do formulário no modal do lead
-3. A vinculação automática de imóvel por reference_code continua funcionando normalmente
-
+4. **Validação fim a fim**
+   - Gerar 1 lead teste nesse form após ajustes.
+   - Confirmar:
+     - REF visível em “Dados do Formulário”,
+     - referência disponível no seletor de “Campo de Código de Referência”,
+     - badge de configuração atualiza corretamente após salvar.
