@@ -411,6 +411,16 @@ const MetaFormScoringManager = () => {
         refFields.push(fieldName);
       }
     }
+
+    // From config.reference_field_name (detected during sync, even without leads)
+    const config = formConfigs.find(c => c.id === configId);
+    if (config?.reference_field_name) {
+      const configRefLower = config.reference_field_name.toLowerCase();
+      if (!seenFields.has(configRefLower)) {
+        seenFields.add(configRefLower);
+        refFields.push(config.reference_field_name);
+      }
+    }
     
     return refFields;
   };
