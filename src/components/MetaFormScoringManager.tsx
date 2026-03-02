@@ -76,6 +76,7 @@ const MetaFormScoringManager = () => {
   const [showSyncPanel, setShowSyncPanel] = useState(false);
   const [hasMetaConfig, setHasMetaConfig] = useState<boolean | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [formFieldRefCandidates, setFormFieldRefCandidates] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     fetchData();
@@ -144,6 +145,30 @@ const MetaFormScoringManager = () => {
         }
       }
       setScoringRules(rulesMap);
+
+      // Fetch distinct ref field names from lead_form_field_values per form
+      const refCandidatesMap: Record<string, string[]> = {};
+      for (const config of configsWithType) {
+        const { data: refFields } = await supabase
+          .from("lead_form_field_values")
+          .select("field_name")
+          .in("lead_id", 
+            // Subquery: get lead IDs for this form
+            (await supabase
+              .from("leads")
+              .select("id")
+              .eq("meta_form_id", config.form_id)
+              .limit(100)
+            ).data?.map(l => l.id) || []
+          )
+          .in("field_name", REFERENCE_FIELD_NAMES);
+
+        if (refFields && refFields.length > 0) {
+          const uniqueFields = [...new Set(refFields.map(r => r.field_name))];
+          refCandidatesMap[config.id] = uniqueFields;
+        }
+      }
+      setFormFieldRefCandidates(refCandidatesMap);
     } catch (error) {
       console.error("Erro ao carregar configurações:", error);
       toast({
@@ -350,11 +375,12 @@ const MetaFormScoringManager = () => {
     return grouped;
   };
 
-  // Detectar campos de referência nas regras (antes de serem excluídos)
-  const getDetectedRefFields = (rules: ScoringRule[]): string[] => {
+  // Detectar campos de referência nas regras E em lead_form_field_values
+  const getDetectedRefFields = (configId: string, rules: ScoringRule[]): string[] => {
     const refFields: string[] = [];
     const seenFields = new Set<string>();
     
+    // From scoring rules
     for (const rule of rules) {
       const fieldNameLower = rule.question_name.toLowerCase();
       if (REFERENCE_FIELD_NAMES.includes(fieldNameLower) && !seenFields.has(fieldNameLower)) {
@@ -362,6 +388,17 @@ const MetaFormScoringManager = () => {
         refFields.push(rule.question_name);
       }
     }
+    
+    // From lead_form_field_values (backfilled or from new leads)
+    const candidates = formFieldRefCandidates[configId] || [];
+    for (const fieldName of candidates) {
+      const fieldNameLower = fieldName.toLowerCase();
+      if (!seenFields.has(fieldNameLower)) {
+        seenFields.add(fieldNameLower);
+        refFields.push(fieldName);
+      }
+    }
+    
     return refFields;
   };
 
@@ -707,7 +744,7 @@ const MetaFormScoringManager = () => {
   const renderFormConfig = (config: FormConfig) => {
     const rules = scoringRules[config.id] || [];
     const groupedRules = groupRulesByQuestion(rules);
-    const detectedRefFields = getDetectedRefFields(rules);
+    const detectedRefFields = getDetectedRefFields(config.id, rules);
     const editedConfig = editedConfigs[config.id];
     const { hotThreshold, warmThreshold } = getTemperaturePreview(config, rules);
     const hasChanges = !!editedConfig || rules.some((r) => editedRules[r.id] !== undefined);
