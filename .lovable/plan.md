@@ -1,76 +1,65 @@
 
+## Correcao: Follow-up nao dispara para leads do Meta Ads (Facebook/Instagram)
 
-## Correcao: Mensagens Duplicadas na Fila Legada (whatsapp_message_queue)
+### Causa Raiz
 
-### Causa Raiz Confirmada
+A funcao `meta-webhook/index.ts` (que processa leads do Facebook/Instagram) **nunca foi migrada** para o novo sistema de automacao (`whatsapp_automation_control`). Ela ainda usa exclusivamente a fila legada (`whatsapp_message_queue`), que so agenda as mensagens de **saudacao**.
 
-O problema **nao esta** no novo sistema de automacao (`whatsapp_automation_control`) -- esse funciona corretamente com lock otimista.
+O fluxo de follow-up (etapas 1, 2, 3 com delays de 2h, 24h, 24h) depende inteiramente do `whatsapp_automation_control`, que contem um snapshot com as etapas de greeting + followup e e processado pela state machine no worker.
 
-O problema esta na **fila legada** (`whatsapp_message_queue`) que ainda processa leads criados antes da migracao. Os dados confirmam:
+**Prova nos dados:**
+- A conta T&B tem **3 etapas de follow-up** configuradas na tabela `whatsapp_followup_steps` (2h, 24h, 24h)
+- Porem, tem **zero registros** na tabela `whatsapp_automation_control`
+- Todos os leads sao de origem Facebook -- entram pelo `meta-webhook`
+- O `meta-webhook` so insere na `whatsapp_message_queue` (saudacao) e nunca cria o registro de controle
+- Enquanto isso, o `webhook-leads` (usado por Webhook/OLX) ja foi migrado e cria o `automation_control` corretamente (linhas 649-740)
 
-- Walter Costa tem **2 entradas** na fila legada (template 1 + template 2), ambas com `scheduled_for: 2026-03-02 11:00:00`
-- O `message_log` mostra **4 envios** (cada template enviado 2x)
-- Os timestamps sao separados por apenas **124ms** (`11:01:09.442` vs `11:01:09.566`)
-- Isso significa que o **cron disparou 2 execucoes simultaneas** do worker
-
-O codigo legado na linha 698-704 faz `SELECT status WHERE id = X` antes de enviar. Duas execucoes simultaneas leem `status = 'pending'` ao mesmo tempo, e ambas procedem com o envio. E a mesma corrida de condicao que o lock otimista resolve no sistema novo, mas que nunca foi aplicada ao codigo legado.
-
-**8 leads afetados** na conta Senseys, todos com exatamente o mesmo padrao: cada mensagem enviada 2x.
-
----
+**Por que a saudacao funciona mas o follow-up nao:**
+- Saudacao: inserida diretamente na `whatsapp_message_queue` pelo `meta-webhook` -- funciona
+- Follow-up: depende do `automation_control` para ser agendado pelo worker -- nunca criado, portanto nunca dispara
 
 ### Solucao
 
-Aplicar **lock otimista** na fila legada, identico ao padrao do automation_control:
+Migrar a logica do `meta-webhook/index.ts` (linhas 374-441) para usar o `whatsapp_automation_control`, replicando exatamente o padrao do `webhook-leads/index.ts` (linhas 649-740).
 
-**Arquivo: `supabase/functions/process-whatsapp-queue/index.ts`**
+### Implementacao
 
-Substituir o padrao atual (linhas 697-707):
-```typescript
-// ANTES (race condition):
-const { data: freshMsg } = await supabase
-  .from('whatsapp_message_queue')
-  .select('status')
-  .eq('id', msg.id)
-  .single()
+**Arquivo: `supabase/functions/meta-webhook/index.ts`**
 
-if (freshMsg?.status !== 'pending') {
-  continue
-}
-```
+Substituir o bloco das linhas 374-441 (que insere na `whatsapp_message_queue`) pelo seguinte fluxo:
 
-Por lock otimista atomico:
-```typescript
-// DEPOIS (atomico):
-const { data: locked, error: lockErr } = await supabase
-  .from('whatsapp_message_queue')
-  .update({ status: 'processing' })
-  .eq('id', msg.id)
-  .eq('status', 'pending')
-  .select('id')
-  .maybeSingle()
+1. Construir o `steps_snapshot` com greeting + followup:
+   - Buscar `whatsapp_greeting_sequence_steps` (para sequencia de saudacao)
+   - Se nao houver sequencia, usar o template unico como step de greeting
+   - Buscar `whatsapp_followup_steps` para a conta e adicionar ao snapshot
+   - Para cada step, buscar o `template` da tabela `whatsapp_templates`
 
-if (lockErr || !locked) {
-  console.log(`[process-whatsapp-queue] Message ${msg.id} already picked up, skipping`)
-  continue
-}
-```
+2. Inserir registro em `whatsapp_automation_control`:
+   ```
+   account_id, lead_id, automation_rule_id, phone,
+   current_phase: 'greeting',
+   current_step_position: 0,
+   status: 'active',
+   next_execution_at: now + delaySeconds,
+   steps_snapshot: { greeting: [...], followup: [...] }
+   ```
 
-E ajustar o status final de `sent` para usar `.eq('status', 'processing')` ao inves de `.eq('id', msg.id)` simples.
+3. Remover a insercao direta na `whatsapp_message_queue`
 
-Tambem adicionar recuperacao de registros "stuck" (status `processing` ha mais de 5 minutos) no inicio do bloco legado, identico ao que ja existe no automation_control.
+4. Manter o `supabase.functions.invoke('process-whatsapp-queue')` para triggerar o worker
 
----
+Isso e uma substituicao direta -- o codigo do `webhook-leads` ja esta validado e funcionando. A unica diferenca e que no `meta-webhook` as variaveis tem nomes levemente diferentes (`cfg.account_id` vs `accountId`, `newLead.id` vs `lead.id`).
+
+### Resultado esperado
+
+- Leads do Facebook/Instagram passam a ter registro no `automation_control`
+- O worker processa a saudacao e, se o lead nao responder, dispara os follow-ups nos intervalos configurados (2h, 24h, 24h)
+- Respeita horario de envio (ja implementado no worker)
+- Respeita deteccao de resposta (ja implementado no worker)
+- Compativel com todas as contas, nao apenas T&B
 
 ### Arquivos a editar
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `supabase/functions/process-whatsapp-queue/index.ts` | Lock otimista na fila legada + recuperacao de stuck |
-
-### Resultado esperado
-
-- Zero duplicatas futuras mesmo com cron disparando execucoes simultaneas
-- Compativel com o periodo de transicao enquanto a fila legada ainda tem mensagens pendentes
-- Mesma abordagem ja validada no automation_control
-
+| `supabase/functions/meta-webhook/index.ts` | Substituir insercao na fila legada por criacao de `automation_control` com snapshot completo |
