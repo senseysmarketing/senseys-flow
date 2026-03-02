@@ -385,18 +385,13 @@ const MetaFormScoringManager = () => {
   const saveConfig = async (configId: string) => {
     setSaving(true);
     try {
-      const updates = editedConfigs[configId];
-      if (updates) {
-        const { error } = await supabase
-          .from("meta_form_configs")
-          .update({
-            ...updates,
-            is_configured: true,
-          })
-          .eq("id", configId);
+      const updates = editedConfigs[configId] || {};
+      const { error: configError } = await supabase
+        .from("meta_form_configs")
+        .update({ ...updates, is_configured: true })
+        .eq("id", configId);
 
-        if (error) throw error;
-      }
+      if (configError) throw configError;
 
       // Save edited rules
       const rulesToUpdate = Object.entries(editedRules).filter(([ruleId]) => {
