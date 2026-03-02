@@ -167,7 +167,7 @@ function extractMessageContent(msg: any): { content: string | null, mediaType: s
   return { content: null, mediaType: 'text', mediaUrl: null }
 }
 
-async function upsertConversation(supabase: any, accountId: string, remoteJid: string, phone: string, contactName: string | null, lastMessage: string | null, isFromMe: boolean, leadId: string | null, lidJid?: string | null, sessionPhone?: string | null, wasInserted: boolean = true) {
+async function upsertConversation(supabase: any, accountId: string, remoteJid: string, phone: string, contactName: string | null, lastMessage: string | null, isFromMe: boolean, leadId: string | null, lidJid?: string | null, sessionPhone?: string | null, wasInserted: boolean = true, messageTimestamp?: string | null) {
   const { data: existing } = await supabase
     .from('whatsapp_conversations')
     .select('id, unread_count')
@@ -184,6 +184,7 @@ async function upsertConversation(supabase: any, accountId: string, remoteJid: s
       last_message_is_from_me: isFromMe,
       updated_at: now,
     }
+    if (!isFromMe) updateData.last_customer_message_at = messageTimestamp || now
     if (contactName) updateData.contact_name = contactName
     if (leadId) updateData.lead_id = leadId
     if (!isFromMe && wasInserted) updateData.unread_count = (existing.unread_count || 0) + 1
@@ -205,6 +206,7 @@ async function upsertConversation(supabase: any, accountId: string, remoteJid: s
         last_message: lastMessage?.substring(0, 500),
         last_message_at: now,
         last_message_is_from_me: isFromMe,
+        last_customer_message_at: !isFromMe ? (messageTimestamp || now) : null,
         unread_count: isFromMe ? 0 : 1,
         lead_id: leadId,
         lid_jid: lidJid || null,
@@ -435,21 +437,27 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any, inst
     // Store the message with the resolved JID (not the @lid) — atomic idempotent insert
     const storeJid = (isLid && resolvedJid) ? resolvedJid : finalJid
     
+    // Guard: ensure message_id is never NULL to prevent silent duplicate inserts
+    const safeMessageId = messageId ?? `${instanceName}-${Date.now()}-${crypto.randomUUID().slice(0,8)}`
+    
+    // Calculate message timestamp for conversation state
+    const messageTimestamp = msg.messageTimestamp 
+      ? new Date(typeof msg.messageTimestamp === 'number' ? msg.messageTimestamp * 1000 : msg.messageTimestamp).toISOString()
+      : new Date().toISOString()
+    
     const { data: inserted } = await supabase
       .from('whatsapp_messages')
       .upsert({
         account_id: session.account_id,
         remote_jid: storeJid,
         phone: finalPhone,
-        message_id: messageId,
+        message_id: safeMessageId,
         content,
         media_type: mediaType,
         media_url: mediaUrl,
         is_from_me: isFromMe,
         status: isFromMe ? 'sent' : 'received',
-        timestamp: msg.messageTimestamp 
-          ? new Date(typeof msg.messageTimestamp === 'number' ? msg.messageTimestamp * 1000 : msg.messageTimestamp).toISOString()
-          : new Date().toISOString(),
+        timestamp: messageTimestamp,
         lead_id: leadId,
         contact_name: contactName,
         session_phone: session.phone_number || null,
@@ -466,7 +474,7 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any, inst
     if (!isLid || resolvedJid) {
       await upsertConversation(
         supabase, session.account_id, storeJid, finalPhone,
-        contactName, content, isFromMe, leadId, lidJidForConversation, session.phone_number || null, wasInserted
+        contactName, content, isFromMe, leadId, lidJidForConversation, session.phone_number || null, wasInserted, messageTimestamp
       )
     } else {
       console.log(`[whatsapp-webhook] Skipping conversation upsert for unresolved @lid: ${rawRemoteJid}`)
