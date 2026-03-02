@@ -1,31 +1,38 @@
 
-
-## Mostrar valores de referência recebidos na qualificação
+## Detectar campo REF durante sincronização de formulários (sem depender de leads)
 
 ### Problema
+Os formulários "R$ 420 Mil | Bairro Nações", "R$ 545 Mil | Bairro Eucaliptos v2" e "R$ 583 Mil - Bairro Eucaliptos v2" não mostram o campo de código de referência porque **ainda não receberam nenhum lead**. A detecção atual depende exclusivamente de dados em `lead_form_field_values`, que está vazia para formulários sem leads.
 
-A seção "Valores de código de referência recebidos" aparece vazia porque o código atual (linha 885) tenta buscar os valores do array `rules` (regras de pontuação), mas campos de referência como `ref` são campos de texto livre -- eles nunca geram entradas em `meta_form_scoring_rules`. Os valores reais estão na tabela `lead_form_field_values`.
+Porém, quando o `sync-meta-forms` sincroniza esses formulários, ele **já recebe todas as perguntas do Meta** (incluindo campos hidden/texto como REF) -- mas descarta os campos de referência sem registrá-los.
 
 ### Solução
 
-1. **Ampliar a busca de dados** no `fetchData` do `MetaFormScoringManager.tsx`:
-   - Além de buscar os nomes dos campos de referência (`field_name`), buscar também os **valores distintos** (`field_value`) de `lead_form_field_values` para cada formulário.
-   - Armazenar num novo state `formFieldRefValues` no formato `Record<configId, string[]>` (valores únicos).
+1. **Atualizar `sync-meta-forms`** para detectar campos de referência nas perguntas do formulário e salvá-los no `meta_form_configs.reference_field_name` automaticamente (quando ainda não configurado pelo usuário).
+   - Durante o processamento das questions, se encontrar um campo cujo `key` está na lista de referência (ref, reference_code, etc.), gravar esse nome no `reference_field_name` do form config.
 
-2. **Atualizar a seção de exibição** (linhas 882-894):
-   - Em vez de buscar valores em `rules`, usar o novo `formFieldRefValues[config.id]` para listar os códigos de referência reais recebidos (ex: "ABC123", "XYZ789").
-   - Limitar a exibição aos últimos ~20 valores distintos para não sobrecarregar a interface.
+2. **Atualizar o frontend** (`MetaFormScoringManager.tsx`) para incluir na detecção de REF o valor já salvo em `config.reference_field_name`, garantindo que o seletor mostre o campo mesmo sem leads.
 
-### Detalhes técnicos
+### Arquivos a modificar
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/components/MetaFormScoringManager.tsx` | Adicionar state `formFieldRefValues`, query de valores distintos no `fetchData`, e atualizar o render dos badges |
+| `supabase/functions/sync-meta-forms/index.ts` | Ao processar questions, detectar campos de referência e fazer update de `reference_field_name` no form config |
+| `src/components/MetaFormScoringManager.tsx` | Incluir `config.reference_field_name` como candidato adicional em `getDetectedRefFields` |
 
-A query adicional será algo como:
-```sql
-SELECT DISTINCT field_value FROM lead_form_field_values
-WHERE lead_id IN (leads do form) AND field_name IN (ref fields detectados)
-LIMIT 20
+### Detalhes da lógica no sync
+
+No loop de questions do sync-form:
+```text
+Para cada question:
+  Se question.key está em EXCLUDED_FIELD_KEYS (ref, reference_code, etc.):
+    -> Registrar como detected_ref_field
+    -> Após o loop, fazer UPDATE em meta_form_configs
+       SET reference_field_name = detected_ref_field
+       WHERE id = formConfigId AND reference_field_name IS NULL
 ```
 
+Isso garante que:
+- Formulários sem leads já mostram o campo REF no seletor
+- O valor só é preenchido automaticamente se o usuário ainda não configurou manualmente
+- Quando leads chegarem, a vinculação com imóveis já funciona desde o primeiro lead
