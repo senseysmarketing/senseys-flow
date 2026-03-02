@@ -280,6 +280,9 @@ Deno.serve(async (req) => {
       })
     }
 
+    // Guard: ensure message_id is never NULL to prevent silent duplicate inserts
+    const safeMessageId = sendData.key?.id ?? `${session.instance_name}-${Date.now()}-${crypto.randomUUID().slice(0,8)}`
+
     // Log successful message
     await supabase.from('whatsapp_message_log').insert({
       account_id: accountId,
@@ -288,7 +291,7 @@ Deno.serve(async (req) => {
       message_content: message,
       sent_by: userId,
       send_type: isInternalCall ? 'automation' : 'api',
-      message_id: sendData.key?.id,
+      message_id: safeMessageId,
       delivery_status: 'sent',
     })
 
@@ -298,7 +301,7 @@ Deno.serve(async (req) => {
       account_id: accountId,
       remote_jid: remoteJid,
       phone: formattedPhone,
-      message_id: sendData.key?.id,
+      message_id: safeMessageId,
       content: message,
       media_type: 'text',
       is_from_me: true,
@@ -359,7 +362,7 @@ Deno.serve(async (req) => {
     console.log('[whatsapp-send] Message sent successfully')
     return new Response(JSON.stringify({ 
       success: true,
-      messageId: sendData.key?.id
+      messageId: safeMessageId
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
