@@ -46,8 +46,11 @@ const LeadFormFields = ({ leadId }: LeadFormFieldsProps) => {
     );
   }
 
+  // Hide reference fields from display (they're used for property linking, not for user viewing)
+  const HIDDEN_REF_FIELDS = ['ref', 'reference_code', 'codigo_referencia', 'codigo_imovel', 'property_ref', 'imovel_ref'];
+
   const fieldsWithValues = formFields.filter(
-    field => field.field_value && field.field_value.trim() !== ''
+    field => field.field_value && field.field_value.trim() !== '' && !HIDDEN_REF_FIELDS.includes(field.field_name.toLowerCase())
   );
 
   if (fieldsWithValues.length === 0) {
