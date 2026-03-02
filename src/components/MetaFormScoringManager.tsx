@@ -77,6 +77,7 @@ const MetaFormScoringManager = () => {
   const [hasMetaConfig, setHasMetaConfig] = useState<boolean | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [formFieldRefCandidates, setFormFieldRefCandidates] = useState<Record<string, string[]>>({});
+  const [formFieldRefValues, setFormFieldRefValues] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     fetchData();
@@ -146,29 +147,41 @@ const MetaFormScoringManager = () => {
       }
       setScoringRules(rulesMap);
 
-      // Fetch distinct ref field names from lead_form_field_values per form
+      // Fetch distinct ref field names and values from lead_form_field_values per form
       const refCandidatesMap: Record<string, string[]> = {};
+      const refValuesMap: Record<string, string[]> = {};
       for (const config of configsWithType) {
+        const leadIdsResult = await supabase
+          .from("leads")
+          .select("id")
+          .eq("meta_form_id", config.form_id)
+          .limit(100);
+        const leadIds = leadIdsResult.data?.map(l => l.id) || [];
+        if (leadIds.length === 0) continue;
+
         const { data: refFields } = await supabase
           .from("lead_form_field_values")
-          .select("field_name")
-          .in("lead_id", 
-            // Subquery: get lead IDs for this form
-            (await supabase
-              .from("leads")
-              .select("id")
-              .eq("meta_form_id", config.form_id)
-              .limit(100)
-            ).data?.map(l => l.id) || []
-          )
+          .select("field_name, field_value")
+          .in("lead_id", leadIds)
           .in("field_name", REFERENCE_FIELD_NAMES);
 
         if (refFields && refFields.length > 0) {
           const uniqueFields = [...new Set(refFields.map(r => r.field_name))];
           refCandidatesMap[config.id] = uniqueFields;
+          
+          // Collect distinct non-empty values
+          const uniqueValues = [...new Set(
+            refFields
+              .map(r => r.field_value)
+              .filter((v): v is string => !!v && v.trim() !== '')
+          )].slice(0, 20);
+          if (uniqueValues.length > 0) {
+            refValuesMap[config.id] = uniqueValues;
+          }
         }
       }
       setFormFieldRefCandidates(refCandidatesMap);
+      setFormFieldRefValues(refValuesMap);
     } catch (error) {
       console.error("Erro ao carregar configurações:", error);
       toast({
@@ -880,18 +893,17 @@ const MetaFormScoringManager = () => {
                   Valores de código de referência recebidos:
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {detectedRefFields.map((fieldName) => {
-                    // Pegar os valores únicos deste campo de referência
-                    const refValues = rules
-                      .filter(r => r.question_name.toLowerCase() === fieldName.toLowerCase())
-                      .map(r => r.answer_value);
-                    
-                    return refValues.map((value, idx) => (
-                      <Badge key={`${fieldName}-${idx}`} variant="secondary" className="text-xs">
+                  {(formFieldRefValues[config.id] || []).length > 0 ? (
+                    (formFieldRefValues[config.id]).map((value, idx) => (
+                      <Badge key={`ref-val-${idx}`} variant="secondary" className="text-xs">
                         {value}
                       </Badge>
-                    ));
-                  })}
+                    ))
+                  ) : (
+                    <span className="text-xs text-muted-foreground italic">
+                      Nenhum valor recebido ainda
+                    </span>
+                  )}
                 </div>
               </div>
             )}
