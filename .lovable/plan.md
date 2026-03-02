@@ -1,83 +1,62 @@
 
 
-## Correção: Espelhamento de Mensagens e Follow-up Quebrados
+## Blindagem do Sistema de Mensagens WhatsApp (Refinado)
 
-### Causa Raiz Identificada
+### Mudancas
 
-O espelhamento de mensagens parou completamente em **27/02** (zero mensagens desde então). O banco está gerando milhares de erros:
+#### 1. Migration SQL: Adicionar `last_customer_message_at`
 
-```text
-"there is no unique or exclusion constraint matching the ON CONFLICT specification"
-```
+Adicionar coluna `last_customer_message_at` (timestamptz, nullable) na tabela `whatsapp_conversations`. Permite queries de inatividade sem consultar `whatsapp_messages`.
 
-A migração `20260227182622` criou um **índice parcial** (`CREATE UNIQUE INDEX ... WHERE message_id IS NOT NULL`) para deduplicação. O problema é que o Supabase client usa `upsert({ onConflict: 'account_id,message_id' })`, mas o PostgreSQL exige uma **constraint real** (não um índice parcial) para `ON CONFLICT`. Resultado: toda tentativa de inserção via upsert falha silenciosamente.
+#### 2. `whatsapp-webhook/index.ts` - Guard de message_id + Estado da conversa
 
-**Isso afeta:**
-- Webhook: mensagens recebidas nao sao salvas
-- whatsapp-send: mensagens enviadas nao sao salvas
-- Consequencia: CRM mostra "Nenhuma mensagem", follow-ups nao detectam respostas
+**Guard de message_id (linha ~444):**
+Antes do upsert em `whatsapp_messages`, garantir que `messageId` nunca seja NULL:
 
-### Solucao
-
-#### 1. Migracão SQL: Criar constraint real
-
-Substituir o índice parcial por uma constraint de unicidade que o PostgREST consiga usar com ON CONFLICT:
-
-```sql
--- Remover o indice parcial que causa o erro
-DROP INDEX IF EXISTS idx_whatsapp_messages_unique_msg;
-
--- Criar constraint real (nao indice parcial)
--- Para lidar com message_id NULL, usar COALESCE com o id do registro
-ALTER TABLE whatsapp_messages 
-  ADD CONSTRAINT whatsapp_messages_account_message_unique 
-  UNIQUE (account_id, message_id);
-```
-
-**Nota:** Se existirem registros com `message_id = NULL`, nao havera conflito porque `NULL != NULL` em constraints UNIQUE do PostgreSQL. Ou seja, a constraint funciona naturalmente.
-
-#### 2. Atualizar `whatsapp-webhook/index.ts`
-
-Trocar o `.upsert()` por `.insert()` com tratamento de conflito explícito, mais robusto:
-
-Na linha ~438, mudar de:
 ```typescript
-.upsert({...}, { onConflict: 'account_id,message_id', ignoreDuplicates: true })
+const safeMessageId = messageId ?? `${instanceName}-${Date.now()}-${crypto.randomUUID().slice(0,8)}`
 ```
-Para:
+
+Formato rastreavel: inclui nome da instancia + timestamp + sufixo unico.
+
+**Estado da conversa na funcao `upsertConversation` (linha ~170):**
+Adicionar parametro `messageTimestamp` e atualizar `last_customer_message_at` quando `!isFromMe`:
+
 ```typescript
-.upsert({...}, { onConflict: 'whatsapp_messages_account_message_unique', ignoreDuplicates: true })
+if (!isFromMe) updateData.last_customer_message_at = messageTimestamp || now
 ```
 
-Ou, de forma mais simples, manter o `onConflict: 'account_id,message_id'` que agora vai funcionar com a constraint real.
+Isso garante que `last_message_is_from_me`, `last_message_at` e `last_customer_message_at` sao atualizados atomicamente numa unica operacao de UPDATE, eliminando o risco de estado inconsistente entre mensagem salva e conversa nao atualizada.
 
-#### 3. Atualizar `whatsapp-send/index.ts`
+#### 3. `whatsapp-send/index.ts` - Guard de message_id
 
-Mesma correção na linha ~280 do whatsapp-send (que também usa `upsert` com `onConflict: 'account_id,message_id'`).
+Na linha ~280, antes do upsert em `whatsapp_messages`:
 
-#### 4. Recuperacao de dados
+```typescript
+const safeMessageId = sendData.key?.id ?? `${session.instance_name}-${Date.now()}-${crypto.randomUUID().slice(0,8)}`
+```
 
-Executar um backfill para recuperar mensagens dos últimos dias que foram registradas no `whatsapp_message_log` mas não no `whatsapp_messages`. Isso restaurara o historico perdido para mensagens enviadas pelo CRM/automação.
-
-### Impacto
-
-| Problema | Status Atual | Apos Correcão |
-|----------|-------------|---------------|
-| Espelhamento de mensagens | Quebrado desde 27/02 | Restaurado |
-| Follow-up nao detecta respostas | Quebrado (sem dados em whatsapp_messages) | Restaurado |
-| Historico no CRM | Vazio para conversas recentes | Restaurado |
-| Conversas (pagina Conversas) | last_message funciona, mas sem historico detalhado | Completo |
+Substituir `sendData.key?.id` por `safeMessageId` no upsert e no log.
 
 ### Arquivos a Modificar
 
 | Arquivo | Mudanca |
 |---------|---------|
-| Nova migração SQL | Criar constraint UNIQUE real, dropar indice parcial |
-| `supabase/functions/whatsapp-webhook/index.ts` | Nenhuma mudanca necessaria no codigo (o onConflict vai funcionar com a nova constraint) |
-| `supabase/functions/whatsapp-send/index.ts` | Nenhuma mudanca necessaria no codigo |
-| Nova migração SQL (backfill) | Recuperar mensagens do `whatsapp_message_log` para `whatsapp_messages` |
+| Nova migracao SQL | `ALTER TABLE whatsapp_conversations ADD COLUMN last_customer_message_at timestamptz` |
+| `supabase/functions/whatsapp-webhook/index.ts` | Guard message_id NULL + passar timestamp para upsertConversation + atualizar `last_customer_message_at` |
+| `supabase/functions/whatsapp-send/index.ts` | Guard message_id NULL |
 
-### Detalhes Tecnicos
+### Formato do message_id fallback
 
-A causa é que o PostgreSQL diferencia **partial unique indexes** de **unique constraints**. O `ON CONFLICT` do SQL aceita ambos, mas o PostgREST (usado pelo Supabase client JS) converte `onConflict: 'col1,col2'` para `ON CONFLICT (col1, col2)` sem a clausula `WHERE`, o que nao corresponde ao indice parcial. Criar uma constraint UNIQUE real resolve o problema sem precisar alterar nenhum codigo das edge functions.
+```text
+senseys_abc123-1709398400000-f7a3b2c1
+```
+
+- Prefixo da instancia para rastreabilidade
+- Timestamp para ordenacao temporal
+- Sufixo UUID curto para unicidade
+
+### Garantia de consistencia
+
+O ponto critico levantado sobre `last_message_is_from_me` ja e tratado atomicamente na funcao `upsertConversation` (linhas 181-195): ela faz um unico UPDATE com `last_message`, `last_message_at` e `last_message_is_from_me` juntos. Com a adicao de `last_customer_message_at` nesse mesmo UPDATE, todos os campos de estado da conversa serao atualizados numa operacao atomica, eliminando o risco de inconsistencia.
 
