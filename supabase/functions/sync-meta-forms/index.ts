@@ -19,6 +19,11 @@ const EXCLUDED_FIELD_KEYS = [
   'street_address', 'city', 'state', 'zip_code', 'country', 'address'
 ];
 
+// Keys que indicam campos de código de referência de imóvel
+const REFERENCE_FIELD_KEYS = [
+  'ref', 'reference_code', 'codigo_referencia', 'codigo_imovel', 'property_ref', 'imovel_ref'
+];
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -265,10 +270,18 @@ serve(async (req) => {
         // Process questions and create scoring rules
         const questions = formData.questions || [];
         let rulesCreated = 0;
+        let detectedRefField: string | null = null;
 
         for (const question of questions) {
           // Skip basic data fields
           const keyLower = (question.key || '').toLowerCase();
+          
+          // Detect reference fields
+          if (REFERENCE_FIELD_KEYS.includes(keyLower) && !detectedRefField) {
+            detectedRefField = question.key;
+            console.log(`Detected reference field: ${question.key}`);
+          }
+          
           if (EXCLUDED_FIELD_TYPES.includes(question.type) || EXCLUDED_FIELD_KEYS.includes(keyLower)) {
             console.log(`Skipping excluded field: ${question.key} (type: ${question.type})`);
             continue;
@@ -307,6 +320,15 @@ serve(async (req) => {
           }
         }
 
+        // Auto-set reference_field_name if detected and not yet configured
+        if (detectedRefField) {
+          await supabase
+            .from('meta_form_configs')
+            .update({ reference_field_name: detectedRefField })
+            .eq('id', formConfigId)
+            .is('reference_field_name', null);
+        }
+
         console.log(`Created ${rulesCreated} scoring rules for form ${form_id}`);
 
         return new Response(JSON.stringify({ 
@@ -324,10 +346,18 @@ serve(async (req) => {
       // Process questions and create scoring rules
       const questions = formData.questions || [];
       let rulesCreated = 0;
+      let detectedRefField2: string | null = null;
 
       for (const question of questions) {
         // Skip basic data fields
         const keyLower = (question.key || '').toLowerCase();
+        
+        // Detect reference fields
+        if (REFERENCE_FIELD_KEYS.includes(keyLower) && !detectedRefField2) {
+          detectedRefField2 = question.key;
+          console.log(`Detected reference field: ${question.key}`);
+        }
+        
         if (EXCLUDED_FIELD_TYPES.includes(question.type) || EXCLUDED_FIELD_KEYS.includes(keyLower)) {
           console.log(`Skipping excluded field: ${question.key} (type: ${question.type})`);
           continue;
@@ -364,6 +394,15 @@ serve(async (req) => {
             }
           }
         }
+      }
+
+      // Auto-set reference_field_name if detected and not yet configured
+      if (detectedRefField2) {
+        await supabase
+          .from('meta_form_configs')
+          .update({ reference_field_name: detectedRefField2 })
+          .eq('id', formConfigId)
+          .is('reference_field_name', null);
       }
 
       console.log(`Created ${rulesCreated} scoring rules for form ${form_id}`);
@@ -452,8 +491,15 @@ serve(async (req) => {
 
           // Process questions
           const questions = formData.questions || [];
+          let detectedRefFieldSync: string | null = null;
           for (const question of questions) {
             const keyLower = (question.key || '').toLowerCase();
+            
+            // Detect reference fields
+            if (REFERENCE_FIELD_KEYS.includes(keyLower) && !detectedRefFieldSync) {
+              detectedRefFieldSync = question.key;
+            }
+            
             if (EXCLUDED_FIELD_TYPES.includes(question.type) || EXCLUDED_FIELD_KEYS.includes(keyLower)) {
               continue;
             }
@@ -485,6 +531,15 @@ serve(async (req) => {
                 }
               }
             }
+          }
+
+          // Auto-set reference_field_name if detected and not yet configured
+          if (detectedRefFieldSync) {
+            await supabase
+              .from('meta_form_configs')
+              .update({ reference_field_name: detectedRefFieldSync })
+              .eq('id', formConfigId)
+              .is('reference_field_name', null);
           }
 
           syncedForms.push(formData.name);
