@@ -372,7 +372,10 @@ const handler = async (req: Request): Promise<Response> => {
               }
 
               if (templateId) {
-                // Check for sequence steps
+                // ═══ Build steps_snapshot for automation control ═══
+                const stepsSnapshot: { greeting: any[]; followup: any[] } = { greeting: [], followup: [] };
+
+                // Get greeting sequence steps
                 const seqQuery = (supabase as any)
                   .from("whatsapp_greeting_sequence_steps")
                   .select("*")
@@ -383,60 +386,79 @@ const handler = async (req: Request): Promise<Response> => {
                   ? seqQuery.eq("greeting_rule_id", matchedRule.id)
                   : (ruleId ? seqQuery.eq("automation_rule_id", ruleId) : null);
 
-                const { data: seqSteps, error: seqError } = seqFilter
-                  ? await seqFilter
-                  : { data: null, error: null };
-
-                if (seqError) console.error("Sequence query error:", seqError);
+                const { data: seqSteps } = seqFilter ? await seqFilter : { data: null };
 
                 if (seqSteps && seqSteps.length > 0) {
-                  // Enqueue multiple messages in sequence
-                  let accumulatedDelay = delaySeconds;
-                  const inserts = seqSteps.map((step: { template_id: string; delay_seconds: number }) => {
-                    accumulatedDelay += (step.delay_seconds || 0);
-                    return {
-                      account_id: cfg.account_id,
-                      lead_id: newLead.id,
-                      phone: phone,
-                      message: "",
+                  for (const step of seqSteps) {
+                    const { data: tmpl } = await supabase
+                      .from("whatsapp_templates")
+                      .select("template")
+                      .eq("id", step.template_id)
+                      .single();
+                    stepsSnapshot.greeting.push({
+                      delay_seconds: step.delay_seconds || 0,
                       template_id: step.template_id,
-                      automation_rule_id: ruleId,
-                      scheduled_for: new Date(Date.now() + accumulatedDelay * 1000).toISOString(),
-                      status: "pending",
-                    };
-                  });
-                  await supabase.from("whatsapp_message_queue").insert(inserts);
-                  console.log(`WhatsApp greeting SEQUENCE (${seqSteps.length} msgs) scheduled for lead ${newLead.id}`);
-                } else {
-                  // Single message
+                      template_content: tmpl?.template || "",
+                    });
+                  }
+                } else if (templateId) {
                   const { data: tmpl } = await supabase
                     .from("whatsapp_templates")
                     .select("template")
                     .eq("id", templateId)
                     .single();
+                  stepsSnapshot.greeting.push({
+                    delay_seconds: 0,
+                    template_id: templateId,
+                    template_content: tmpl?.template || "",
+                  });
+                }
 
-                  if (tmpl) {
-                    const scheduledFor = new Date(Date.now() + delaySeconds * 1000);
-                    const message = tmpl.template
-                      .replace(/{nome}/gi, name || "")
-                      .replace(/{telefone}/gi, phone || "")
-                      .replace(/{email}/gi, email || "")
-                      .replace(/{imovel}/gi, propertyName || "");
+                // Get followup steps
+                const { data: followUpSteps } = await supabase
+                  .from("whatsapp_followup_steps")
+                  .select("*")
+                  .eq("account_id", cfg.account_id)
+                  .eq("is_active", true)
+                  .order("position");
 
-                    await supabase.from("whatsapp_message_queue").insert({
-                      account_id: cfg.account_id,
-                      lead_id: newLead.id,
-                      phone: phone,
-                      message: message,
-                      template_id: templateId,
-                      automation_rule_id: ruleId,
-                      scheduled_for: scheduledFor.toISOString(),
-                      status: "pending",
+                if (followUpSteps && followUpSteps.length > 0) {
+                  for (const step of followUpSteps as any[]) {
+                    const { data: tmpl } = await supabase
+                      .from("whatsapp_templates")
+                      .select("template")
+                      .eq("id", step.template_id)
+                      .single();
+                    stepsSnapshot.followup.push({
+                      delay_minutes: step.delay_minutes,
+                      template_id: step.template_id,
+                      template_content: tmpl?.template || "",
                     });
-                    console.log(`WhatsApp greeting scheduled for lead ${newLead.id} at ${scheduledFor.toISOString()}`);
                   }
                 }
 
+                // Insert automation control record
+                const { error: controlError } = await supabase
+                  .from("whatsapp_automation_control")
+                  .insert({
+                    account_id: cfg.account_id,
+                    lead_id: newLead.id,
+                    automation_rule_id: ruleId,
+                    phone: phone,
+                    current_phase: "greeting",
+                    current_step_position: 0,
+                    status: "active",
+                    next_execution_at: new Date(Date.now() + delaySeconds * 1000).toISOString(),
+                    steps_snapshot: stepsSnapshot,
+                  });
+
+                if (controlError) {
+                  console.error("Error creating automation control:", controlError);
+                } else {
+                  console.log(`✅ Automation control created for lead ${newLead.id} (greeting: ${stepsSnapshot.greeting.length} steps, followup: ${stepsSnapshot.followup.length} steps)`);
+                }
+
+                // Trigger worker
                 supabase.functions.invoke("process-whatsapp-queue").catch(() => {});
               }
             }
