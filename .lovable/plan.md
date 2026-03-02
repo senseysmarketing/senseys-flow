@@ -1,102 +1,64 @@
 
-## Correcao do Espelhamento de Mensagens WhatsApp
 
-### Diagnostico confirmado
+## Correcao: Mensagens Duplicadas na Fila Legada (whatsapp_message_queue)
 
-1. **Tela de conversas vazia**: A query na linha 95 de `use-conversations.tsx` faz `.eq('session_phone', currentPhone)`, mas muitas conversas tem `session_phone = null`, escondendo dados validos.
-2. **31 duplicatas reais**: 14.064 mensagens com `message_id`, apenas 14.033 unicas. Sem constraint UNIQUE no banco.
-3. **Insercao nao atomica**: O webhook faz `SELECT` + `INSERT` separados (linhas 436-454), permitindo corrida de condicao.
-4. **unread_count pode inflar**: Na funcao `upsertConversation` (linha 189), o `unread_count++` acontece independente de saber se a mensagem foi realmente inserida ou ja existia.
+### Causa Raiz Confirmada
 
-### Sobre os pontos do ChatGPT
+O problema **nao esta** no novo sistema de automacao (`whatsapp_automation_control`) -- esse funciona corretamente com lock otimista.
 
-- **UNIQUE com instance_id**: Verificado no banco -- todas as contas tem exatamente 1 instancia. `UNIQUE(account_id, message_id)` e suficiente. Nao precisa de `instance_id`.
-- **session_phone OR null como temporario**: Concordo. O plano inclui backfill + garantia de preenchimento futuro. O filtro `OR IS NULL` sera temporario ate o backfill concluir.
-- **whatsapp_jid_mapping**: Concordo em nao criar agora. `lid_jid` + `jid_locked` cobrem o cenario atual.
-- **unread_count idempotente**: Ponto valido e nao coberto anteriormente. Sera incluido.
+O problema esta na **fila legada** (`whatsapp_message_queue`) que ainda processa leads criados antes da migracao. Os dados confirmam:
+
+- Walter Costa tem **2 entradas** na fila legada (template 1 + template 2), ambas com `scheduled_for: 2026-03-02 11:00:00`
+- O `message_log` mostra **4 envios** (cada template enviado 2x)
+- Os timestamps sao separados por apenas **124ms** (`11:01:09.442` vs `11:01:09.566`)
+- Isso significa que o **cron disparou 2 execucoes simultaneas** do worker
+
+O codigo legado na linha 698-704 faz `SELECT status WHERE id = X` antes de enviar. Duas execucoes simultaneas leem `status = 'pending'` ao mesmo tempo, e ambas procedem com o envio. E a mesma corrida de condicao que o lock otimista resolve no sistema novo, mas que nunca foi aplicada ao codigo legado.
+
+**8 leads afetados** na conta Senseys, todos com exatamente o mesmo padrao: cada mensagem enviada 2x.
 
 ---
 
-### Implementacao
+### Solucao
 
-#### 1. Migracao SQL
+Aplicar **lock otimista** na fila legada, identico ao padrao do automation_control:
 
-**Backfill session_phone** nas conversas existentes usando o phone_number da sessao ativa:
-```sql
-UPDATE whatsapp_conversations wc
-SET session_phone = ws.phone_number
-FROM whatsapp_sessions ws
-WHERE wc.account_id = ws.account_id
-  AND wc.session_phone IS NULL
-  AND ws.phone_number IS NOT NULL;
-```
+**Arquivo: `supabase/functions/process-whatsapp-queue/index.ts`**
 
-**Remover duplicatas** (manter a mais antiga):
-```sql
-DELETE FROM whatsapp_messages
-WHERE id IN (
-  SELECT id FROM (
-    SELECT id, ROW_NUMBER() OVER (
-      PARTITION BY account_id, message_id
-      ORDER BY created_at ASC
-    ) as rn
-    FROM whatsapp_messages
-    WHERE message_id IS NOT NULL
-  ) sub
-  WHERE rn > 1
-);
-```
-
-**Criar UNIQUE index parcial**:
-```sql
-CREATE UNIQUE INDEX idx_whatsapp_messages_unique_msg
-  ON whatsapp_messages(account_id, message_id)
-  WHERE message_id IS NOT NULL;
-```
-
-#### 2. Frontend: `src/hooks/use-conversations.tsx`
-
-Linha 95: trocar `.eq('session_phone', currentPhone)` por filtro que inclui `session_phone = currentPhone` OU `session_phone IS NULL`:
+Substituir o padrao atual (linhas 697-707):
 ```typescript
-.or(`session_phone.eq.${currentPhone},session_phone.is.null`)
+// ANTES (race condition):
+const { data: freshMsg } = await supabase
+  .from('whatsapp_message_queue')
+  .select('status')
+  .eq('id', msg.id)
+  .single()
+
+if (freshMsg?.status !== 'pending') {
+  continue
+}
 ```
 
-Isso resolve o bug imediato. Apos backfill, a maioria tera `session_phone` preenchido.
-
-#### 3. Backend: `supabase/functions/whatsapp-webhook/index.ts`
-
-**3a. Trocar SELECT+INSERT por INSERT ON CONFLICT DO NOTHING** (linhas 436-478):
-
-Remover o bloco de verificacao manual (linhas 436-454). Substituir o INSERT da linha 460 por:
+Por lock otimista atomico:
 ```typescript
-const { data: inserted } = await supabase
-  .from('whatsapp_messages')
-  .upsert({
-    account_id: session.account_id,
-    remote_jid: storeJid,
-    phone: finalPhone,
-    message_id: messageId,
-    content,
-    media_type: mediaType,
-    media_url: mediaUrl,
-    is_from_me: isFromMe,
-    status: isFromMe ? 'sent' : 'received',
-    timestamp: ...,
-    lead_id: leadId,
-    contact_name: contactName,
-    session_phone: session.phone_number || null,
-  }, { onConflict: 'account_id,message_id', ignoreDuplicates: true })
+// DEPOIS (atomico):
+const { data: locked, error: lockErr } = await supabase
+  .from('whatsapp_message_queue')
+  .update({ status: 'processing' })
+  .eq('id', msg.id)
+  .eq('status', 'pending')
   .select('id')
+  .maybeSingle()
+
+if (lockErr || !locked) {
+  console.log(`[process-whatsapp-queue] Message ${msg.id} already picked up, skipping`)
+  continue
+}
 ```
 
-**3b. unread_count condicional**: Passar o resultado do insert para `upsertConversation`. So incrementar `unread_count` se a mensagem foi realmente inserida (ou seja, `inserted?.length > 0`). Adicionar parametro `wasInserted: boolean` a funcao `upsertConversation`:
-```typescript
-if (!isFromMe && wasInserted) updateData.unread_count = (existing.unread_count || 0) + 1
-```
+E ajustar o status final de `sent` para usar `.eq('status', 'processing')` ao inves de `.eq('id', msg.id)` simples.
 
-#### 4. Backend: `supabase/functions/whatsapp-send/index.ts`
-
-Garantir que ao inserir em `whatsapp_messages` e ao fazer upsert de conversa, o campo `session_phone` seja preenchido buscando da sessao ativa.
+Tambem adicionar recuperacao de registros "stuck" (status `processing` ha mais de 5 minutos) no inicio do bloco legado, identico ao que ja existe no automation_control.
 
 ---
 
@@ -104,14 +66,11 @@ Garantir que ao inserir em `whatsapp_messages` e ao fazer upsert de conversa, o 
 
 | Arquivo | Mudanca |
 |---------|---------|
-| Migracao SQL | Backfill session_phone, remover duplicatas, UNIQUE index |
-| `src/hooks/use-conversations.tsx` | Filtro session_phone OR null |
-| `supabase/functions/whatsapp-webhook/index.ts` | INSERT ON CONFLICT + unread_count condicional |
-| `supabase/functions/whatsapp-send/index.ts` | Garantir session_phone no upsert de conversa |
+| `supabase/functions/process-whatsapp-queue/index.ts` | Lock otimista na fila legada + recuperacao de stuck |
 
 ### Resultado esperado
 
-- Tela de conversas mostra todas as conversas imediatamente
-- Zero duplicatas futuras (constraint UNIQUE atomica)
-- unread_count nunca infla por webhook duplicado
-- session_phone preenchido em todas as conversas futuras e retroativamente
+- Zero duplicatas futuras mesmo com cron disparando execucoes simultaneas
+- Compativel com o periodo de transicao enquanto a fila legada ainda tem mensagens pendentes
+- Mesma abordagem ja validada no automation_control
+
