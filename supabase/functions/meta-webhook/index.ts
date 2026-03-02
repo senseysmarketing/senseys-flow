@@ -36,7 +36,7 @@ const BASIC_FIELDS = new Set([
   "phone_number", "telefone", "phone",
   "email", "e-mail"
 ]);
-const EXCLUDED_FIELDS = new Set([...BASIC_FIELDS, "reference_code", "ref", "codigo_referencia", "codigo_imovel"]);
+const EXCLUDED_FIELDS = new Set([...BASIC_FIELDS]);
 
 function extractLeadName(fields: Record<string, string>): string {
   const fullNameKeys = [
