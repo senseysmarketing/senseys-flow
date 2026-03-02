@@ -632,6 +632,20 @@ Deno.serve(async (req) => {
     const automationResult = await processAutomationControl(supabase, supabaseUrl, supabaseServiceKey)
 
     // ═══ BLOCK 2: Process LEGACY message queue ═══
+
+    // Recover stuck legacy messages (processing for more than 5 minutes)
+    const legacyStuckCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+    const { data: stuckLegacy } = await supabase
+      .from('whatsapp_message_queue')
+      .update({ status: 'pending' })
+      .eq('status', 'processing')
+      .lt('scheduled_for', legacyStuckCutoff)
+      .select('id')
+
+    if (stuckLegacy?.length > 0) {
+      console.log(`[process-whatsapp-queue] Recovered ${stuckLegacy.length} stuck legacy messages`)
+    }
+
     const { data: pendingMessages, error: fetchError } = await supabase
       .from('whatsapp_message_queue')
       .select(`
@@ -694,15 +708,17 @@ Deno.serve(async (req) => {
           continue
         }
 
-        // ── Layer 1: Re-check status in DB ──
-        const { data: freshMsg } = await supabase
+        // ── Layer 1: Optimistic lock (atomic UPDATE WHERE status='pending') ──
+        const { data: locked, error: lockErr } = await supabase
           .from('whatsapp_message_queue')
-          .select('status')
+          .update({ status: 'processing' })
           .eq('id', msg.id)
-          .single()
+          .eq('status', 'pending')
+          .select('id')
+          .maybeSingle()
 
-        if (freshMsg?.status !== 'pending') {
-          console.log(`[process-whatsapp-queue] Message ${msg.id} is no longer pending (${freshMsg?.status}), skipping`)
+        if (lockErr || !locked) {
+          console.log(`[process-whatsapp-queue] Message ${msg.id} already picked up, skipping`)
           continue
         }
 
@@ -833,6 +849,7 @@ Deno.serve(async (req) => {
             sent_at: new Date().toISOString()
           })
           .eq('id', msg.id)
+          .eq('status', 'processing')
 
         processedCount++
         console.log(`[process-whatsapp-queue] Legacy message ${msg.id} sent successfully`)
@@ -855,15 +872,18 @@ Deno.serve(async (req) => {
               retry_count: newRetryCount
             })
             .eq('id', msg.id)
+            .eq('status', 'processing')
         } else {
           await supabase
             .from('whatsapp_message_queue')
             .update({
+              status: 'pending',
               retry_count: newRetryCount,
               error_message: errorMessage,
               scheduled_for: new Date(Date.now() + 5 * 60 * 1000).toISOString()
             })
             .eq('id', msg.id)
+            .eq('status', 'processing')
         }
 
         errorCount++
