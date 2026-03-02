@@ -1,38 +1,83 @@
 
-## Detectar campo REF durante sincronização de formulários (sem depender de leads)
 
-### Problema
-Os formulários "R$ 420 Mil | Bairro Nações", "R$ 545 Mil | Bairro Eucaliptos v2" e "R$ 583 Mil - Bairro Eucaliptos v2" não mostram o campo de código de referência porque **ainda não receberam nenhum lead**. A detecção atual depende exclusivamente de dados em `lead_form_field_values`, que está vazia para formulários sem leads.
+## Correção: Espelhamento de Mensagens e Follow-up Quebrados
 
-Porém, quando o `sync-meta-forms` sincroniza esses formulários, ele **já recebe todas as perguntas do Meta** (incluindo campos hidden/texto como REF) -- mas descarta os campos de referência sem registrá-los.
+### Causa Raiz Identificada
 
-### Solução
+O espelhamento de mensagens parou completamente em **27/02** (zero mensagens desde então). O banco está gerando milhares de erros:
 
-1. **Atualizar `sync-meta-forms`** para detectar campos de referência nas perguntas do formulário e salvá-los no `meta_form_configs.reference_field_name` automaticamente (quando ainda não configurado pelo usuário).
-   - Durante o processamento das questions, se encontrar um campo cujo `key` está na lista de referência (ref, reference_code, etc.), gravar esse nome no `reference_field_name` do form config.
-
-2. **Atualizar o frontend** (`MetaFormScoringManager.tsx`) para incluir na detecção de REF o valor já salvo em `config.reference_field_name`, garantindo que o seletor mostre o campo mesmo sem leads.
-
-### Arquivos a modificar
-
-| Arquivo | Mudança |
-|---------|---------|
-| `supabase/functions/sync-meta-forms/index.ts` | Ao processar questions, detectar campos de referência e fazer update de `reference_field_name` no form config |
-| `src/components/MetaFormScoringManager.tsx` | Incluir `config.reference_field_name` como candidato adicional em `getDetectedRefFields` |
-
-### Detalhes da lógica no sync
-
-No loop de questions do sync-form:
 ```text
-Para cada question:
-  Se question.key está em EXCLUDED_FIELD_KEYS (ref, reference_code, etc.):
-    -> Registrar como detected_ref_field
-    -> Após o loop, fazer UPDATE em meta_form_configs
-       SET reference_field_name = detected_ref_field
-       WHERE id = formConfigId AND reference_field_name IS NULL
+"there is no unique or exclusion constraint matching the ON CONFLICT specification"
 ```
 
-Isso garante que:
-- Formulários sem leads já mostram o campo REF no seletor
-- O valor só é preenchido automaticamente se o usuário ainda não configurou manualmente
-- Quando leads chegarem, a vinculação com imóveis já funciona desde o primeiro lead
+A migração `20260227182622` criou um **índice parcial** (`CREATE UNIQUE INDEX ... WHERE message_id IS NOT NULL`) para deduplicação. O problema é que o Supabase client usa `upsert({ onConflict: 'account_id,message_id' })`, mas o PostgreSQL exige uma **constraint real** (não um índice parcial) para `ON CONFLICT`. Resultado: toda tentativa de inserção via upsert falha silenciosamente.
+
+**Isso afeta:**
+- Webhook: mensagens recebidas nao sao salvas
+- whatsapp-send: mensagens enviadas nao sao salvas
+- Consequencia: CRM mostra "Nenhuma mensagem", follow-ups nao detectam respostas
+
+### Solucao
+
+#### 1. Migracão SQL: Criar constraint real
+
+Substituir o índice parcial por uma constraint de unicidade que o PostgREST consiga usar com ON CONFLICT:
+
+```sql
+-- Remover o indice parcial que causa o erro
+DROP INDEX IF EXISTS idx_whatsapp_messages_unique_msg;
+
+-- Criar constraint real (nao indice parcial)
+-- Para lidar com message_id NULL, usar COALESCE com o id do registro
+ALTER TABLE whatsapp_messages 
+  ADD CONSTRAINT whatsapp_messages_account_message_unique 
+  UNIQUE (account_id, message_id);
+```
+
+**Nota:** Se existirem registros com `message_id = NULL`, nao havera conflito porque `NULL != NULL` em constraints UNIQUE do PostgreSQL. Ou seja, a constraint funciona naturalmente.
+
+#### 2. Atualizar `whatsapp-webhook/index.ts`
+
+Trocar o `.upsert()` por `.insert()` com tratamento de conflito explícito, mais robusto:
+
+Na linha ~438, mudar de:
+```typescript
+.upsert({...}, { onConflict: 'account_id,message_id', ignoreDuplicates: true })
+```
+Para:
+```typescript
+.upsert({...}, { onConflict: 'whatsapp_messages_account_message_unique', ignoreDuplicates: true })
+```
+
+Ou, de forma mais simples, manter o `onConflict: 'account_id,message_id'` que agora vai funcionar com a constraint real.
+
+#### 3. Atualizar `whatsapp-send/index.ts`
+
+Mesma correção na linha ~280 do whatsapp-send (que também usa `upsert` com `onConflict: 'account_id,message_id'`).
+
+#### 4. Recuperacao de dados
+
+Executar um backfill para recuperar mensagens dos últimos dias que foram registradas no `whatsapp_message_log` mas não no `whatsapp_messages`. Isso restaurara o historico perdido para mensagens enviadas pelo CRM/automação.
+
+### Impacto
+
+| Problema | Status Atual | Apos Correcão |
+|----------|-------------|---------------|
+| Espelhamento de mensagens | Quebrado desde 27/02 | Restaurado |
+| Follow-up nao detecta respostas | Quebrado (sem dados em whatsapp_messages) | Restaurado |
+| Historico no CRM | Vazio para conversas recentes | Restaurado |
+| Conversas (pagina Conversas) | last_message funciona, mas sem historico detalhado | Completo |
+
+### Arquivos a Modificar
+
+| Arquivo | Mudanca |
+|---------|---------|
+| Nova migração SQL | Criar constraint UNIQUE real, dropar indice parcial |
+| `supabase/functions/whatsapp-webhook/index.ts` | Nenhuma mudanca necessaria no codigo (o onConflict vai funcionar com a nova constraint) |
+| `supabase/functions/whatsapp-send/index.ts` | Nenhuma mudanca necessaria no codigo |
+| Nova migração SQL (backfill) | Recuperar mensagens do `whatsapp_message_log` para `whatsapp_messages` |
+
+### Detalhes Tecnicos
+
+A causa é que o PostgreSQL diferencia **partial unique indexes** de **unique constraints**. O `ON CONFLICT` do SQL aceita ambos, mas o PostgREST (usado pelo Supabase client JS) converte `onConflict: 'col1,col2'` para `ON CONFLICT (col1, col2)` sem a clausula `WHERE`, o que nao corresponde ao indice parcial. Criar uma constraint UNIQUE real resolve o problema sem precisar alterar nenhum codigo das edge functions.
+
