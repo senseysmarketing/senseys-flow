@@ -1,62 +1,72 @@
 
 
-## Blindagem do Sistema de Mensagens WhatsApp (Refinado)
+## Diagnostico e Solucao: Variaveis de Formulario nos Templates WhatsApp
 
-### Mudancas
+### O que esta acontecendo
 
-#### 1. Migration SQL: Adicionar `last_customer_message_at`
+Sua analise esta **100% correta**. O lead Cristal Lorca veio do formulario **Cidade-Jardim** (form_id: 1852010645681625) e possui estes campos salvos:
 
-Adicionar coluna `last_customer_message_at` (timestamptz, nullable) na tabela `whatsapp_conversations`. Permite queries de inatividade sem consultar `whatsapp_messages`.
+- `você_já_investe_em_imóveis?` → sim, tenho portfólio...
+- `qual_seu_momento_de_decisão_para_investir?` → 6 meses
+- `qual_valor_você_considera_investir_neste_empreendimento?` → até R$ 300 mil
 
-#### 2. `whatsapp-webhook/index.ts` - Guard de message_id + Estado da conversa
+O template que foi enviado provavelmente usa uma variavel do formulario **Ilha Pura** (ex: `{form_você_está_buscando_imóvel_para_moradia_própria_ou_para_investimento?_}`), que **nao existe** nos dados desse lead. Por isso aparece vazio na mensagem.
 
-**Guard de message_id (linha ~444):**
-Antes do upsert em `whatsapp_messages`, garantir que `messageId` nunca seja NULL:
+### A conta tem 6+ formularios com perguntas sobrepostas
 
-```typescript
-const safeMessageId = messageId ?? `${instanceName}-${Date.now()}-${crypto.randomUUID().slice(0,8)}`
+- Art Wood, Cidade-Jardim, Ilha Pura v3/v4/v5/v6, Ipanema v2
+- Varias perguntas sao **iguais** entre formularios (ex: "fase da compra", "valor maximo")
+- Mas o Cidade-Jardim tem perguntas **exclusivas** (ex: "Voce ja investe em imoveis?")
+- Hoje o modal de templates mostra **todas as variaveis de todos os formularios misturadas**, sem indicar de qual formulario vem cada uma
+
+### Solucao: Duas mudancas
+
+#### 1. Confirmar a abordagem correta de configuracao (sem codigo)
+
+Sim, o correto e:
+- Criar **um template por formulario/imovel** com as variaveis especificas daquele formulario
+- Usar **regras condicionais de saudacao** (que ja existem no sistema) vinculadas a campanha, formulario ou imovel
+- Cada regra aponta para o template correto com as variaveis daquele formulario
+
+#### 2. Melhorar o seletor de variaveis no modal de templates (mudanca de codigo)
+
+Agrupar as variaveis por formulario no modal `WhatsAppTemplatesModal`, para ficar claro de qual formulario vem cada variavel.
+
+**Mudancas em `WhatsAppTemplatesModal.tsx`:**
+
+- Alterar `fetchFormVars` para buscar tambem o `form_name` via join com `meta_form_configs`
+- Na interface `FormVar`, adicionar campo `formName`
+- Na secao expandivel de variaveis, agrupar por nome do formulario com headers visuais (ex: "Cidade-Jardim", "Ilha Pura v6")
+- Cada grupo mostra apenas as variaveis daquele formulario
+
+**Layout proposto:**
+
+```text
+▼ Mostrar variaveis de formulario Meta (12)
+
+  ── Cidade-Jardim ──
+  {form_qual_seu_momento...}   Qual seu momento de decisao...
+  {form_você_já_investe...}    Voce ja investe em imoveis?
+  {form_qual_valor_você...}    Qual valor voce considera...
+
+  ── Ilha Pura v6 ──
+  {form_Para_entendermos...}   Para entendermos melhor...
+  {form_Qual_o_valor...}       Qual o valor maximo...
+  {form_Você_está_buscando...} Voce esta buscando...
+
+  ── Art Wood ──
+  ...
 ```
 
-Formato rastreavel: inclui nome da instancia + timestamp + sufixo unico.
-
-**Estado da conversa na funcao `upsertConversation` (linha ~170):**
-Adicionar parametro `messageTimestamp` e atualizar `last_customer_message_at` quando `!isFromMe`:
-
-```typescript
-if (!isFromMe) updateData.last_customer_message_at = messageTimestamp || now
-```
-
-Isso garante que `last_message_is_from_me`, `last_message_at` e `last_customer_message_at` sao atualizados atomicamente numa unica operacao de UPDATE, eliminando o risco de estado inconsistente entre mensagem salva e conversa nao atualizada.
-
-#### 3. `whatsapp-send/index.ts` - Guard de message_id
-
-Na linha ~280, antes do upsert em `whatsapp_messages`:
-
-```typescript
-const safeMessageId = sendData.key?.id ?? `${session.instance_name}-${Date.now()}-${crypto.randomUUID().slice(0,8)}`
-```
-
-Substituir `sendData.key?.id` por `safeMessageId` no upsert e no log.
-
-### Arquivos a Modificar
+### Arquivo a modificar
 
 | Arquivo | Mudanca |
 |---------|---------|
-| Nova migracao SQL | `ALTER TABLE whatsapp_conversations ADD COLUMN last_customer_message_at timestamptz` |
-| `supabase/functions/whatsapp-webhook/index.ts` | Guard message_id NULL + passar timestamp para upsertConversation + atualizar `last_customer_message_at` |
-| `supabase/functions/whatsapp-send/index.ts` | Guard message_id NULL |
+| `src/components/whatsapp/WhatsAppTemplatesModal.tsx` | Agrupar variaveis por formulario, buscar form_name via join |
 
-### Formato do message_id fallback
+### Impacto
 
-```text
-senseys_abc123-1709398400000-f7a3b2c1
-```
-
-- Prefixo da instancia para rastreabilidade
-- Timestamp para ordenacao temporal
-- Sufixo UUID curto para unicidade
-
-### Garantia de consistencia
-
-O ponto critico levantado sobre `last_message_is_from_me` ja e tratado atomicamente na funcao `upsertConversation` (linhas 181-195): ela faz um unico UPDATE com `last_message`, `last_message_at` e `last_message_is_from_me` juntos. Com a adicao de `last_customer_message_at` nesse mesmo UPDATE, todos os campos de estado da conversa serao atualizados numa operacao atomica, eliminando o risco de inconsistencia.
+- Nenhuma mudanca no backend ou edge functions
+- Apenas melhoria de UX no seletor de variaveis
+- O sistema de substituicao de variaveis ja funciona corretamente — o problema e de configuracao (template errado para o formulario do lead)
 
