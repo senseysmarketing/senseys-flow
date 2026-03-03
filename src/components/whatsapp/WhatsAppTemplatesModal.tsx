@@ -28,6 +28,7 @@ interface Template {
 interface FormVar {
   code: string;
   label: string;
+  formName: string;
 }
 
 const TEMPLATE_VARIABLES = [
@@ -68,24 +69,25 @@ export function WhatsAppTemplatesModal({ open, onOpenChange, onTemplatesChange }
   };
 
   const fetchFormVars = async () => {
-    // Get distinct question_name + question_label from meta_form_scoring_rules via meta_form_configs
     const { data } = await supabase
       .from('meta_form_scoring_rules')
-      .select('question_name, question_label');
+      .select('question_name, question_label, form_config_id, meta_form_configs!inner(form_name)');
     
     if (!data || data.length === 0) return;
 
-    // Deduplicate by question_name
+    // Deduplicate by form_config_id + question_name
     const seen = new Set<string>();
     const vars: FormVar[] = [];
     for (const row of data) {
-      if (!seen.has(row.question_name)) {
-        seen.add(row.question_name);
+      const key = `${row.form_config_id}::${row.question_name}`;
+      if (!seen.has(key)) {
+        seen.add(key);
         const label = row.question_label || row.question_name;
-        // Generate variable code: {form_<question_name>} keeping the name as-is
+        const formConfig = row.meta_form_configs as unknown as { form_name: string | null };
         vars.push({
           code: `{form_${row.question_name}}`,
           label,
+          formName: formConfig?.form_name || 'Formulário sem nome',
         });
       }
     }
@@ -323,22 +325,35 @@ export function WhatsAppTemplatesModal({ open, onOpenChange, onTemplatesChange }
                     </Button>
                     {showMoreVars && (
                       <div className="flex flex-col gap-1.5 mt-2 p-2 bg-muted/40 rounded-md border border-dashed">
-                        {formVars.map((v) => (
-                          <div
-                            key={v.code}
-                            className="flex items-center gap-2 cursor-pointer hover:bg-accent rounded px-1 py-0.5 transition-colors"
-                            onClick={() => insertVariable(v.code)}
-                            title={v.label}
-                          >
-                            <Badge
-                              variant="outline"
-                              className="border-primary/40 text-primary font-mono text-xs shrink-0 max-w-[220px] truncate"
-                            >
-                              {v.code}
-                            </Badge>
-                            <span className="text-xs text-muted-foreground truncate">{v.label}</span>
+                      {(() => {
+                        const grouped = formVars.reduce<Record<string, FormVar[]>>((acc, v) => {
+                          (acc[v.formName] = acc[v.formName] || []).push(v);
+                          return acc;
+                        }, {});
+                        return Object.entries(grouped).map(([formName, vars]) => (
+                          <div key={formName} className="space-y-1">
+                            <p className="text-xs font-medium text-muted-foreground border-b border-dashed pb-1 mt-1">
+                              {formName}
+                            </p>
+                            {vars.map((v) => (
+                              <div
+                                key={v.code}
+                                className="flex items-center gap-2 cursor-pointer hover:bg-accent rounded px-1 py-0.5 transition-colors"
+                                onClick={() => insertVariable(v.code)}
+                                title={v.label}
+                              >
+                                <Badge
+                                  variant="outline"
+                                  className="border-primary/40 text-primary font-mono text-xs shrink-0 max-w-[220px] truncate"
+                                >
+                                  {v.code}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground truncate">{v.label}</span>
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        ));
+                      })()}
                       </div>
                     )}
                   </div>
@@ -452,14 +467,27 @@ export function WhatsAppTemplatesModal({ open, onOpenChange, onTemplatesChange }
                       </Button>
                       {showMoreVars && (
                         <div className="flex flex-col gap-1.5 mt-2 pt-2 border-t border-dashed">
-                          {formVars.map((v) => (
-                            <div key={v.code} className="flex items-center gap-2 text-xs">
-                              <Badge variant="outline" className="font-mono text-xs border-primary/40 text-primary shrink-0 max-w-[220px] truncate">
-                                {v.code}
-                              </Badge>
-                              <span className="text-muted-foreground truncate">{v.label}</span>
-                            </div>
-                          ))}
+                          {(() => {
+                            const grouped = formVars.reduce<Record<string, FormVar[]>>((acc, v) => {
+                              (acc[v.formName] = acc[v.formName] || []).push(v);
+                              return acc;
+                            }, {});
+                            return Object.entries(grouped).map(([formName, vars]) => (
+                              <div key={formName} className="space-y-1">
+                                <p className="text-xs font-medium text-muted-foreground border-b border-dashed pb-1 mt-1">
+                                  {formName}
+                                </p>
+                                {vars.map((v) => (
+                                  <div key={v.code} className="flex items-center gap-2 text-xs">
+                                    <Badge variant="outline" className="font-mono text-xs border-primary/40 text-primary shrink-0 max-w-[220px] truncate">
+                                      {v.code}
+                                    </Badge>
+                                    <span className="text-muted-foreground truncate">{v.label}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ));
+                          })()}
                         </div>
                       )}
                     </div>
