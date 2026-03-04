@@ -1,65 +1,72 @@
 
 
-## Verificacao: Regras Condicionais e Envios - Status Atual
+## Diagnostico e Solucao: Variaveis de Formulario nos Templates WhatsApp
 
-### Resultado da Analise: Tudo Correto
+### O que esta acontecendo
 
-Apos revisar os 4 arquivos criticos do fluxo (`meta-webhook`, `webhook-leads`, `process-whatsapp-queue`, `WhatsAppTemplatesModal`), confirmo que o sistema esta funcionando corretamente com as ultimas atualizacoes. Nao ha mudancas de codigo necessarias.
+Sua analise esta **100% correta**. O lead Cristal Lorca veio do formulario **Cidade-Jardim** (form_id: 1852010645681625) e possui estes campos salvos:
 
-### Fluxo Verificado (ponta a ponta)
+- `você_já_investe_em_imóveis?` → sim, tenho portfólio...
+- `qual_seu_momento_de_decisão_para_investir?` → 6 meses
+- `qual_valor_você_considera_investir_neste_empreendimento?` → até R$ 300 mil
+
+O template que foi enviado provavelmente usa uma variavel do formulario **Ilha Pura** (ex: `{form_você_está_buscando_imóvel_para_moradia_própria_ou_para_investimento?_}`), que **nao existe** nos dados desse lead. Por isso aparece vazio na mensagem.
+
+### A conta tem 6+ formularios com perguntas sobrepostas
+
+- Art Wood, Cidade-Jardim, Ilha Pura v3/v4/v5/v6, Ipanema v2
+- Varias perguntas sao **iguais** entre formularios (ex: "fase da compra", "valor maximo")
+- Mas o Cidade-Jardim tem perguntas **exclusivas** (ex: "Voce ja investe em imoveis?")
+- Hoje o modal de templates mostra **todas as variaveis de todos os formularios misturadas**, sem indicar de qual formulario vem cada uma
+
+### Solucao: Duas mudancas
+
+#### 1. Confirmar a abordagem correta de configuracao (sem codigo)
+
+Sim, o correto e:
+- Criar **um template por formulario/imovel** com as variaveis especificas daquele formulario
+- Usar **regras condicionais de saudacao** (que ja existem no sistema) vinculadas a campanha, formulario ou imovel
+- Cada regra aponta para o template correto com as variaveis daquele formulario
+
+#### 2. Melhorar o seletor de variaveis no modal de templates (mudanca de codigo)
+
+Agrupar as variaveis por formulario no modal `WhatsAppTemplatesModal`, para ficar claro de qual formulario vem cada variavel.
+
+**Mudancas em `WhatsAppTemplatesModal.tsx`:**
+
+- Alterar `fetchFormVars` para buscar tambem o `form_name` via join com `meta_form_configs`
+- Na interface `FormVar`, adicionar campo `formName`
+- Na secao expandivel de variaveis, agrupar por nome do formulario com headers visuais (ex: "Cidade-Jardim", "Ilha Pura v6")
+- Cada grupo mostra apenas as variaveis daquele formulario
+
+**Layout proposto:**
 
 ```text
-Lead chega (Meta/Webhook/OLX)
-       │
-       ▼
-Busca greeting_rules ativas (por prioridade)
-       │
-       ├─ property       → compara property_id
-       ├─ price_range    → compara sale_price/rent_price
-       ├─ property_type  → compara tipo do imovel
-       ├─ transaction    → compara venda/aluguel
-       ├─ campaign       → match parcial no nome da campanha
-       ├─ origin         → meta/webhook/olx/manual
-       └─ form_answer    → busca lead_form_field_values, normaliza e compara
-       │
-       ▼
-Matched? → Usa template_id da regra
-Nao?     → Fallback para whatsapp_automation_rules (template padrao)
-       │
-       ▼
-Monta steps_snapshot (greeting[] + followup[])
-  → Busca template_content de cada step via whatsapp_templates
-  → Grava em whatsapp_automation_control
-       │
-       ▼
-process-whatsapp-queue executa:
-  → substituteTemplateVariables() resolve {nome}, {imovel}, {form_*}
-  → {form_*} busca lead_form_field_values com normalizacao
-  → Envia via whatsapp-send (com safeMessageId guard)
+▼ Mostrar variaveis de formulario Meta (12)
+
+  ── Cidade-Jardim ──
+  {form_qual_seu_momento...}   Qual seu momento de decisao...
+  {form_você_já_investe...}    Voce ja investe em imoveis?
+  {form_qual_valor_você...}    Qual valor voce considera...
+
+  ── Ilha Pura v6 ──
+  {form_Para_entendermos...}   Para entendermos melhor...
+  {form_Qual_o_valor...}       Qual o valor maximo...
+  {form_Você_está_buscando...} Voce esta buscando...
+
+  ── Art Wood ──
+  ...
 ```
 
-### Pontos Confirmados
+### Arquivo a modificar
 
-| Item | Status |
-|------|--------|
-| Regras condicionais avaliadas por prioridade | OK - `order('priority', { ascending: true })` com `break` no primeiro match |
-| form_answer normaliza pergunta e resposta | OK - `toLowerCase().replace(/\?/g, '').replace(/_/g, ' ').trim()` |
-| Template correto vai para o snapshot | OK - busca `whatsapp_templates.template` pelo `template_id` da regra matched |
-| Substituicao de {form_*} no envio | OK - `substituteTemplateVariables()` busca `lead_form_field_values` com normalizacao identica |
-| Fallback para automation_rules | OK - se nenhuma greeting_rule matchou |
-| Sequence steps (bubbles) | OK - busca por `greeting_rule_id` ou `automation_rule_id` |
-| message_id guard (safeMessageId) | OK - implementado na ultima atualizacao |
-| last_customer_message_at atomico | OK - implementado na ultima atualizacao |
-| Agrupamento de variaveis por formulario no modal | OK - implementado na ultima atualizacao |
-| Logica identica entre meta-webhook e webhook-leads | OK - ambos usam o mesmo padrao de avaliacao |
+| Arquivo | Mudanca |
+|---------|---------|
+| `src/components/whatsapp/WhatsAppTemplatesModal.tsx` | Agrupar variaveis por formulario, buscar form_name via join |
 
-### Conclusao
+### Impacto
 
-O sistema esta blindado e consistente. A unica acao necessaria e de **configuracao** (nao de codigo):
-
-1. Criar um template especifico para cada formulario/imovel com as variaveis `{form_*}` correspondentes
-2. Criar regras condicionais vinculando cada template ao formulario/campanha/imovel correto
-3. O template padrao (fallback) deve usar apenas variaveis universais (`{nome}`, `{empresa}`, `{imovel}`)
-
-Nenhuma mudanca de codigo e necessaria.
+- Nenhuma mudanca no backend ou edge functions
+- Apenas melhoria de UX no seletor de variaveis
+- O sistema de substituicao de variaveis ja funciona corretamente — o problema e de configuracao (template errado para o formulario do lead)
 
