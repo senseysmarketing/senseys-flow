@@ -909,7 +909,7 @@ const Leads = () => {
       )}>
         {/* Hero Stats Section */}
         <LeadsHeroStats 
-          leads={leads}
+          leads={filteredLeads}
           onFilterChange={(filter) => {
             if (filter.type === "clear") {
               setFilters(prev => ({ ...prev, temperatures: [], noBroker: false }));
