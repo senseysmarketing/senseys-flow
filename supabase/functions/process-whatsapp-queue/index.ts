@@ -556,7 +556,7 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
         console.log(`[automation-control] Invalid number for lead ${record.lead_id}: ${sendResult.error}`)
         await supabase
           .from('whatsapp_automation_control')
-          .update({ status: 'failed', updated_at: new Date().toISOString() })
+          .update({ status: 'failed', conversation_state: 'automation_finished', updated_at: new Date().toISOString() })
           .eq('id', record.id)
         errors++
         continue
@@ -596,6 +596,7 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
 
           updateData.status = 'active'
           updateData.next_execution_at = new Date(adjustedMs).toISOString()
+          updateData.conversation_state = 'greeting_sent'
         } else {
           // Greeting complete — move to waiting_response or finish
           const followupSteps = snapshot.followup || []
@@ -608,8 +609,10 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
             updateData.current_step_position = 0
             updateData.status = 'active'
             updateData.next_execution_at = new Date(adjustedMs).toISOString()
+            updateData.conversation_state = 'waiting_reply'
           } else {
             updateData.status = 'finished'
+            updateData.conversation_state = 'closed_no_reply'
           }
         }
     } else if (currentPhase === 'followup') {
@@ -623,10 +626,12 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
 
           updateData.status = 'active'
           updateData.next_execution_at = new Date(adjustedMs).toISOString()
+          updateData.conversation_state = `followup_${nextStepPos}_sent`
           console.log(`[automation-control] 📊 Follow-up delay: nextStep[${nextStepPos}].delay_minutes=${nextStep.delay_minutes}, deltaMinutes=${deltaMinutes}, next_execution_at=${updateData.next_execution_at}`)
         } else {
           // All followups sent
           updateData.status = 'finished'
+          updateData.conversation_state = 'closed_no_reply'
         }
       }
 
