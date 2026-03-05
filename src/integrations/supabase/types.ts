@@ -1480,6 +1480,7 @@ export type Database = {
           current_step_position: number
           id: string
           jid_locked: boolean | null
+          last_followup_sent_at: string | null
           last_sent_message_id: string | null
           lead_id: string
           next_execution_at: string | null
@@ -1499,6 +1500,7 @@ export type Database = {
           current_step_position?: number
           id?: string
           jid_locked?: boolean | null
+          last_followup_sent_at?: string | null
           last_sent_message_id?: string | null
           lead_id: string
           next_execution_at?: string | null
@@ -1518,6 +1520,7 @@ export type Database = {
           current_step_position?: number
           id?: string
           jid_locked?: boolean | null
+          last_followup_sent_at?: string | null
           last_sent_message_id?: string | null
           lead_id?: string
           next_execution_at?: string | null
