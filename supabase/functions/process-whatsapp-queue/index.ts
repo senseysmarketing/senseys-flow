@@ -433,7 +433,7 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
         if (responded && responded.length > 0) {
           await supabase
             .from('whatsapp_automation_control')
-            .update({ status: 'responded', updated_at: new Date().toISOString() })
+            .update({ status: 'responded', conversation_state: 'customer_replied', updated_at: new Date().toISOString() })
             .eq('id', record.id)
           console.log(`[automation-control] Lead ${record.lead_id} responded during waiting_response phase`)
           continue
@@ -444,7 +444,7 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
         if (followupSteps.length === 0) {
           await supabase
             .from('whatsapp_automation_control')
-            .update({ status: 'finished', updated_at: new Date().toISOString() })
+            .update({ status: 'finished', conversation_state: 'closed_no_reply', updated_at: new Date().toISOString() })
             .eq('id', record.id)
           console.log(`[automation-control] Lead ${record.lead_id} finished (no followup steps)`)
           continue
@@ -502,6 +502,7 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
               current_phase: followupSteps.length > 0 ? 'waiting_response' : 'finished',
               current_step_position: 0,
               status: followupSteps.length > 0 ? 'active' : 'finished',
+              conversation_state: followupSteps.length > 0 ? 'waiting_reply' : 'closed_no_reply',
               next_execution_at: new Date(adjustedMs).toISOString(),
               updated_at: new Date().toISOString()
             })
@@ -512,7 +513,7 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
           // Followup exhausted
           await supabase
             .from('whatsapp_automation_control')
-            .update({ status: 'finished', updated_at: new Date().toISOString() })
+            .update({ status: 'finished', conversation_state: 'closed_no_reply', updated_at: new Date().toISOString() })
             .eq('id', record.id)
           console.log(`[automation-control] Lead ${record.lead_id} all followups sent, finished`)
           continue
