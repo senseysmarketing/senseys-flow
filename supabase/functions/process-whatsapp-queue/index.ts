@@ -335,9 +335,43 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
       if (hasResponse && hasResponse.length > 0) {
         await supabase
           .from('whatsapp_automation_control')
-          .update({ status: 'responded', updated_at: new Date().toISOString() })
+          .update({ status: 'responded', conversation_state: 'customer_replied', updated_at: new Date().toISOString() })
           .eq('id', record.id)
         console.log(`[automation-control] Lead ${record.lead_id} responded (temporal check), marking as responded`)
+        continue
+      }
+
+      // b2. Cross-check: verify last_customer_message_at from conversation
+      const { data: convCheck } = await supabase
+        .from('whatsapp_conversations')
+        .select('last_customer_message_at')
+        .eq('lead_id', record.lead_id)
+        .eq('account_id', record.account_id)
+        .maybeSingle()
+
+      if (convCheck?.last_customer_message_at) {
+        const customerMsgAt = new Date(convCheck.last_customer_message_at).getTime()
+        const automationStartedAt = new Date(record.started_at).getTime()
+        if (customerMsgAt > automationStartedAt) {
+          await supabase
+            .from('whatsapp_automation_control')
+            .update({ status: 'responded', conversation_state: 'customer_replied', updated_at: new Date().toISOString() })
+            .eq('id', record.id)
+          console.log(`[automation-control] Lead ${record.lead_id} responded (cross-check last_customer_message_at), marking as responded`)
+          continue
+        }
+      }
+
+      // b3. Minimum window: prevent two messages within 2 minutes (anti-loop)
+      const lastSendTimestamp = record.last_followup_sent_at || record.updated_at
+      const timeSinceLastSend = Date.now() - new Date(lastSendTimestamp).getTime()
+      if (timeSinceLastSend < 120_000) { // 2 minutes
+        const retryAt = new Date(new Date(lastSendTimestamp).getTime() + 120_000).toISOString()
+        await supabase
+          .from('whatsapp_automation_control')
+          .update({ status: 'active', next_execution_at: retryAt, updated_at: new Date().toISOString() })
+          .eq('id', record.id)
+        console.log(`[automation-control] ⛔ Minimum window: lead ${record.lead_id} last send ${Math.round(timeSinceLastSend/1000)}s ago, rescheduled to ${retryAt}`)
         continue
       }
 
@@ -399,7 +433,7 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
         if (responded && responded.length > 0) {
           await supabase
             .from('whatsapp_automation_control')
-            .update({ status: 'responded', updated_at: new Date().toISOString() })
+            .update({ status: 'responded', conversation_state: 'customer_replied', updated_at: new Date().toISOString() })
             .eq('id', record.id)
           console.log(`[automation-control] Lead ${record.lead_id} responded during waiting_response phase`)
           continue
@@ -410,7 +444,7 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
         if (followupSteps.length === 0) {
           await supabase
             .from('whatsapp_automation_control')
-            .update({ status: 'finished', updated_at: new Date().toISOString() })
+            .update({ status: 'finished', conversation_state: 'closed_no_reply', updated_at: new Date().toISOString() })
             .eq('id', record.id)
           console.log(`[automation-control] Lead ${record.lead_id} finished (no followup steps)`)
           continue
@@ -468,6 +502,7 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
               current_phase: followupSteps.length > 0 ? 'waiting_response' : 'finished',
               current_step_position: 0,
               status: followupSteps.length > 0 ? 'active' : 'finished',
+              conversation_state: followupSteps.length > 0 ? 'waiting_reply' : 'closed_no_reply',
               next_execution_at: new Date(adjustedMs).toISOString(),
               updated_at: new Date().toISOString()
             })
@@ -478,7 +513,7 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
           // Followup exhausted
           await supabase
             .from('whatsapp_automation_control')
-            .update({ status: 'finished', updated_at: new Date().toISOString() })
+            .update({ status: 'finished', conversation_state: 'closed_no_reply', updated_at: new Date().toISOString() })
             .eq('id', record.id)
           console.log(`[automation-control] Lead ${record.lead_id} all followups sent, finished`)
           continue
@@ -521,7 +556,7 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
         console.log(`[automation-control] Invalid number for lead ${record.lead_id}: ${sendResult.error}`)
         await supabase
           .from('whatsapp_automation_control')
-          .update({ status: 'failed', updated_at: new Date().toISOString() })
+          .update({ status: 'failed', conversation_state: 'automation_finished', updated_at: new Date().toISOString() })
           .eq('id', record.id)
         errors++
         continue
@@ -561,6 +596,7 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
 
           updateData.status = 'active'
           updateData.next_execution_at = new Date(adjustedMs).toISOString()
+          updateData.conversation_state = 'greeting_sent'
         } else {
           // Greeting complete — move to waiting_response or finish
           const followupSteps = snapshot.followup || []
@@ -573,8 +609,10 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
             updateData.current_step_position = 0
             updateData.status = 'active'
             updateData.next_execution_at = new Date(adjustedMs).toISOString()
+            updateData.conversation_state = 'waiting_reply'
           } else {
             updateData.status = 'finished'
+            updateData.conversation_state = 'closed_no_reply'
           }
         }
     } else if (currentPhase === 'followup') {
@@ -588,10 +626,12 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
 
           updateData.status = 'active'
           updateData.next_execution_at = new Date(adjustedMs).toISOString()
+          updateData.conversation_state = `followup_${nextStepPos}_sent`
           console.log(`[automation-control] 📊 Follow-up delay: nextStep[${nextStepPos}].delay_minutes=${nextStep.delay_minutes}, deltaMinutes=${deltaMinutes}, next_execution_at=${updateData.next_execution_at}`)
         } else {
           // All followups sent
           updateData.status = 'finished'
+          updateData.conversation_state = 'closed_no_reply'
         }
       }
 

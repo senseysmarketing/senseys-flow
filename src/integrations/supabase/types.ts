@@ -1475,6 +1475,7 @@ export type Database = {
         Row: {
           account_id: string
           automation_rule_id: string | null
+          conversation_state: string | null
           created_at: string | null
           current_phase: string
           current_step_position: number
@@ -1495,6 +1496,7 @@ export type Database = {
         Insert: {
           account_id: string
           automation_rule_id?: string | null
+          conversation_state?: string | null
           created_at?: string | null
           current_phase?: string
           current_step_position?: number
@@ -1515,6 +1517,7 @@ export type Database = {
         Update: {
           account_id?: string
           automation_rule_id?: string | null
+          conversation_state?: string | null
           created_at?: string | null
           current_phase?: string
           current_step_position?: number
