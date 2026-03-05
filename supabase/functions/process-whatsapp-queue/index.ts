@@ -434,6 +434,23 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
       } else if (phase === 'followup') {
         stepsInPhase = snapshot.followup || []
         currentStep = stepsInPhase[stepPos]
+
+        // Safety net: double-check that enough time has elapsed since last followup
+        if (currentStep && (record as any).last_followup_sent_at) {
+          const lastSentAt = new Date((record as any).last_followup_sent_at).getTime()
+          const requiredDelayMs = Math.max(currentStep.delay_minutes || 1440, 60) * 60 * 1000
+          const elapsed = Date.now() - lastSentAt
+          if (elapsed < requiredDelayMs * 0.9) { // 90% threshold to account for minor timing differences
+            console.log(`[automation-control] ⛔ Safety net: follow-up[${stepPos}] for lead ${record.lead_id} blocked. Elapsed=${Math.round(elapsed/60000)}min, required=${Math.round(requiredDelayMs/60000)}min`)
+            // Reschedule to correct time
+            const correctNextExec = new Date(lastSentAt + requiredDelayMs).toISOString()
+            await supabase
+              .from('whatsapp_automation_control')
+              .update({ status: 'active', next_execution_at: correctNextExec, updated_at: new Date().toISOString() })
+              .eq('id', record.id)
+            continue
+          }
+        }
       }
 
       if (!currentStep) {
