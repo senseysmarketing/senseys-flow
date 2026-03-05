@@ -335,9 +335,43 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
       if (hasResponse && hasResponse.length > 0) {
         await supabase
           .from('whatsapp_automation_control')
-          .update({ status: 'responded', updated_at: new Date().toISOString() })
+          .update({ status: 'responded', conversation_state: 'customer_replied', updated_at: new Date().toISOString() })
           .eq('id', record.id)
         console.log(`[automation-control] Lead ${record.lead_id} responded (temporal check), marking as responded`)
+        continue
+      }
+
+      // b2. Cross-check: verify last_customer_message_at from conversation
+      const { data: convCheck } = await supabase
+        .from('whatsapp_conversations')
+        .select('last_customer_message_at')
+        .eq('lead_id', record.lead_id)
+        .eq('account_id', record.account_id)
+        .maybeSingle()
+
+      if (convCheck?.last_customer_message_at) {
+        const customerMsgAt = new Date(convCheck.last_customer_message_at).getTime()
+        const automationStartedAt = new Date(record.started_at).getTime()
+        if (customerMsgAt > automationStartedAt) {
+          await supabase
+            .from('whatsapp_automation_control')
+            .update({ status: 'responded', conversation_state: 'customer_replied', updated_at: new Date().toISOString() })
+            .eq('id', record.id)
+          console.log(`[automation-control] Lead ${record.lead_id} responded (cross-check last_customer_message_at), marking as responded`)
+          continue
+        }
+      }
+
+      // b3. Minimum window: prevent two messages within 2 minutes (anti-loop)
+      const lastSendTimestamp = record.last_followup_sent_at || record.updated_at
+      const timeSinceLastSend = Date.now() - new Date(lastSendTimestamp).getTime()
+      if (timeSinceLastSend < 120_000) { // 2 minutes
+        const retryAt = new Date(new Date(lastSendTimestamp).getTime() + 120_000).toISOString()
+        await supabase
+          .from('whatsapp_automation_control')
+          .update({ status: 'active', next_execution_at: retryAt, updated_at: new Date().toISOString() })
+          .eq('id', record.id)
+        console.log(`[automation-control] ⛔ Minimum window: lead ${record.lead_id} last send ${Math.round(timeSinceLastSend/1000)}s ago, rescheduled to ${retryAt}`)
         continue
       }
 
