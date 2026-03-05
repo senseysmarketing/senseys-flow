@@ -434,6 +434,23 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
       } else if (phase === 'followup') {
         stepsInPhase = snapshot.followup || []
         currentStep = stepsInPhase[stepPos]
+
+        // Safety net: double-check that enough time has elapsed since last followup
+        if (currentStep && (record as any).last_followup_sent_at) {
+          const lastSentAt = new Date((record as any).last_followup_sent_at).getTime()
+          const requiredDelayMs = Math.max(currentStep.delay_minutes || 1440, 60) * 60 * 1000
+          const elapsed = Date.now() - lastSentAt
+          if (elapsed < requiredDelayMs * 0.9) { // 90% threshold to account for minor timing differences
+            console.log(`[automation-control] ⛔ Safety net: follow-up[${stepPos}] for lead ${record.lead_id} blocked. Elapsed=${Math.round(elapsed/60000)}min, required=${Math.round(requiredDelayMs/60000)}min`)
+            // Reschedule to correct time
+            const correctNextExec = new Date(lastSentAt + requiredDelayMs).toISOString()
+            await supabase
+              .from('whatsapp_automation_control')
+              .update({ status: 'active', next_execution_at: correctNextExec, updated_at: new Date().toISOString() })
+              .eq('id', record.id)
+            continue
+          }
+        }
       }
 
       if (!currentStep) {
@@ -560,24 +577,27 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
             updateData.status = 'finished'
           }
         }
-      } else if (currentPhase === 'followup') {
+    } else if (currentPhase === 'followup') {
         const followupSteps = snapshot.followup || []
         if (nextStepPos < followupSteps.length) {
-          // More followup steps
+          // More followup steps — use the NEXT step's delay directly (each step delay is individual, not cumulative)
           const nextStep = followupSteps[nextStepPos]
-          // delay_minutes is absolute; compute delta from current step
-          const currentDelay = currentStep.delay_minutes || 0
-          const nextDelay = nextStep.delay_minutes || 0
-          const deltaMinutes = Math.max(nextDelay - currentDelay, 60)
+          const deltaMinutes = Math.max(nextStep.delay_minutes || 1440, 60)
           const nextExecMs = Date.now() + deltaMinutes * 60 * 1000
           const adjustedMs = schedule?.is_enabled ? getNextValidSendTime(nextExecMs, schedule) : nextExecMs
 
           updateData.status = 'active'
           updateData.next_execution_at = new Date(adjustedMs).toISOString()
+          console.log(`[automation-control] 📊 Follow-up delay: nextStep[${nextStepPos}].delay_minutes=${nextStep.delay_minutes}, deltaMinutes=${deltaMinutes}, next_execution_at=${updateData.next_execution_at}`)
         } else {
           // All followups sent
           updateData.status = 'finished'
         }
+      }
+
+      // Safety net: record when the last followup was sent
+      if (currentPhase === 'followup' || currentPhase === 'waiting_response') {
+        updateData.last_followup_sent_at = new Date().toISOString()
       }
 
       await supabase
@@ -586,7 +606,7 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
         .eq('id', record.id)
 
       processed++
-      console.log(`[automation-control] ✅ ${currentPhase}[${stepPos}] sent for lead ${record.lead_id}, next: ${updateData.status === 'active' ? updateData.next_execution_at : updateData.status}`)
+      console.log(`[automation-control] ✅ ${currentPhase}[${stepPos}] sent for lead ${record.lead_id} (record=${record.id}), phase=${currentPhase}, step=${stepPos}, next: ${updateData.status === 'active' ? updateData.next_execution_at : updateData.status}`)
 
       // Rate limiting: 1.5s between sends
       await sleep(1500)
