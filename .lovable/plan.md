@@ -1,72 +1,84 @@
 
 
-## Diagnostico e Solucao: Variaveis de Formulario nos Templates WhatsApp
+## Analise: 4 Blindagens vs Estado Atual do Sistema
 
-### O que esta acontecendo
+Apos revisar o codigo de `process-whatsapp-queue`, o sistema ja implementa a maioria dessas protecoes. Vou detalhar o que ja existe e o que falta.
 
-Sua analise esta **100% correta**. O lead Cristal Lorca veio do formulario **Cidade-Jardim** (form_id: 1852010645681625) e possui estes campos salvos:
+### O que JA esta implementado
 
-- `você_já_investe_em_imóveis?` → sim, tenho portfólio...
-- `qual_seu_momento_de_decisão_para_investir?` → 6 meses
-- `qual_valor_você_considera_investir_neste_empreendimento?` → até R$ 300 mil
+| Blindagem | Status | Onde |
+|-----------|--------|------|
+| **1. Lock de Execucao** | **JA EXISTE** | Linhas 313-318: optimistic lock via `UPDATE SET status='processing' WHERE status='active'` com `.maybeSingle()`. Se retorna null, outro worker ja pegou. Equivalente funcional ao `processing_lock_at`. |
+| **2. Verificacao de Resposta** | **JA EXISTE** | Linhas 327-342: verifica `whatsapp_messages` com `is_from_me=false` e `gt('created_at', record.started_at)`. Se respondeu, marca `status='responded'` e para. |
+| **4. State Machine** | **JA EXISTE** | O sistema ja usa `current_phase` (greeting / waiting_response / followup) + `status` (active / processing / responded / finished / failed) + `current_step_position`. Isso E uma state machine. |
 
-O template que foi enviado provavelmente usa uma variavel do formulario **Ilha Pura** (ex: `{form_você_está_buscando_imóvel_para_moradia_própria_ou_para_investimento?_}`), que **nao existe** nos dados desse lead. Por isso aparece vazio na mensagem.
+### O que FALTA (incremental)
 
-### A conta tem 6+ formularios com perguntas sobrepostas
+**Blindagem 3: Janela minima entre mensagens (anti-loop)**
 
-- Art Wood, Cidade-Jardim, Ilha Pura v3/v4/v5/v6, Ipanema v2
-- Varias perguntas sao **iguais** entre formularios (ex: "fase da compra", "valor maximo")
-- Mas o Cidade-Jardim tem perguntas **exclusivas** (ex: "Voce ja investe em imoveis?")
-- Hoje o modal de templates mostra **todas as variaveis de todos os formularios misturadas**, sem indicar de qual formulario vem cada uma
+Nao existe nenhuma verificacao de intervalo minimo entre envios. Se ocorrer um loop ou duplicacao de evento, o sistema pode enviar 2 mensagens em sequencia rapida.
 
-### Solucao: Duas mudancas
+**Blindagem 2 (extra): Verificacao cruzada `last_customer_message_at`**
 
-#### 1. Confirmar a abordagem correta de configuracao (sem codigo)
+A verificacao atual consulta `whatsapp_messages` (query ao banco). Adicionar uma verificacao rapida usando `last_followup_sent_at` vs timestamp de resposta do webhook evitaria queries desnecessarias e adicionaria uma segunda camada.
 
-Sim, o correto e:
-- Criar **um template por formulario/imovel** com as variaveis especificas daquele formulario
-- Usar **regras condicionais de saudacao** (que ja existem no sistema) vinculadas a campanha, formulario ou imovel
-- Cada regra aponta para o template correto com as variaveis daquele formulario
+**Blindagem 4 (extra): Campo `conversation_state` explicito**
 
-#### 2. Melhorar o seletor de variaveis no modal de templates (mudanca de codigo)
+Embora o sistema ja funcione como state machine, adicionar um campo textual explicito (`conversation_state`) facilita debug e auditoria futura sem mudar a logica existente.
 
-Agrupar as variaveis por formulario no modal `WhatsAppTemplatesModal`, para ficar claro de qual formulario vem cada variavel.
+### Plano de Implementacao
 
-**Mudancas em `WhatsAppTemplatesModal.tsx`:**
+**Arquivo: `supabase/functions/process-whatsapp-queue/index.ts`**
 
-- Alterar `fetchFormVars` para buscar tambem o `form_name` via join com `meta_form_configs`
-- Na interface `FormVar`, adicionar campo `formName`
-- Na secao expandivel de variaveis, agrupar por nome do formulario com headers visuais (ex: "Cidade-Jardim", "Ilha Pura v6")
-- Cada grupo mostra apenas as variaveis daquele formulario
-
-**Layout proposto:**
-
-```text
-▼ Mostrar variaveis de formulario Meta (12)
-
-  ── Cidade-Jardim ──
-  {form_qual_seu_momento...}   Qual seu momento de decisao...
-  {form_você_já_investe...}    Voce ja investe em imoveis?
-  {form_qual_valor_você...}    Qual valor voce considera...
-
-  ── Ilha Pura v6 ──
-  {form_Para_entendermos...}   Para entendermos melhor...
-  {form_Qual_o_valor...}       Qual o valor maximo...
-  {form_Você_está_buscando...} Voce esta buscando...
-
-  ── Art Wood ──
-  ...
+1. Adicionar verificacao de janela minima (2 minutos) antes do envio:
+```typescript
+// Apos o safety net do delay (linha 453), antes de enviar:
+const lastSentAt = record.last_followup_sent_at || record.updated_at
+const timeSinceLastSend = Date.now() - new Date(lastSentAt).getTime()
+if (timeSinceLastSend < 120_000) { // 2 minutos
+  // Reagendar e pular
+}
 ```
 
-### Arquivo a modificar
+2. Adicionar verificacao cruzada com `last_customer_message_at` da conversa:
+```typescript
+// Antes do envio de followup, consultar whatsapp_conversations
+const { data: conv } = await supabase
+  .from('whatsapp_conversations')
+  .select('last_customer_message_at')
+  .eq('lead_id', record.lead_id)
+  .maybeSingle()
+
+if (conv?.last_customer_message_at > record.last_followup_sent_at) {
+  // Cliente respondeu - cancelar automacao
+}
+```
+
+**Migration SQL**
+
+Adicionar campo `conversation_state` na tabela `whatsapp_automation_control`:
+
+```sql
+ALTER TABLE public.whatsapp_automation_control
+ADD COLUMN IF NOT EXISTS conversation_state text 
+DEFAULT 'new_lead';
+```
+
+Valores possiveis: `new_lead`, `greeting_sent`, `waiting_reply`, `followup_1_sent`, `followup_2_sent`, `followup_3_sent`, `customer_replied`, `automation_finished`, `closed_no_reply`
+
+O campo sera atualizado junto com as transicoes ja existentes de `current_phase` e `status`, sem alterar a logica principal.
+
+### Resumo de Mudancas
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `src/components/whatsapp/WhatsAppTemplatesModal.tsx` | Agrupar variaveis por formulario, buscar form_name via join |
+| `supabase/functions/process-whatsapp-queue/index.ts` | Janela minima 2min + verificacao `last_customer_message_at` + atualizar `conversation_state` nas transicoes |
+| Migration SQL | Adicionar coluna `conversation_state` |
 
 ### Impacto
 
-- Nenhuma mudanca no backend ou edge functions
-- Apenas melhoria de UX no seletor de variaveis
-- O sistema de substituicao de variaveis ja funciona corretamente — o problema e de configuracao (template errado para o formulario do lead)
+- Zero breaking changes (tudo incremental)
+- Melhora auditoria com `conversation_state` explicito
+- Protege contra loops e duplicacoes com janela minima
+- Adiciona segunda camada de deteccao de resposta
 
