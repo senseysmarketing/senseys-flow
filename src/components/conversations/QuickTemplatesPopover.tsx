@@ -12,7 +12,7 @@ interface QuickTemplatesPopoverProps {
   propertyName?: string;
 }
 
-export function QuickTemplatesPopover({ onSelect, leadName, propertyName, propertyName }: QuickTemplatesPopoverProps) {
+export function QuickTemplatesPopover({ onSelect, leadName, propertyName }: QuickTemplatesPopoverProps) {
   const { account } = useAccount();
   const accountId = account?.id;
   const [templates, setTemplates] = useState<{ id: string; name: string; template: string }[]>([]);
