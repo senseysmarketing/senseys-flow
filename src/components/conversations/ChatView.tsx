@@ -205,6 +205,7 @@ export function ChatView({ conversation, messages, loading, onSend, onBack, onSh
           <QuickTemplatesPopover 
             onSelect={handleTemplateSelect} 
             leadName={conversation.lead?.name}
+            propertyName={conversation.lead?.properties?.title}
           />
           <Textarea
             ref={textareaRef}

@@ -9,9 +9,10 @@ import { useAccount } from "@/hooks/use-account";
 interface QuickTemplatesPopoverProps {
   onSelect: (template: string) => void;
   leadName?: string;
+  propertyName?: string;
 }
 
-export function QuickTemplatesPopover({ onSelect, leadName }: QuickTemplatesPopoverProps) {
+export function QuickTemplatesPopover({ onSelect, leadName, propertyName }: QuickTemplatesPopoverProps) {
   const { account } = useAccount();
   const accountId = account?.id;
   const [templates, setTemplates] = useState<{ id: string; name: string; template: string }[]>([]);
@@ -37,7 +38,7 @@ export function QuickTemplatesPopover({ onSelect, leadName }: QuickTemplatesPopo
     text = text.replace(/{empresa}/g, '');
     text = text.replace(/{email}/g, '');
     text = text.replace(/{telefone}/g, '');
-    text = text.replace(/{imovel}/g, '');
+    text = text.replace(/{imovel}/g, propertyName || '');
     text = text.replace(/{corretor}/g, '');
     
     onSelect(text);

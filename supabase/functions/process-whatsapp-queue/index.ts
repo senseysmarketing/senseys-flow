@@ -127,7 +127,7 @@ async function substituteTemplateVariables(
   // Get lead data
   const { data: lead } = await supabase
     .from('leads')
-    .select('name, phone, email, property_id, assigned_broker_id, properties(title), profiles!leads_assigned_broker_id_fkey(full_name)')
+    .select('name, phone, email, property_id, assigned_broker_id, properties!leads_property_id_fkey(title), profiles!leads_assigned_broker_id_fkey(full_name)')
     .eq('id', leadId)
     .single()
 
@@ -137,11 +137,17 @@ async function substituteTemplateVariables(
       .replace(/{telefone}/gi, lead.phone || '')
       .replace(/{email}/gi, lead.email || '')
 
-    if (lead.properties) {
-      message = message.replace(/{imovel}/gi, (lead.properties as any).title || '')
-    } else {
-      message = message.replace(/{imovel}/gi, '')
+    // Robust property title resolution with fallback
+    let propertyTitle = (lead.properties as any)?.title || ''
+    if (!propertyTitle && lead.property_id) {
+      const { data: prop } = await supabase
+        .from('properties')
+        .select('title')
+        .eq('id', lead.property_id)
+        .single()
+      propertyTitle = prop?.title || ''
     }
+    message = message.replace(/{imovel}/gi, propertyTitle.trim())
 
     if (lead.profiles) {
       message = message.replace(/{corretor}/gi, (lead.profiles as any).full_name || '')
