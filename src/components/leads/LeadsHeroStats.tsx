@@ -104,7 +104,7 @@ export const LeadsHeroStats = ({ leads, className, onFilterChange }: LeadsHeroSt
       label: "Sem Corretor",
       value: unassigned,
       trend: null,
-      percentage: pct(unassigned),
+      percentage: null,
       icon: UserX,
       gradient: "from-muted to-muted/50",
       iconBg: "bg-muted",
