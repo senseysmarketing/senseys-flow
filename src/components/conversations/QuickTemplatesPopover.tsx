@@ -38,7 +38,7 @@ export function QuickTemplatesPopover({ onSelect, leadName, propertyName }: Quic
     text = text.replace(/{empresa}/g, '');
     text = text.replace(/{email}/g, '');
     text = text.replace(/{telefone}/g, '');
-    text = text.replacepropertyName || (/{imovel}/g, '');
+    text = text.replace(/{imovel}/g, propertyName || '');
     text = text.replace(/{corretor}/g, '');
     
     onSelect(text);
