@@ -154,12 +154,17 @@ export const LeadsHeroStats = ({ leads, className, onFilterChange }: LeadsHeroSt
                 {stat.trend !== null && stat.trend > 0 && (
                   <div className="flex items-center gap-1 text-xs font-medium text-success">
                     <TrendingUp className="h-3 w-3" />
-                    <span>+{stat.trend} hoje</span>
+                    <span>+{stat.trend} hoje{stat.percentage !== null ? ` · ${stat.percentage}%` : ''}</span>
                   </div>
                 )}
                 {stat.trend !== null && stat.trend === 0 && (
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <span>0 hoje</span>
+                    <span>0 hoje{stat.percentage !== null ? ` · ${stat.percentage}%` : ''}</span>
+                  </div>
+                )}
+                {stat.trend === null && stat.percentage !== null && (
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <span>{stat.percentage}%</span>
                   </div>
                 )}
               </div>
