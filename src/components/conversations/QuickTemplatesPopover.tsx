@@ -9,6 +9,7 @@ import { useAccount } from "@/hooks/use-account";
 interface QuickTemplatesPopoverProps {
   onSelect: (template: string) => void;
   leadName?: string;
+  propertyName?: string;
 }
 
 export function QuickTemplatesPopover({ onSelect, leadName }: QuickTemplatesPopoverProps) {
