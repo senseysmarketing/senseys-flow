@@ -44,12 +44,15 @@ export const LeadsHeroStats = ({ leads, className, onFilterChange }: LeadsHeroSt
     }
   };
 
+  const pct = (v: number) => total > 0 ? Math.round((v / total) * 100) : 0;
+
   const stats = [
     {
       key: "total",
       label: "Total",
       value: total,
       trend: todayTotal,
+      percentage: null as number | null,
       icon: Users,
       gradient: "from-primary/20 to-primary/5",
       iconBg: "bg-primary/20",
@@ -62,6 +65,7 @@ export const LeadsHeroStats = ({ leads, className, onFilterChange }: LeadsHeroSt
       label: "Quentes",
       value: hot,
       trend: todayHot,
+      percentage: pct(hot),
       icon: Flame,
       gradient: "from-orange-500/20 to-orange-500/5",
       iconBg: "bg-orange-500/20",
@@ -74,6 +78,7 @@ export const LeadsHeroStats = ({ leads, className, onFilterChange }: LeadsHeroSt
       label: "Mornos",
       value: warm,
       trend: todayWarm,
+      percentage: pct(warm),
       icon: Thermometer,
       gradient: "from-yellow-500/20 to-yellow-500/5",
       iconBg: "bg-yellow-500/20",
@@ -86,6 +91,7 @@ export const LeadsHeroStats = ({ leads, className, onFilterChange }: LeadsHeroSt
       label: "Frios",
       value: cold,
       trend: todayCold,
+      percentage: pct(cold),
       icon: Snowflake,
       gradient: "from-blue-400/20 to-blue-400/5",
       iconBg: "bg-blue-400/20",
@@ -98,6 +104,7 @@ export const LeadsHeroStats = ({ leads, className, onFilterChange }: LeadsHeroSt
       label: "Sem Corretor",
       value: unassigned,
       trend: null,
+      percentage: pct(unassigned),
       icon: UserX,
       gradient: "from-muted to-muted/50",
       iconBg: "bg-muted",
