@@ -1,72 +1,53 @@
 
 
-## Diagnostico e Solucao: Variaveis de Formulario nos Templates WhatsApp
+## Problema: Variavel {imovel} nao sendo substituida nas mensagens automaticas
 
-### O que esta acontecendo
+### Diagnostico
 
-Sua analise esta **100% correta**. O lead Cristal Lorca veio do formulario **Cidade-Jardim** (form_id: 1852010645681625) e possui estes campos salvos:
+Confirmado no banco: o lead Flavio Lepri tem `property_id` apontando para o imovel ` AP0199-OSWG`, mas a mensagem enviada mostra "sobre o apartamento ," — ou seja, `{imovel}` foi substituido por string vazia.
 
-- `você_já_investe_em_imóveis?` → sim, tenho portfólio...
-- `qual_seu_momento_de_decisão_para_investir?` → 6 meses
-- `qual_valor_você_considera_investir_neste_empreendimento?` → até R$ 300 mil
+A query na edge function usa `properties(title)` como join implicito do Supabase PostgREST. Embora o FK exista (`leads_property_id_fkey`) e o service role key seja usado, o join pode falhar silenciosamente (retornando `null` para `properties`) sem causar erro na query. Isso faz com que o `if (lead.properties)` retorne false e o `{imovel}` seja substituido por vazio.
 
-O template que foi enviado provavelmente usa uma variavel do formulario **Ilha Pura** (ex: `{form_você_está_buscando_imóvel_para_moradia_própria_ou_para_investimento?_}`), que **nao existe** nos dados desse lead. Por isso aparece vazio na mensagem.
+### Solucao
 
-### A conta tem 6+ formularios com perguntas sobrepostas
+Tornar a busca do imovel mais robusta com duas mudancas:
 
-- Art Wood, Cidade-Jardim, Ilha Pura v3/v4/v5/v6, Ipanema v2
-- Varias perguntas sao **iguais** entre formularios (ex: "fase da compra", "valor maximo")
-- Mas o Cidade-Jardim tem perguntas **exclusivas** (ex: "Voce ja investe em imoveis?")
-- Hoje o modal de templates mostra **todas as variaveis de todos os formularios misturadas**, sem indicar de qual formulario vem cada uma
+1. **Usar FK hint explicito**: Trocar `properties(title)` por `properties!leads_property_id_fkey(title)` para evitar qualquer ambiguidade
+2. **Adicionar fallback com query direta**: Se `lead.properties` for null mas `lead.property_id` existir, fazer um `SELECT title FROM properties WHERE id = property_id` como segunda tentativa
 
-### Solucao: Duas mudancas
+Tambem corrigir o mesmo problema no `QuickTemplatesPopover.tsx` (frontend), onde `{imovel}` e **sempre** substituido por string vazia porque o componente nao recebe o nome do imovel.
 
-#### 1. Confirmar a abordagem correta de configuracao (sem codigo)
-
-Sim, o correto e:
-- Criar **um template por formulario/imovel** com as variaveis especificas daquele formulario
-- Usar **regras condicionais de saudacao** (que ja existem no sistema) vinculadas a campanha, formulario ou imovel
-- Cada regra aponta para o template correto com as variaveis daquele formulario
-
-#### 2. Melhorar o seletor de variaveis no modal de templates (mudanca de codigo)
-
-Agrupar as variaveis por formulario no modal `WhatsAppTemplatesModal`, para ficar claro de qual formulario vem cada variavel.
-
-**Mudancas em `WhatsAppTemplatesModal.tsx`:**
-
-- Alterar `fetchFormVars` para buscar tambem o `form_name` via join com `meta_form_configs`
-- Na interface `FormVar`, adicionar campo `formName`
-- Na secao expandivel de variaveis, agrupar por nome do formulario com headers visuais (ex: "Cidade-Jardim", "Ilha Pura v6")
-- Cada grupo mostra apenas as variaveis daquele formulario
-
-**Layout proposto:**
-
-```text
-▼ Mostrar variaveis de formulario Meta (12)
-
-  ── Cidade-Jardim ──
-  {form_qual_seu_momento...}   Qual seu momento de decisao...
-  {form_você_já_investe...}    Voce ja investe em imoveis?
-  {form_qual_valor_você...}    Qual valor voce considera...
-
-  ── Ilha Pura v6 ──
-  {form_Para_entendermos...}   Para entendermos melhor...
-  {form_Qual_o_valor...}       Qual o valor maximo...
-  {form_Você_está_buscando...} Voce esta buscando...
-
-  ── Art Wood ──
-  ...
-```
-
-### Arquivo a modificar
+### Arquivos a modificar
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `src/components/whatsapp/WhatsAppTemplatesModal.tsx` | Agrupar variaveis por formulario, buscar form_name via join |
+| `supabase/functions/process-whatsapp-queue/index.ts` | Adicionar FK hint na query + fallback direto para buscar titulo do imovel |
+| `src/components/conversations/QuickTemplatesPopover.tsx` | Aceitar prop `propertyName` e usar na substituicao de `{imovel}` |
+| `src/components/conversations/ChatView.tsx` | Passar `propertyName` do lead para o `QuickTemplatesPopover` |
 
-### Impacto
+### Mudanca principal (edge function)
 
-- Nenhuma mudanca no backend ou edge functions
-- Apenas melhoria de UX no seletor de variaveis
-- O sistema de substituicao de variaveis ja funciona corretamente — o problema e de configuracao (template errado para o formulario do lead)
+```typescript
+// Antes:
+.select('name, phone, email, property_id, assigned_broker_id, properties(title), profiles!leads_assigned_broker_id_fkey(full_name)')
+
+// Depois:
+.select('name, phone, email, property_id, assigned_broker_id, properties!leads_property_id_fkey(title), profiles!leads_assigned_broker_id_fkey(full_name)')
+
+// + fallback:
+let propertyTitle = (lead.properties as any)?.title || ''
+if (!propertyTitle && lead.property_id) {
+  const { data: prop } = await supabase
+    .from('properties')
+    .select('title')
+    .eq('id', lead.property_id)
+    .single()
+  propertyTitle = prop?.title || ''
+}
+message = message.replace(/{imovel}/gi, propertyTitle.trim())
+```
+
+### Mudanca frontend (QuickTemplatesPopover)
+
+Adicionar prop `propertyName` ao componente e usa-la na substituicao em vez de string vazia. O `ChatView` passara `conversation.lead?.properties?.title` para o popover.
 
