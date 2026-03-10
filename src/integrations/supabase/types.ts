@@ -1487,6 +1487,7 @@ export type Database = {
           next_execution_at: string | null
           phone: string
           remote_jid: string | null
+          retry_count: number | null
           started_at: string
           status: string
           steps_snapshot: Json
@@ -1508,6 +1509,7 @@ export type Database = {
           next_execution_at?: string | null
           phone: string
           remote_jid?: string | null
+          retry_count?: number | null
           started_at?: string
           status?: string
           steps_snapshot?: Json
@@ -1529,6 +1531,7 @@ export type Database = {
           next_execution_at?: string | null
           phone?: string
           remote_jid?: string | null
+          retry_count?: number | null
           started_at?: string
           status?: string
           steps_snapshot?: Json
