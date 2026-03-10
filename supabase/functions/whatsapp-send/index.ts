@@ -100,6 +100,7 @@ async function sendWithRetry(
     // Check if it's an invalid number error - no point retrying
     const isInvalidNumber =
       data?.exists === false ||
+      data?.response?.message?.some?.((m: any) => m.exists === false) ||
       data?.error?.includes?.('not exist') ||
       data?.error?.includes?.('not registered') ||
       data?.message?.includes?.('not exist') ||
@@ -254,9 +255,10 @@ Deno.serve(async (req) => {
       message
     )
 
-    // Detect invalid number
+    // Detect invalid number (including nested Evolution API response structure)
     const isInvalidNumber = 
       sendData?.exists === false || 
+      sendData?.response?.message?.some?.((m: any) => m.exists === false) ||
       sendData?.error?.includes?.('not exist') ||
       sendData?.error?.includes?.('not registered') ||
       sendData?.message?.includes?.('not exist') ||
