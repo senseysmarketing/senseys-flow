@@ -118,9 +118,42 @@ Deno.serve(async (req) => {
 
         if (!bestMatch) continue
 
+        // Step 4: Atomic claim — try to set lid_jid on the conversation only if not already mapped.
+        // This prevents race conditions when two workers run simultaneously: the first to claim wins.
+        const leadPhone = bestMatch.phone?.replace(/\D/g, '') || ''
+        const leadRemoteJid = `${leadPhone}@s.whatsapp.net`
+
+        // Try to claim via phone-based conversation (most common case)
+        const { data: claimedByPhone } = await supabase
+          .from('whatsapp_conversations')
+          .update({ lid_jid: lidMsg.remote_jid, lead_id: bestMatch.lead_id })
+          .eq('account_id', accountId)
+          .eq('remote_jid', leadRemoteJid)
+          .is('lid_jid', null) // Only claim if not already mapped — prevents race condition
+          .select('id')
+
+        // If phone-based claim failed, try claiming via lead_id-based conversation
+        if (!claimedByPhone || claimedByPhone.length === 0) {
+          const { data: claimedByLead } = await supabase
+            .from('whatsapp_conversations')
+            .update({ lid_jid: lidMsg.remote_jid })
+            .eq('account_id', accountId)
+            .eq('lead_id', bestMatch.lead_id)
+            .is('lid_jid', null) // Only claim if not already mapped
+            .select('id')
+
+          if (!claimedByLead || claimedByLead.length === 0) {
+            // Another process already claimed this mapping — skip to avoid duplicate correlation
+            console.log(`[sync-whatsapp-replies] ⚠️ SKIP: @lid ${lidMsg.remote_jid} -> lead ${bestMatch.lead_id} already claimed by another process`)
+            mappedLids.add(lidMsg.remote_jid)
+            mappedLeadIds.add(bestMatch.lead_id)
+            continue
+          }
+        }
+
         console.log(`[sync-whatsapp-replies] ✅ MATCH: @lid ${lidMsg.remote_jid} -> lead ${bestMatch.lead_id} (greeting at ${bestMatch.timestamp}, reply at ${lidMsg.timestamp})`)
 
-        // Step 4: Update the @lid message with the lead_id
+        // Step 5: Update the @lid message with the lead_id (now safe — claim was successful)
         await supabase
           .from('whatsapp_messages')
           .update({ lead_id: bestMatch.lead_id })
@@ -133,39 +166,6 @@ Deno.serve(async (req) => {
           .eq('account_id', accountId)
           .eq('remote_jid', lidMsg.remote_jid)
           .is('lead_id', null)
-
-        // Step 5: Save lid_jid mapping in the conversation
-        const leadPhone = bestMatch.phone?.replace(/\D/g, '') || ''
-        const leadRemoteJid = `${leadPhone}@s.whatsapp.net`
-
-        const { data: existingConv } = await supabase
-          .from('whatsapp_conversations')
-          .select('id')
-          .eq('account_id', accountId)
-          .eq('remote_jid', leadRemoteJid)
-          .maybeSingle()
-
-        if (existingConv) {
-          await supabase
-            .from('whatsapp_conversations')
-            .update({ lid_jid: lidMsg.remote_jid, lead_id: bestMatch.lead_id })
-            .eq('id', existingConv.id)
-        } else {
-          // Try finding by lead_id
-          const { data: convByLead } = await supabase
-            .from('whatsapp_conversations')
-            .select('id')
-            .eq('account_id', accountId)
-            .eq('lead_id', bestMatch.lead_id)
-            .maybeSingle()
-
-          if (convByLead) {
-            await supabase
-              .from('whatsapp_conversations')
-              .update({ lid_jid: lidMsg.remote_jid })
-              .eq('id', convByLead.id)
-          }
-        }
 
         // Step 6: Cancel ALL pending follow-ups for this lead
         const { data: cancelledMsgs } = await supabase

@@ -7,10 +7,19 @@ const corsHeaders = {
 
 // Ensure URL has protocol prefix (fallback for misconfigured secrets)
 const rawEvolutionUrl = Deno.env.get('EVOLUTION_API_URL') || ''
-const EVOLUTION_API_URL = rawEvolutionUrl.startsWith('http') 
-  ? rawEvolutionUrl 
+const EVOLUTION_API_URL = rawEvolutionUrl.startsWith('http')
+  ? rawEvolutionUrl
   : `https://${rawEvolutionUrl}`
 const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || ''
+
+// Validate URL at startup to catch misconfigured env vars early
+if (EVOLUTION_API_URL) {
+  try {
+    new URL(EVOLUTION_API_URL)
+  } catch {
+    console.error(`[whatsapp-connect] Invalid EVOLUTION_API_URL: "${EVOLUTION_API_URL}" — check the environment variable`)
+  }
+}
 
 // Helper function to fetch phone number from Evolution API
 async function fetchPhoneNumber(instanceName: string): Promise<string | null> {
@@ -85,143 +94,11 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
     const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`
 
-    // Parse action BEFORE auth check to allow unauthenticated actions
+    // Parse action and require JWT for all actions
     const url = new URL(req.url)
     const action = url.searchParams.get('action') || 'status'
 
-    // === UNAUTHENTICATED ACTION: force-reconfigure ===
-    if (action === 'force-reconfigure') {
-      const targetAccountId = url.searchParams.get('account_id')
-      if (!targetAccountId) {
-        return new Response(JSON.stringify({ error: 'account_id required' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      }
-
-      // Validate account exists in database
-      const { data: accountExists } = await supabase
-        .from('accounts')
-        .select('id')
-        .eq('id', targetAccountId)
-        .maybeSingle()
-
-      if (!accountExists) {
-        return new Response(JSON.stringify({ error: 'Invalid account_id' }), {
-          status: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      }
-
-      const targetInstance = `senseys_${targetAccountId.replace(/-/g, '_')}`
-      console.log(`[whatsapp-connect] Force reconfigure for instance: ${targetInstance}`)
-
-      // Check if instance is connected
-      try {
-        const statusResp = await fetch(
-          `${EVOLUTION_API_URL}/instance/connectionState/${targetInstance}`,
-          { headers: { 'apikey': EVOLUTION_API_KEY } }
-        )
-
-        if (statusResp.ok) {
-          const statusData = await statusResp.json()
-          console.log('[whatsapp-connect] Instance state:', statusData)
-
-          if (statusData.instance?.state === 'open') {
-            const webhookData = await configureWebhook(targetInstance, webhookUrl)
-            console.log('[whatsapp-connect] Force reconfigure result:', JSON.stringify(webhookData).substring(0, 300))
-
-            // Verify
-            const verifyResponse = await fetch(
-              `${EVOLUTION_API_URL}/webhook/find/${targetInstance}`,
-              { headers: { 'apikey': EVOLUTION_API_KEY } }
-            )
-            const currentConfig = await verifyResponse.json()
-            console.log('[whatsapp-connect] Webhook verified after force-reconfigure:', JSON.stringify(currentConfig).substring(0, 500))
-
-            return new Response(JSON.stringify({ 
-              success: true, 
-              message: 'Webhook reconfigured successfully',
-              webhookConfig: currentConfig
-            }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            })
-          } else {
-            return new Response(JSON.stringify({ 
-              error: 'Instance not connected', 
-              state: statusData.instance?.state 
-            }), {
-              status: 400,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            })
-          }
-        }
-      } catch (e) {
-        console.log('[whatsapp-connect] Error in force-reconfigure:', e)
-        return new Response(JSON.stringify({ error: 'Failed to reconfigure', details: e.message }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      }
-    }
-
-    // === UNAUTHENTICATED ACTION: restart-instance ===
-    if (action === 'restart-instance') {
-      const targetAccountId = url.searchParams.get('account_id')
-      if (!targetAccountId) {
-        return new Response(JSON.stringify({ error: 'account_id required' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      }
-
-      const { data: accountExists } = await supabase
-        .from('accounts')
-        .select('id')
-        .eq('id', targetAccountId)
-        .maybeSingle()
-
-      if (!accountExists) {
-        return new Response(JSON.stringify({ error: 'Invalid account_id' }), {
-          status: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      }
-
-      const targetInstance = `senseys_${targetAccountId.replace(/-/g, '_')}`
-      console.log(`[whatsapp-connect] Restarting instance: ${targetInstance}`)
-
-      try {
-        const restartResp = await fetch(
-          `${EVOLUTION_API_URL}/instance/restart/${targetInstance}`,
-          { method: 'PUT', headers: { 'apikey': EVOLUTION_API_KEY } }
-        )
-        const restartData = await restartResp.json()
-        console.log('[whatsapp-connect] Restart result:', JSON.stringify(restartData))
-
-        // Wait for reconnection
-        await new Promise(resolve => setTimeout(resolve, 3000))
-
-        // Reconfigure webhook
-        const webhookData = await configureWebhook(targetInstance, webhookUrl)
-        console.log('[whatsapp-connect] Webhook reconfigured after restart:', JSON.stringify(webhookData).substring(0, 300))
-
-        return new Response(JSON.stringify({ 
-          success: true, message: 'Instance restarted and webhook reconfigured',
-          restart: restartData, webhook: webhookData
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      } catch (e) {
-        console.log('[whatsapp-connect] Error restarting instance:', e)
-        return new Response(JSON.stringify({ error: e.message }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      }
-    }
-
-    // === AUTHENTICATED ACTIONS: require JWT ===
+    // === ALL ACTIONS: require JWT ===
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -232,7 +109,7 @@ Deno.serve(async (req) => {
 
     const token = authHeader.replace('Bearer ', '')
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-    
+
     if (authError || !user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
@@ -258,6 +135,98 @@ Deno.serve(async (req) => {
     const instanceName = `senseys_${accountId.replace(/-/g, '_')}`
 
     console.log(`[whatsapp-connect] Action: ${action}, Account: ${accountId}, Instance: ${instanceName}`)
+
+    // === AUTHENTICATED ACTION: force-reconfigure ===
+    if (action === 'force-reconfigure') {
+      // Use authenticated user's account_id — ignore any account_id query param for security
+      const targetAccountId = accountId
+      const targetInstance = instanceName
+      console.log(`[whatsapp-connect] Force reconfigure for instance: ${targetInstance}`)
+
+      // Check if instance is connected
+      try {
+        const statusResp = await fetch(
+          `${EVOLUTION_API_URL}/instance/connectionState/${targetInstance}`,
+          { headers: { 'apikey': EVOLUTION_API_KEY } }
+        )
+
+        if (statusResp.ok) {
+          const statusData = await statusResp.json()
+          console.log('[whatsapp-connect] Instance state:', statusData)
+
+          if (statusData.instance?.state === 'open') {
+            const webhookData = await configureWebhook(targetInstance, webhookUrl)
+            console.log('[whatsapp-connect] Force reconfigure result:', JSON.stringify(webhookData).substring(0, 300))
+
+            // Verify
+            const verifyResponse = await fetch(
+              `${EVOLUTION_API_URL}/webhook/find/${targetInstance}`,
+              { headers: { 'apikey': EVOLUTION_API_KEY } }
+            )
+            const currentConfig = await verifyResponse.json()
+            console.log('[whatsapp-connect] Webhook verified after force-reconfigure:', JSON.stringify(currentConfig).substring(0, 500))
+
+            return new Response(JSON.stringify({
+              success: true,
+              message: 'Webhook reconfigured successfully',
+              webhookConfig: currentConfig
+            }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            })
+          } else {
+            return new Response(JSON.stringify({
+              error: 'Instance not connected',
+              state: statusData.instance?.state
+            }), {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            })
+          }
+        }
+      } catch (e) {
+        console.log('[whatsapp-connect] Error in force-reconfigure:', e)
+        return new Response(JSON.stringify({ error: 'Failed to reconfigure', details: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    }
+
+    // === AUTHENTICATED ACTION: restart-instance ===
+    if (action === 'restart-instance') {
+      // Use authenticated user's account_id — ignore any account_id query param for security
+      const targetInstance = instanceName
+      console.log(`[whatsapp-connect] Restarting instance: ${targetInstance}`)
+
+      try {
+        const restartResp = await fetch(
+          `${EVOLUTION_API_URL}/instance/restart/${targetInstance}`,
+          { method: 'PUT', headers: { 'apikey': EVOLUTION_API_KEY } }
+        )
+        const restartData = await restartResp.json()
+        console.log('[whatsapp-connect] Restart result:', JSON.stringify(restartData))
+
+        // Wait for reconnection
+        await new Promise(resolve => setTimeout(resolve, 3000))
+
+        // Reconfigure webhook
+        const webhookData = await configureWebhook(targetInstance, webhookUrl)
+        console.log('[whatsapp-connect] Webhook reconfigured after restart:', JSON.stringify(webhookData).substring(0, 300))
+
+        return new Response(JSON.stringify({
+          success: true, message: 'Instance restarted and webhook reconfigured',
+          restart: restartData, webhook: webhookData
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      } catch (e) {
+        console.log('[whatsapp-connect] Error restarting instance:', e)
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    }
 
     switch (action) {
       case 'create-instance': {

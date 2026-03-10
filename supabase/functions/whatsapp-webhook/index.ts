@@ -409,9 +409,9 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any, inst
         console.log(`[whatsapp-webhook] Saved lid_jid ${rawRemoteJid} to conversation for lead ${leadId}`)
 
         // Immediately cancel pending follow-ups for this lead since they responded
-        const { data: cancelledMsgs } = await supabase
+        const { data: cancelledMsgs, error: cancelErr } = await supabase
           .from('whatsapp_message_queue')
-          .update({ 
+          .update({
             status: 'cancelled',
             error_message: 'Cancelado: lead respondeu via @lid (identificado por nome)'
           })
@@ -419,7 +419,9 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any, inst
           .eq('status', 'pending')
           .not('followup_step_id', 'is', null)
           .select('id')
-        if (cancelledMsgs?.length > 0) {
+        if (cancelErr) {
+          console.warn(`[whatsapp-webhook] Failed to cancel follow-ups for lead ${leadId} (@lid name resolution):`, cancelErr)
+        } else if (cancelledMsgs?.length > 0) {
           console.log(`[whatsapp-webhook] Cancelled ${cancelledMsgs.length} follow-up(s) for lead ${leadId} (via @lid name resolution)`)
         }
 
@@ -470,12 +472,31 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any, inst
       console.log('[whatsapp-webhook] Duplicate message skipped (ON CONFLICT):', messageId)
     }
 
-    // Update/create conversation — skip if @lid couldn't be resolved (avoid ghost conversations)
+    // Update/create conversation
     if (!isLid || resolvedJid) {
       await upsertConversation(
         supabase, session.account_id, storeJid, finalPhone,
         contactName, content, isFromMe, leadId, lidJidForConversation, session.phone_number || null, wasInserted, messageTimestamp
       )
+    } else if (lidResolvedLeadId) {
+      // @lid not resolved via API/DB mapping, but resolved by lead name.
+      // Update the existing conversation for this lead so the message is visible.
+      const { data: existingLeadConv } = await supabase
+        .from('whatsapp_conversations')
+        .select('remote_jid, phone')
+        .eq('account_id', session.account_id)
+        .eq('lead_id', lidResolvedLeadId)
+        .maybeSingle()
+
+      if (existingLeadConv) {
+        await upsertConversation(
+          supabase, session.account_id, existingLeadConv.remote_jid, existingLeadConv.phone,
+          contactName, content, isFromMe, lidResolvedLeadId, rawRemoteJid, session.phone_number || null, wasInserted, messageTimestamp
+        )
+        console.log(`[whatsapp-webhook] Updated conversation for @lid lead ${lidResolvedLeadId} via name resolution`)
+      } else {
+        console.log(`[whatsapp-webhook] Skipping conversation upsert for unresolved @lid: ${rawRemoteJid} (no existing conversation found)`)
+      }
     } else {
       console.log(`[whatsapp-webhook] Skipping conversation upsert for unresolved @lid: ${rawRemoteJid}`)
     }
@@ -493,15 +514,29 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any, inst
 
     // Handle incoming message lead status changes
     if (!isFromMe && !isLid) {
-      const phoneSuffix = finalPhone.slice(-9)
+      // Prefer the lead already resolved by findLeadByPhone (exact account match).
+      // Only fall back to phone-suffix ILIKE search when leadId is not yet known,
+      // to avoid cancelling follow-ups for multiple leads sharing the same phone suffix.
+      let matchedLeads: any[] = []
 
-      const { data: matchedLeads } = await supabase
-        .from('leads')
-        .select('id, status_id, name')
-        .eq('account_id', session.account_id)
-        .ilike('phone', `%${phoneSuffix}%`)
-        .order('created_at', { ascending: false })
-        .limit(5)
+      if (leadId) {
+        const { data: exactLead } = await supabase
+          .from('leads')
+          .select('id, status_id, name')
+          .eq('id', leadId)
+          .maybeSingle()
+        if (exactLead) matchedLeads = [exactLead]
+      } else {
+        const phoneSuffix = finalPhone.slice(-9)
+        const { data: leads } = await supabase
+          .from('leads')
+          .select('id, status_id, name')
+          .eq('account_id', session.account_id)
+          .ilike('phone', `%${phoneSuffix}%`)
+          .order('created_at', { ascending: false })
+          .limit(5)
+        matchedLeads = leads || []
+      }
 
       if (!matchedLeads || matchedLeads.length === 0) continue
 
@@ -522,15 +557,17 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any, inst
       if (!novoLeadStatus || !emContatoStatus) continue
 
       for (const lead of matchedLeads) {
-        const { data: cancelledMsgs } = await supabase
+        const { data: cancelledMsgs, error: cancelErr } = await supabase
           .from('whatsapp_message_queue')
-          .update({ status: 'cancelled' })
+          .update({ status: 'cancelled', error_message: 'Cancelado: lead respondeu via WhatsApp' })
           .eq('lead_id', lead.id)
           .eq('status', 'pending')
           .not('followup_step_id', 'is', null)
           .select('id')
 
-        if (cancelledMsgs?.length > 0) {
+        if (cancelErr) {
+          console.warn(`[whatsapp-webhook] Failed to cancel follow-ups for lead ${lead.id}:`, cancelErr)
+        } else if (cancelledMsgs?.length > 0) {
           console.log(`[whatsapp-webhook] Cancelled ${cancelledMsgs.length} follow-up(s) for lead ${lead.id}`)
         }
 
@@ -554,9 +591,12 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any, inst
           .update({ status_id: emContatoStatus.id })
           .eq('id', lead.id)
 
-        if (updateError) continue
+        if (updateError) {
+          console.warn(`[whatsapp-webhook] Failed to update lead status for ${lead.id}:`, updateError)
+          continue
+        }
 
-        await supabase
+        const { error: activityError } = await supabase
           .from('lead_activities')
           .insert({
             lead_id: lead.id,
@@ -567,11 +607,21 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any, inst
             new_value: 'Em Contato',
           })
 
-        console.log(`[whatsapp-webhook] Lead "${lead.name}" moved to "Em Contato"`)
+        if (activityError) {
+          // Status was already updated — log the missing audit trail but do not revert
+          console.warn(`[whatsapp-webhook] Lead ${lead.id} moved to "Em Contato" but activity insert failed:`, activityError)
+        } else {
+          console.log(`[whatsapp-webhook] Lead "${lead.name}" moved to "Em Contato"`)
+        }
       }
     }
   }
 }
+
+// Status rank map — higher rank = more advanced delivery state.
+// Updates are only applied when the new status has a strictly higher rank,
+// preventing delivery status regression (e.g. 'read' -> 'delivered' -> 'sent').
+const STATUS_RANK: Record<string, number> = { sent: 1, delivered: 2, read: 3, played: 4 }
 
 async function handleMessagesUpdate(supabase: any, data: any) {
   let updates: any[] = []
@@ -583,21 +633,37 @@ async function handleMessagesUpdate(supabase: any, data: any) {
   for (const update of updates) {
     const messageId = update.key?.id
     const status = update.update?.status
-    
+
     if (messageId && status) {
-      const deliveryStatus = status === 2 ? 'delivered' : 
-                             status === 3 ? 'read' : 
+      const deliveryStatus = status === 2 ? 'delivered' :
+                             status === 3 ? 'read' :
                              status === 4 ? 'played' : 'sent'
-      
+
+      const newRank = STATUS_RANK[deliveryStatus] ?? 0
+      // Only allow advancing to a higher-ranked status (forward-only transitions)
+      const lowerStatuses = Object.keys(STATUS_RANK).filter(s => (STATUS_RANK[s] ?? 0) < newRank)
+
       await supabase
         .from('whatsapp_message_log')
         .update({ delivery_status: deliveryStatus })
         .eq('message_id', messageId)
+        // message_log may not have a status column to filter on, so update unconditionally
 
-      await supabase
-        .from('whatsapp_messages')
-        .update({ status: deliveryStatus })
-        .eq('message_id', messageId)
+      if (lowerStatuses.length > 0) {
+        // Advance status only if current status is lower (prevents regression)
+        await supabase
+          .from('whatsapp_messages')
+          .update({ status: deliveryStatus })
+          .eq('message_id', messageId)
+          .in('status', lowerStatuses)
+      } else {
+        // deliveryStatus === 'sent': set only if no status is recorded yet
+        await supabase
+          .from('whatsapp_messages')
+          .update({ status: deliveryStatus })
+          .eq('message_id', messageId)
+          .is('status', null)
+      }
     }
   }
 }
