@@ -100,6 +100,7 @@ async function sendWithRetry(
     // Check if it's an invalid number error - no point retrying
     const isInvalidNumber =
       data?.exists === false ||
+      data?.response?.message?.some?.((m: any) => m.exists === false) ||
       data?.error?.includes?.('not exist') ||
       data?.error?.includes?.('not registered') ||
       data?.message?.includes?.('not exist') ||

@@ -577,7 +577,36 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
       }
 
       if (!sendResponse.ok) {
-        throw new Error(sendResult.error || 'Failed to send message')
+        const newRetryCount = (record.retry_count || 0) + 1
+        console.log(`[automation-control] ❌ Send failed for lead ${record.lead_id} (attempt ${newRetryCount}/5): ${sendResult.error}`)
+        
+        if (newRetryCount >= 5) {
+          // Max retries reached — mark as failed permanently
+          await supabase
+            .from('whatsapp_automation_control')
+            .update({ 
+              status: 'failed', 
+              conversation_state: 'automation_finished', 
+              retry_count: newRetryCount,
+              updated_at: new Date().toISOString() 
+            })
+            .eq('id', record.id)
+          console.log(`[automation-control] 🛑 Lead ${record.lead_id} marked as FAILED after ${newRetryCount} attempts`)
+        } else {
+          // Reschedule with exponential backoff: 2min, 4min, 8min, 16min
+          const backoffMs = Math.pow(2, newRetryCount) * 60 * 1000
+          await supabase
+            .from('whatsapp_automation_control')
+            .update({ 
+              status: 'active', 
+              retry_count: newRetryCount,
+              next_execution_at: new Date(Date.now() + backoffMs).toISOString(),
+              updated_at: new Date().toISOString() 
+            })
+            .eq('id', record.id)
+        }
+        errors++
+        continue
       }
 
       // h. Extract remote_jid from send response and lock JID on first send
