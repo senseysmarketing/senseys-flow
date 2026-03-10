@@ -1,72 +1,93 @@
 
 
-## Diagnostico e Solucao: Variaveis de Formulario nos Templates WhatsApp
+## Diagnostico: Mensagens de saudacao falhando em loop infinito
 
-### O que esta acontecendo
+### Causa raiz (2 bugs)
 
-Sua analise esta **100% correta**. O lead Cristal Lorca veio do formulario **Cidade-Jardim** (form_id: 1852010645681625) e possui estes campos salvos:
+**Bug 1: Deteccao de numero invalido nao funciona com a resposta atual da Evolution API**
 
-- `você_já_investe_em_imóveis?` → sim, tenho portfólio...
-- `qual_seu_momento_de_decisão_para_investir?` → 6 meses
-- `qual_valor_você_considera_investir_neste_empreendimento?` → até R$ 300 mil
-
-O template que foi enviado provavelmente usa uma variavel do formulario **Ilha Pura** (ex: `{form_você_está_buscando_imóvel_para_moradia_própria_ou_para_investimento?_}`), que **nao existe** nos dados desse lead. Por isso aparece vazio na mensagem.
-
-### A conta tem 6+ formularios com perguntas sobrepostas
-
-- Art Wood, Cidade-Jardim, Ilha Pura v3/v4/v5/v6, Ipanema v2
-- Varias perguntas sao **iguais** entre formularios (ex: "fase da compra", "valor maximo")
-- Mas o Cidade-Jardim tem perguntas **exclusivas** (ex: "Voce ja investe em imoveis?")
-- Hoje o modal de templates mostra **todas as variaveis de todos os formularios misturadas**, sem indicar de qual formulario vem cada uma
-
-### Solucao: Duas mudancas
-
-#### 1. Confirmar a abordagem correta de configuracao (sem codigo)
-
-Sim, o correto e:
-- Criar **um template por formulario/imovel** com as variaveis especificas daquele formulario
-- Usar **regras condicionais de saudacao** (que ja existem no sistema) vinculadas a campanha, formulario ou imovel
-- Cada regra aponta para o template correto com as variaveis daquele formulario
-
-#### 2. Melhorar o seletor de variaveis no modal de templates (mudanca de codigo)
-
-Agrupar as variaveis por formulario no modal `WhatsAppTemplatesModal`, para ficar claro de qual formulario vem cada variavel.
-
-**Mudancas em `WhatsAppTemplatesModal.tsx`:**
-
-- Alterar `fetchFormVars` para buscar tambem o `form_name` via join com `meta_form_configs`
-- Na interface `FormVar`, adicionar campo `formName`
-- Na secao expandivel de variaveis, agrupar por nome do formulario com headers visuais (ex: "Cidade-Jardim", "Ilha Pura v6")
-- Cada grupo mostra apenas as variaveis daquele formulario
-
-**Layout proposto:**
-
-```text
-▼ Mostrar variaveis de formulario Meta (12)
-
-  ── Cidade-Jardim ──
-  {form_qual_seu_momento...}   Qual seu momento de decisao...
-  {form_você_já_investe...}    Voce ja investe em imoveis?
-  {form_qual_valor_você...}    Qual valor voce considera...
-
-  ── Ilha Pura v6 ──
-  {form_Para_entendermos...}   Para entendermos melhor...
-  {form_Qual_o_valor...}       Qual o valor maximo...
-  {form_Você_está_buscando...} Voce esta buscando...
-
-  ── Art Wood ──
-  ...
+A Evolution API retorna o campo `exists: false` dentro de uma estrutura aninhada:
+```json
+{"status":400,"error":"Bad Request","response":{"message":[{"jid":"...@s.whatsapp.net","exists":false,"number":"5512988063017"}]}}
 ```
 
-### Arquivo a modificar
+Porem o `whatsapp-send` verifica `sendData?.exists === false` (nivel raiz), que nunca e verdadeiro com essa estrutura. Resultado: o erro 400 e classificado como "Erro temporario na conexao" ao inves de "Numero nao possui WhatsApp", e `invalid_number` nunca e retornado como `true`.
+
+**Bug 2: Automacao retenta infinitamente quando o envio falha**
+
+No `process-whatsapp-queue`, quando `sendResponse.ok` e false e `sendResult.invalid_number` e false, o codigo faz `throw new Error(...)`. O catch reagenda para `next_execution_at + 5min` e mantem `status = 'active'`. Nao existe limite de tentativas — a automacao fica em loop eterno.
+
+### Impacto atual
+
+Dados do banco confirmam o problema em escala:
+
+| Conta | Lead | Tentativas falhas |
+|-------|------|-------------------|
+| Edno Cordeiro | Livia Tunala | **1.660** |
+| Edno Cordeiro | Andrea | **1.519** |
+| Thiago e Belisa | Cintia Nagaoka | **587** |
+| Oswaldo Braz | Anni Amorim | **553** |
+| Rodrigo Lima | Kamila Rodrigues | **418** |
+| Thiago e Belisa | Maxwel Marques | 9 (recente) |
+
+Essas automacoes consomem recursos do cron a cada minuto, gerando milhares de logs inuteis.
+
+### Plano de correcao
+
+**1. Corrigir deteccao de numero invalido no `whatsapp-send`**
+
+Adicionar verificacao da estrutura aninhada `response.message[].exists`:
+
+```typescript
+const isInvalidNumber =
+  sendData?.exists === false ||
+  sendData?.response?.message?.some?.((m: any) => m.exists === false) ||  // NOVO
+  sendData?.error?.includes?.('not exist') || ...
+```
+
+**2. Adicionar limite maximo de tentativas no `process-whatsapp-queue`**
+
+Adicionar campo `retry_count` na tabela e incrementar a cada falha. Apos 5 tentativas, marcar como `failed`:
+
+```sql
+ALTER TABLE whatsapp_automation_control 
+ADD COLUMN IF NOT EXISTS retry_count integer DEFAULT 0;
+```
+
+No codigo:
+```typescript
+if (!sendResponse.ok) {
+  const newRetryCount = (record.retry_count || 0) + 1
+  if (newRetryCount >= 5 || sendResult.invalid_number) {
+    // Marcar como failed permanentemente
+    await update({ status: 'failed', retry_count: newRetryCount })
+  } else {
+    // Reagendar com backoff
+    await update({ status: 'active', retry_count: newRetryCount, next_execution_at: ... })
+  }
+  continue // NAO throw
+}
+```
+
+**3. Limpar automacoes travadas existentes**
+
+Query para marcar como `failed` todas as automacoes com mais de 5 falhas:
+
+```sql
+UPDATE whatsapp_automation_control wac
+SET status = 'failed', conversation_state = 'automation_finished'
+WHERE status = 'active' AND conversation_state = 'new_lead'
+AND (SELECT count(*) FROM whatsapp_message_log wml 
+     WHERE wml.lead_id = wac.lead_id 
+     AND wml.delivery_status = 'failed' 
+     AND wml.send_type = 'automation') >= 5;
+```
+
+### Arquivos a modificar
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `src/components/whatsapp/WhatsAppTemplatesModal.tsx` | Agrupar variaveis por formulario, buscar form_name via join |
-
-### Impacto
-
-- Nenhuma mudanca no backend ou edge functions
-- Apenas melhoria de UX no seletor de variaveis
-- O sistema de substituicao de variaveis ja funciona corretamente — o problema e de configuracao (template errado para o formulario do lead)
+| `supabase/functions/whatsapp-send/index.ts` | Corrigir deteccao de `exists:false` aninhado |
+| `supabase/functions/process-whatsapp-queue/index.ts` | Adicionar retry_count com limite de 5, tratar erro sem throw |
+| Migration SQL | Adicionar coluna `retry_count`, limpar automacoes travadas |
 
