@@ -254,9 +254,10 @@ Deno.serve(async (req) => {
       message
     )
 
-    // Detect invalid number
+    // Detect invalid number (including nested Evolution API response structure)
     const isInvalidNumber = 
       sendData?.exists === false || 
+      sendData?.response?.message?.some?.((m: any) => m.exists === false) ||
       sendData?.error?.includes?.('not exist') ||
       sendData?.error?.includes?.('not registered') ||
       sendData?.message?.includes?.('not exist') ||
