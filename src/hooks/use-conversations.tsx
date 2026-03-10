@@ -101,38 +101,75 @@ export function useConversations() {
       return;
     }
 
-    // Enrich with lead data
-    const enriched: Conversation[] = [];
-    for (const conv of data || []) {
-      let lead = null;
-      if (conv.lead_id) {
-        const { data: leadData } = await supabase
-          .from('leads')
-          .select('id, name, phone, email, temperature, status_id, property_id, assigned_broker_id, origem, interesse, observacoes, lead_status:lead_status(name, color), properties:properties(title), profiles:profiles!leads_assigned_broker_id_fkey(full_name)')
-          .eq('id', conv.lead_id)
-          .maybeSingle();
-        lead = leadData;
-      } else {
-        // Try to find by phone
-        const phoneSuffix = conv.phone.slice(-9);
-        const { data: leadData } = await supabase
-          .from('leads')
-          .select('id, name, phone, email, temperature, status_id, property_id, assigned_broker_id, origem, interesse, observacoes, lead_status:lead_status(name, color), properties:properties(title), profiles:profiles!leads_assigned_broker_id_fkey(full_name)')
-          .eq('account_id', accountId)
-          .ilike('phone', `%${phoneSuffix}%`)
-          .order('created_at', { ascending: false })
-          .limit(1);
-        if (leadData?.[0]) {
-          lead = leadData[0];
-          await supabase
-            .from('whatsapp_conversations')
-            .update({ lead_id: leadData[0].id })
-            .eq('id', conv.id);
+    const convList = data || [];
+    const leadSelect = 'id, name, phone, email, temperature, status_id, property_id, assigned_broker_id, origem, interesse, observacoes, lead_status:lead_status(name, color), properties:properties(title), profiles:profiles!leads_assigned_broker_id_fkey(full_name)';
+
+    // Step 1: Batch-load all leads that already have a lead_id on the conversation (1 query)
+    const convWithLeadId = convList.filter(c => c.lead_id);
+    const convWithoutLeadId = convList.filter(c => !c.lead_id);
+
+    const leadIds = convWithLeadId.map(c => c.lead_id as string);
+    const leadsById = new Map<string, any>();
+
+    if (leadIds.length > 0) {
+      const { data: leadsData } = await supabase
+        .from('leads')
+        .select(leadSelect)
+        .in('id', leadIds);
+      for (const lead of leadsData || []) {
+        leadsById.set(lead.id, lead);
+      }
+    }
+
+    // Step 2: Batch-load all account leads for conversations without lead_id (1 query instead of N)
+    const leadsByPhone = new Map<string, any>();
+    const phoneUpdates: { convId: string; leadId: string }[] = [];
+
+    if (convWithoutLeadId.length > 0) {
+      const { data: allAccountLeads } = await supabase
+        .from('leads')
+        .select(leadSelect)
+        .eq('account_id', accountId)
+        .order('created_at', { ascending: false });
+
+      // Build a phone-suffix index for fast in-memory matching
+      for (const lead of allAccountLeads || []) {
+        const suffix = (lead.phone || '').replace(/\D/g, '').slice(-9);
+        if (suffix && !leadsByPhone.has(suffix)) {
+          leadsByPhone.set(suffix, lead);
         }
       }
-      enriched.push({ ...conv, lead });
+
+      // Match each orphan conversation against the in-memory index
+      for (const conv of convWithoutLeadId) {
+        const suffix = (conv.phone || '').replace(/\D/g, '').slice(-9);
+        if (suffix) {
+          const matched = leadsByPhone.get(suffix);
+          if (matched) {
+            leadsById.set(conv.id, matched); // keyed by conv.id for orphans
+            phoneUpdates.push({ convId: conv.id, leadId: matched.id });
+          }
+        }
+      }
     }
-    
+
+    // Step 3: Persist lead_id links for matched orphan conversations (batch update)
+    for (const { convId, leadId } of phoneUpdates) {
+      supabase
+        .from('whatsapp_conversations')
+        .update({ lead_id: leadId })
+        .eq('id', convId)
+        .then(() => {}); // fire-and-forget
+    }
+
+    // Step 4: Build enriched list without any extra queries
+    const enriched: Conversation[] = convList.map(conv => ({
+      ...conv,
+      lead: conv.lead_id
+        ? (leadsById.get(conv.lead_id) || null)
+        : (leadsById.get(conv.id) || null), // orphan conversations keyed by conv.id
+    }));
+
     setConversations(enriched);
     setLoading(false);
   }, [accountId]);
@@ -149,13 +186,26 @@ export function useConversations() {
       .channel('conversations-realtime')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'whatsapp_conversations', filter: `account_id=eq.${accountId}` },
-        () => { fetchConversations(); }
+        { event: 'UPDATE', schema: 'public', table: 'whatsapp_conversations', filter: `account_id=eq.${accountId}` },
+        (payload) => {
+          // Update only the affected conversation in local state — no full refetch needed
+          const updated = payload.new as any;
+          setConversations(prev =>
+            prev
+              .map(c => c.id === updated.id ? { ...c, ...updated } : c)
+              .sort((a, b) =>
+                new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime()
+              )
+          );
+        }
       )
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'whatsapp_messages', filter: `account_id=eq.${accountId}` },
-        () => { fetchConversations(); }
+        { event: 'INSERT', schema: 'public', table: 'whatsapp_conversations', filter: `account_id=eq.${accountId}` },
+        () => {
+          // New conversation — fetch to enrich with lead data
+          fetchConversations();
+        }
       )
       .subscribe();
 
@@ -344,32 +394,17 @@ export function useMessages(remoteJid: string | null, leadId?: string | null) {
   const sendMessage = async (text: string, phone: string, leadId?: string) => {
     if (!accountId) return;
 
-    const { data: session } = await supabase.auth.getSession();
-    if (!session?.session) {
-      toast({ title: "Erro", description: "Sessão expirada", variant: "destructive" });
-      return;
-    }
-
     try {
-      const response = await fetch(
-        `https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/whatsapp-send`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.session.access_token}`,
-          },
-          body: JSON.stringify({
-            phone,
-            message: text,
-            lead_id: leadId || null,
-          }),
-        }
-      );
+      const { data: result, error: invokeError } = await supabase.functions.invoke('whatsapp-send', {
+        body: {
+          phone,
+          message: text,
+          lead_id: leadId || null,
+        },
+      });
 
-      const result = await response.json();
-      if (!response.ok) {
-        toast({ title: "Erro ao enviar", description: result.error || "Falha no envio", variant: "destructive" });
+      if (invokeError || !result) {
+        toast({ title: "Erro ao enviar", description: invokeError?.message || "Falha no envio", variant: "destructive" });
         return false;
       }
 

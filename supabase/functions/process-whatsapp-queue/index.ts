@@ -115,6 +115,13 @@ function getNextValidSendTime(proposedMs: number, schedule: SendingSchedule): nu
   return proposedMs
 }
 
+// ─── Safe replacement helper ────────────────────────────────────────────────
+// Escapes $ in replacement strings to prevent String.replace() backreference injection.
+// In JS replace(), $1/$2/etc and $& have special meaning — must be escaped as $$.
+function safeReplaceValue(value: string | null | undefined): string {
+  return (value || '').replace(/\$/g, '$$$$')
+}
+
 // ─── Variable substitution helper ──────────────────────────────────────────
 async function substituteTemplateVariables(
   supabase: any,
@@ -133,9 +140,9 @@ async function substituteTemplateVariables(
 
   if (lead) {
     message = message
-      .replace(/{nome}/gi, lead.name || '')
-      .replace(/{telefone}/gi, lead.phone || '')
-      .replace(/{email}/gi, lead.email || '')
+      .replace(/{nome}/gi, safeReplaceValue(lead.name))
+      .replace(/{telefone}/gi, safeReplaceValue(lead.phone))
+      .replace(/{email}/gi, safeReplaceValue(lead.email))
 
     // Robust property title resolution with fallback
     let propertyTitle = (lead.properties as any)?.title || ''
@@ -147,10 +154,10 @@ async function substituteTemplateVariables(
         .single()
       propertyTitle = prop?.title || ''
     }
-    message = message.replace(/{imovel}/gi, propertyTitle.trim())
+    message = message.replace(/{imovel}/gi, safeReplaceValue(propertyTitle.trim()))
 
     if (lead.profiles) {
-      message = message.replace(/{corretor}/gi, (lead.profiles as any).full_name || '')
+      message = message.replace(/{corretor}/gi, safeReplaceValue((lead.profiles as any).full_name))
     } else {
       message = message.replace(/{corretor}/gi, '')
     }
@@ -164,7 +171,7 @@ async function substituteTemplateVariables(
     .single()
 
   if (account) {
-    message = message.replace(/{empresa}/gi, account.company_name || account.name || '')
+    message = message.replace(/{empresa}/gi, safeReplaceValue(account.company_name || account.name))
   } else {
     message = message.replace(/{empresa}/gi, '')
   }
@@ -185,7 +192,8 @@ async function substituteTemplateVariables(
             const normalize = (s: string) => s.toLowerCase().replace(/\?/g, '').replace(/_/g, ' ').trim()
             return normalize(f.field_name) === normalize(fieldName)
           })
-          message = message.replace(new RegExp(match.replace(/[{}?]/g, (c: string) => `\\${c}`), 'gi'), found?.field_value || '')
+          // Use safeReplaceValue to prevent $1/$& backreference injection from DB values
+          message = message.replace(new RegExp(match.replace(/[{}?]/g, (c: string) => `\\${c}`), 'gi'), safeReplaceValue(found?.field_value))
         }
       } else {
         // Try custom fields
@@ -201,7 +209,7 @@ async function substituteTemplateVariables(
             const found = customFields.find((f: any) =>
               normalizeStr((f.custom_fields as any)?.field_key || '') === normalizeStr(fieldName)
             )
-            message = message.replace(new RegExp(match.replace(/[{}?]/g, (c: string) => `\\${c}`), 'gi'), found?.value || '')
+            message = message.replace(new RegExp(match.replace(/[{}?]/g, (c: string) => `\\${c}`), 'gi'), safeReplaceValue(found?.value))
           }
         } else {
           for (const match of formVarMatches) {

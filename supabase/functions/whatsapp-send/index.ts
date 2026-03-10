@@ -10,6 +10,15 @@ const rawEvolutionUrl = Deno.env.get('EVOLUTION_API_URL') || ''
 const EVOLUTION_API_URL = rawEvolutionUrl.startsWith('http') ? rawEvolutionUrl : `https://${rawEvolutionUrl}`
 const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || ''
 
+// Validate URL at startup to catch misconfigured env vars early
+if (EVOLUTION_API_URL) {
+  try {
+    new URL(EVOLUTION_API_URL)
+  } catch {
+    console.error(`[whatsapp-send] Invalid EVOLUTION_API_URL: "${EVOLUTION_API_URL}" — check the environment variable`)
+  }
+}
+
 // Robust phone formatting for Evolution API
 function formatPhoneForEvolution(phone: string): string {
   let cleaned = phone.replace(/\D/g, '')
