@@ -88,22 +88,37 @@ export function useWhatsAppFailures(leadIds: string[]) {
     }
 
     const fetchFailures = async () => {
-      const { data } = await supabase
-        .from('whatsapp_message_queue')
-        .select('lead_id, error_message')
-        .in('lead_id', leadIds)
-        .eq('status', 'failed')
-        .order('created_at', { ascending: false });
+      const [queueResult, logResult] = await Promise.all([
+        supabase
+          .from('whatsapp_message_queue')
+          .select('lead_id, error_message')
+          .in('lead_id', leadIds)
+          .eq('status', 'failed')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('whatsapp_message_log')
+          .select('lead_id, delivery_status')
+          .in('lead_id', leadIds)
+          .eq('delivery_status', 'failed')
+          .order('sent_at', { ascending: false }),
+      ]);
 
-      if (data) {
-        const map = new Map<string, string>();
-        for (const row of data) {
+      const map = new Map<string, string>();
+      if (queueResult.data) {
+        for (const row of queueResult.data) {
           if (row.lead_id && !map.has(row.lead_id)) {
             map.set(row.lead_id, normalizeWhatsAppError(row.error_message));
           }
         }
-        setFailures(map);
       }
+      if (logResult.data) {
+        for (const row of logResult.data) {
+          if (row.lead_id && !map.has(row.lead_id)) {
+            map.set(row.lead_id, 'Falha no envio da mensagem');
+          }
+        }
+      }
+      setFailures(map);
     };
 
     fetchFailures();
@@ -131,14 +146,22 @@ export function useLeadWhatsAppFailure(leadId: string | undefined, accountId?: s
     setLoading(true);
 
     const fetchData = async () => {
-      // Run both queries in parallel
-      const [queueResult, sessionResult] = await Promise.all([
+      // Run all queries in parallel
+      const [queueResult, logResult, sessionResult] = await Promise.all([
         supabase
           .from('whatsapp_message_queue')
           .select('error_message')
           .eq('lead_id', leadId)
           .eq('status', 'failed')
           .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from('whatsapp_message_log')
+          .select('delivery_status')
+          .eq('lead_id', leadId)
+          .eq('delivery_status', 'failed')
+          .order('sent_at', { ascending: false })
           .limit(1)
           .maybeSingle(),
         accountId
@@ -152,16 +175,15 @@ export function useLeadWhatsAppFailure(leadId: string | undefined, accountId?: s
           : Promise.resolve({ data: null }),
       ]);
 
-      const hasFailed = !!queueResult.data;
+      const hasFailed = !!queueResult.data || !!logResult.data;
       const isConnected = !!sessionResult.data;
+      const errorMsg = queueResult.data?.error_message || (logResult.data ? 'Falha no envio da mensagem' : null);
 
       if (hasFailed && !isConnected) {
-        // WhatsApp disconnected — show disconnected warning, not delivery failure
         setFailure(null);
         setIsDisconnected(true);
       } else if (hasFailed && isConnected) {
-        // WhatsApp connected but message failed — show specific error
-        setFailure(normalizeWhatsAppError(queueResult.data?.error_message || null));
+        setFailure(normalizeWhatsAppError(errorMsg));
         setIsDisconnected(false);
       } else {
         setFailure(null);
