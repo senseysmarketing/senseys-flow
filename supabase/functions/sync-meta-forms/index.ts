@@ -229,23 +229,44 @@ serve(async (req) => {
 
       console.log(`Form ${formData.name} has ${formData.questions?.length || 0} questions`);
 
-      // Create or update form config
-      const { data: formConfig, error: configError } = await supabase
+      // Create or update form config - preserve user's is_configured/thresholds
+      const { data: existingFormConfig } = await supabase
         .from('meta_form_configs')
-        .upsert({
-          account_id: accountId,
-          form_id: form_id,
-          form_name: formData.name,
-          source_type: 'meta',
-          is_configured: false,
-          hot_threshold: 3,
-          warm_threshold: 1,
-        }, {
-          onConflict: 'account_id,form_id',
-          ignoreDuplicates: false
-        })
-        .select()
+        .select('*')
+        .eq('account_id', accountId)
+        .eq('form_id', form_id)
         .single();
+
+      let formConfig: any = existingFormConfig;
+      let configError: any = null;
+
+      if (existingFormConfig) {
+        // Only update form_name, never overwrite is_configured/thresholds
+        const { data: updated, error: updErr } = await supabase
+          .from('meta_form_configs')
+          .update({ form_name: formData.name })
+          .eq('id', existingFormConfig.id)
+          .select()
+          .single();
+        formConfig = updated || existingFormConfig;
+        configError = updErr;
+      } else {
+        const { data: inserted, error: insErr } = await supabase
+          .from('meta_form_configs')
+          .insert({
+            account_id: accountId,
+            form_id: form_id,
+            form_name: formData.name,
+            source_type: 'meta',
+            is_configured: false,
+            hot_threshold: 3,
+            warm_threshold: 1,
+          })
+          .select()
+          .single();
+        formConfig = inserted;
+        configError = insErr;
+      }
 
       if (configError) {
         // Try to get existing config if upsert failed
