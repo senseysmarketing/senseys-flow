@@ -593,22 +593,13 @@ const Leads = () => {
       if (oldTemperature !== 'hot' && newTemperature === 'hot') {
         try {
           console.log(`🔥 Temperature changed to hot, sending Meta CAPI event for lead ${editingLead.id}`);
-          
-          const { data: session } = await supabase.auth.getSession();
-          
-          await fetch('https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/send-meta-event', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${session?.session?.access_token}`,
-            },
-            body: JSON.stringify({
+          await supabase.functions.invoke('send-meta-event', {
+            body: {
               lead_id: editingLead.id,
-              event_name: 'Lead',
+              event_name: 'LeadQualificado',
               custom_data: { lead_type: 'qualified' },
-            }),
+            },
           });
-          
           console.log('✅ CAPI event sent for hot lead');
         } catch (capiError) {
           console.error('Error sending Meta CAPI event:', capiError);
@@ -727,20 +718,12 @@ const Leads = () => {
 
           if (mapping) {
             console.log(`Sending Meta CAPI event: ${mapping.event_name} for lead ${leadId}`);
-            
-            const { data: session } = await supabase.auth.getSession();
-            
-            await fetch('https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/send-meta-event', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${session?.session?.access_token}`,
-              },
-              body: JSON.stringify({
+            await supabase.functions.invoke('send-meta-event', {
+              body: {
                 lead_id: leadId,
                 event_name: mapping.event_name,
                 custom_data: mapping.lead_type ? { lead_type: mapping.lead_type } : {},
-              }),
+              },
             });
           }
         } catch (capiError) {

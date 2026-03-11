@@ -36,36 +36,49 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+// Detect invalid number from Evolution API response.
+// The API returns exists:false in a nested structure:
+//   {"status":400,"error":"Bad Request","response":{"message":[{"exists":false,...}]}}
+// This helper checks both the root level and the nested structure.
+function detectInvalidNumber(data: any): boolean {
+  if (!data || typeof data !== 'object') return false
+  // Root-level exists flag
+  if (data.exists === false) return true
+  // Nested response.message[].exists (most common pattern)
+  if (Array.isArray(data?.response?.message)) {
+    if (data.response.message.some((m: any) => m.exists === false)) return true
+  }
+  // Error message patterns
+  const errorStr = (data?.error || data?.message || '').toString().toLowerCase()
+  if (errorStr.includes('not exist') || errorStr.includes('not registered')) return true
+  // HTTP 404 from Evolution means the number doesn't exist
+  if (data?.status === 404) return true
+  return false
+}
+
 // Normalize Evolution API errors to user-friendly Portuguese messages
 function normalizeEvolutionError(status: number, data: any): string {
-  // Check for specific error patterns in the response body
+  // Check invalid number first (handles nested structure)
+  if (detectInvalidNumber(data)) return 'Número não possui WhatsApp'
+
   const errorMsg = data?.error || data?.message || ''
   const errorStr = typeof errorMsg === 'string' ? errorMsg.toLowerCase() : ''
-
-  if (errorStr.includes('not exist') || errorStr.includes('not registered') || data?.exists === false) {
-    return 'Número não possui WhatsApp'
-  }
 
   if (status === 401 || errorStr.includes('unauthorized') || errorStr.includes('invalid api')) {
     return 'Erro de autenticação com a API. Verifique as configurações.'
   }
-
   if (status === 404 || errorStr.includes('not found') || errorStr.includes('instance not found')) {
     return 'Sessão do WhatsApp não encontrada. Reconecte nas configurações.'
   }
-
   if (status === 408 || errorStr.includes('timeout') || errorStr.includes('timed out')) {
     return 'Servidor não respondeu a tempo. Tente novamente.'
   }
-
   if (status === 400) {
     return 'Erro temporário na conexão. Tente novamente em alguns segundos.'
   }
-
   if (status >= 500) {
     return 'Erro no servidor do WhatsApp. Tente novamente em alguns segundos.'
   }
-
   return errorMsg || 'Erro ao enviar mensagem. Tente novamente.'
 }
 
@@ -98,15 +111,7 @@ async function sendWithRetry(
     }
 
     // Check if it's an invalid number error - no point retrying
-    const isInvalidNumber =
-      data?.exists === false ||
-      data?.response?.message?.some?.((m: any) => m.exists === false) ||
-      data?.error?.includes?.('not exist') ||
-      data?.error?.includes?.('not registered') ||
-      data?.message?.includes?.('not exist') ||
-      (data?.status === 404)
-
-    if (isInvalidNumber) {
+    if (detectInvalidNumber(data)) {
       return { response, data }
     }
 
@@ -255,15 +260,8 @@ Deno.serve(async (req) => {
       message
     )
 
-    // Detect invalid number (including nested Evolution API response structure)
-    const isInvalidNumber = 
-      sendData?.exists === false || 
-      sendData?.response?.message?.some?.((m: any) => m.exists === false) ||
-      sendData?.error?.includes?.('not exist') ||
-      sendData?.error?.includes?.('not registered') ||
-      sendData?.message?.includes?.('not exist') ||
-      (sendData?.status === 404) ||
-      (typeof sendData === 'object' && sendData !== null && 'exists' in sendData && sendData.exists === false)
+    // Detect invalid number using the shared helper (checks root + nested response.message[].exists)
+    const isInvalidNumber = detectInvalidNumber(sendData)
 
     if (!sendResponse.ok || isInvalidNumber) {
       const errorMsg = isInvalidNumber 

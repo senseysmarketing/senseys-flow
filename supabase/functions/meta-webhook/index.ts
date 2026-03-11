@@ -489,10 +489,10 @@ const handler = async (req: Request): Promise<Response> => {
                 const ud: Record<string, any> = { lead_id: leadgen_id };
                 if (email) ud.em = [await hashData(email.toLowerCase().trim())];
                 if (phone) { let p = phone.replace(/\D/g, ""); if (p.length <= 11) p = "55" + p; ud.ph = [await hashData(p)]; }
-                const payload = { data: [{ event_name: "Lead", event_time: ts, event_id: evtId, action_source: "system_generated", user_data: ud, custom_data: { lead_event_source: "Senseys CRM", lead_type: "qualified", qualification_score: score } }] };
+                const payload = { data: [{ event_name: "LeadQualificado", event_time: ts, event_id: evtId, action_source: "system_generated", user_data: ud, custom_data: { lead_event_source: "Senseys CRM", lead_type: "qualified", qualification_score: score } }] };
                 const capiRes = await fetch(`https://graph.facebook.com/v19.0/${px.pixel_id}/events?access_token=${tokenData.access_token}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
                 const capiJson = await capiRes.json();
-                await supabase.from("meta_capi_events_log").insert({ lead_id: newLead.id, account_id: cfg.account_id, event_name: "Lead", event_id: evtId, pixel_id: px.pixel_id, status_code: capiRes.status, response_body: capiJson, error_message: capiJson.error?.message || null });
+                await supabase.from("meta_capi_events_log").insert({ lead_id: newLead.id, account_id: cfg.account_id, event_name: "LeadQualificado", event_id: evtId, pixel_id: px.pixel_id, status_code: capiRes.status, response_body: capiJson, error_message: capiJson.error?.message || null });
               }
             } catch (capiErr) {
               console.error("CAPI error for lead:", newLead.id, capiErr);

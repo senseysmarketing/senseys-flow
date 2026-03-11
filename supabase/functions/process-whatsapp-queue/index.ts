@@ -565,43 +565,50 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
 
       const sendResult = await sendResponse.json()
 
-      // Handle invalid number
-      if (sendResult.invalid_number) {
-        console.log(`[automation-control] Invalid number for lead ${record.lead_id}: ${sendResult.error}`)
+      // Handle invalid number — mark as permanently failed, no retry
+      if (sendResult.invalid_number || (!sendResponse.ok && sendResult.error === 'Número não possui WhatsApp')) {
+        console.log(`[automation-control] ❌ Invalid number for lead ${record.lead_id}: ${sendResult.error}`)
         await supabase
           .from('whatsapp_automation_control')
-          .update({ status: 'failed', conversation_state: 'automation_finished', updated_at: new Date().toISOString() })
+          .update({
+            status: 'failed',
+            conversation_state: 'automation_finished',
+            retry_count: (record.retry_count || 0) + 1,
+            updated_at: new Date().toISOString()
+          })
           .eq('id', record.id)
         errors++
         continue
       }
 
+      // Handle other send failures with retry limit (max 5 attempts)
       if (!sendResponse.ok) {
         const newRetryCount = (record.retry_count || 0) + 1
-        console.log(`[automation-control] ❌ Send failed for lead ${record.lead_id} (attempt ${newRetryCount}/5): ${sendResult.error}`)
-        
-        if (newRetryCount >= 5) {
-          // Max retries reached — mark as failed permanently
+        const MAX_RETRIES = 5
+
+        if (newRetryCount >= MAX_RETRIES) {
+          console.log(`[automation-control] ❌ Max retries (${MAX_RETRIES}) reached for lead ${record.lead_id}, marking as failed. Last error: ${sendResult.error}`)
           await supabase
             .from('whatsapp_automation_control')
-            .update({ 
-              status: 'failed', 
-              conversation_state: 'automation_finished', 
+            .update({
+              status: 'failed',
+              conversation_state: 'automation_finished',
               retry_count: newRetryCount,
-              updated_at: new Date().toISOString() 
+              updated_at: new Date().toISOString()
             })
             .eq('id', record.id)
-          console.log(`[automation-control] 🛑 Lead ${record.lead_id} marked as FAILED after ${newRetryCount} attempts`)
         } else {
-          // Reschedule with exponential backoff: 2min, 4min, 8min, 16min
-          const backoffMs = Math.pow(2, newRetryCount) * 60 * 1000
+          // Exponential backoff: 5min, 15min, 30min, 1h, 2h
+          const backoffMinutes = [5, 15, 30, 60, 120][newRetryCount - 1] ?? 60
+          const retryAt = new Date(Date.now() + backoffMinutes * 60 * 1000).toISOString()
+          console.log(`[automation-control] ⚠️ Send failed for lead ${record.lead_id} (attempt ${newRetryCount}/${MAX_RETRIES}), retry at ${retryAt}. Error: ${sendResult.error}`)
           await supabase
             .from('whatsapp_automation_control')
-            .update({ 
-              status: 'active', 
+            .update({
+              status: 'active',
+              next_execution_at: retryAt,
               retry_count: newRetryCount,
-              next_execution_at: new Date(Date.now() + backoffMs).toISOString(),
-              updated_at: new Date().toISOString() 
+              updated_at: new Date().toISOString()
             })
             .eq('id', record.id)
         }
