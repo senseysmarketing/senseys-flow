@@ -20,7 +20,7 @@ async function verifySignature(payload: string, signature: string): Promise<bool
 }
 
 function normalize(value: string): string {
-  return value.toLowerCase().replace(/_/g, " ").replace(/\s+/g, " ").trim();
+  return value.toLowerCase().replace(/\?/g, "").replace(/_/g, " ").replace(/\s+/g, " ").trim();
 }
 
 async function hashData(data: string): Promise<string> {
