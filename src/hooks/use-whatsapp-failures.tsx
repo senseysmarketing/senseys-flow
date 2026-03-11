@@ -131,14 +131,22 @@ export function useLeadWhatsAppFailure(leadId: string | undefined, accountId?: s
     setLoading(true);
 
     const fetchData = async () => {
-      // Run both queries in parallel
-      const [queueResult, sessionResult] = await Promise.all([
+      // Run all queries in parallel
+      const [queueResult, logResult, sessionResult] = await Promise.all([
         supabase
           .from('whatsapp_message_queue')
           .select('error_message')
           .eq('lead_id', leadId)
           .eq('status', 'failed')
           .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from('whatsapp_message_log')
+          .select('delivery_status')
+          .eq('lead_id', leadId)
+          .eq('delivery_status', 'failed')
+          .order('sent_at', { ascending: false })
           .limit(1)
           .maybeSingle(),
         accountId
