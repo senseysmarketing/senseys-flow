@@ -175,16 +175,15 @@ export function useLeadWhatsAppFailure(leadId: string | undefined, accountId?: s
           : Promise.resolve({ data: null }),
       ]);
 
-      const hasFailed = !!queueResult.data;
+      const hasFailed = !!queueResult.data || !!logResult.data;
       const isConnected = !!sessionResult.data;
+      const errorMsg = queueResult.data?.error_message || (logResult.data ? 'Falha no envio da mensagem' : null);
 
       if (hasFailed && !isConnected) {
-        // WhatsApp disconnected — show disconnected warning, not delivery failure
         setFailure(null);
         setIsDisconnected(true);
       } else if (hasFailed && isConnected) {
-        // WhatsApp connected but message failed — show specific error
-        setFailure(normalizeWhatsAppError(queueResult.data?.error_message || null));
+        setFailure(normalizeWhatsAppError(errorMsg));
         setIsDisconnected(false);
       } else {
         setFailure(null);
