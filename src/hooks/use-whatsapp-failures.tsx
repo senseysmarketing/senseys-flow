@@ -88,22 +88,37 @@ export function useWhatsAppFailures(leadIds: string[]) {
     }
 
     const fetchFailures = async () => {
-      const { data } = await supabase
-        .from('whatsapp_message_queue')
-        .select('lead_id, error_message')
-        .in('lead_id', leadIds)
-        .eq('status', 'failed')
-        .order('created_at', { ascending: false });
+      const [queueResult, logResult] = await Promise.all([
+        supabase
+          .from('whatsapp_message_queue')
+          .select('lead_id, error_message')
+          .in('lead_id', leadIds)
+          .eq('status', 'failed')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('whatsapp_message_log')
+          .select('lead_id, delivery_status')
+          .in('lead_id', leadIds)
+          .eq('delivery_status', 'failed')
+          .order('sent_at', { ascending: false }),
+      ]);
 
-      if (data) {
-        const map = new Map<string, string>();
-        for (const row of data) {
+      const map = new Map<string, string>();
+      if (queueResult.data) {
+        for (const row of queueResult.data) {
           if (row.lead_id && !map.has(row.lead_id)) {
             map.set(row.lead_id, normalizeWhatsAppError(row.error_message));
           }
         }
-        setFailures(map);
       }
+      if (logResult.data) {
+        for (const row of logResult.data) {
+          if (row.lead_id && !map.has(row.lead_id)) {
+            map.set(row.lead_id, 'Falha no envio da mensagem');
+          }
+        }
+      }
+      setFailures(map);
     };
 
     fetchFailures();
