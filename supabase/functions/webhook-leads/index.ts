@@ -521,8 +521,8 @@ serve(async (req) => {
         await supabase.functions.invoke('send-meta-event', {
           body: {
             lead_id: lead.id,
-            event_name: 'Lead',
-            lead_type: 'qualified'
+            event_name: 'LeadQualificado',
+            custom_data: { lead_type: 'qualified' },
           }
         });
       } catch (capiError) {
