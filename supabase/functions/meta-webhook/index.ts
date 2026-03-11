@@ -130,9 +130,22 @@ const handler = async (req: Request): Promise<Response> => {
           let temp = "warm", score = 0, refCode: string | null = null;
           const { data: formCfg } = await supabase.from("meta_form_configs").select("*").eq("account_id", cfg.account_id).eq("form_id", form_id).single();
           if (formCfg) {
-            if (formCfg.reference_field_name && fields[formCfg.reference_field_name]) refCode = fields[formCfg.reference_field_name];
+            // Normalized lookup for reference_field_name (case-insensitive)
+            if (formCfg.reference_field_name) {
+              const refNorm = normalize(formCfg.reference_field_name);
+              for (const [k, v] of Object.entries(fields)) {
+                if (normalize(k) === refNorm && v) { refCode = v; break; }
+              }
+            }
             const { data: rules } = await supabase.from("meta_form_scoring_rules").select("*").eq("form_config_id", formCfg.id);
-            for (const r of rules || []) if (fields[r.question_name] && normalize(fields[r.question_name]) === normalize(r.answer_value)) score += r.score;
+            // Build normalized field map for case-insensitive scoring
+            const fieldsByNorm: Record<string, string> = {};
+            for (const [k, v] of Object.entries(fields)) fieldsByNorm[normalize(k)] = v;
+            for (const r of rules || []) {
+              const val = fieldsByNorm[normalize(r.question_name)];
+              if (val && normalize(val) === normalize(r.answer_value)) score += r.score;
+            }
+            console.log(`Scoring for form ${form_id}: score=${score}, hot_threshold=${formCfg.hot_threshold}, warm_threshold=${formCfg.warm_threshold}`);
             temp = score >= formCfg.hot_threshold ? "hot" : score >= formCfg.warm_threshold ? "warm" : "cold";
           } else {
             await supabase.from("meta_form_configs").insert({ account_id: cfg.account_id, form_id, hot_threshold: 3, warm_threshold: 1, is_configured: false });

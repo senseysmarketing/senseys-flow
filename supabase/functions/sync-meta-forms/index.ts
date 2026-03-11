@@ -473,41 +473,43 @@ serve(async (req) => {
             continue;
           }
 
-          // Create or update form config
-          const { data: formConfig, error: configError } = await supabase
+          // Create or update form config - preserve user's is_configured/thresholds
+          const { data: existingSyncConfig } = await supabase
             .from('meta_form_configs')
-            .upsert({
-              account_id: accountId,
-              form_id: form.id,
-              form_name: formData.name,
-              source_type: 'meta',
-              is_configured: false,
-              hot_threshold: 3,
-              warm_threshold: 1,
-            }, {
-              onConflict: 'account_id,form_id',
-              ignoreDuplicates: false
-            })
-            .select()
+            .select('*')
+            .eq('account_id', accountId)
+            .eq('form_id', form.id)
             .single();
 
-          let formConfigId = formConfig?.id;
+          let formConfigId: string | undefined;
 
-          if (configError || !formConfigId) {
-            // Try to get existing config
-            const { data: existingConfig } = await supabase
+          if (existingSyncConfig) {
+            // Only update form_name, preserve thresholds
+            await supabase
               .from('meta_form_configs')
+              .update({ form_name: formData.name })
+              .eq('id', existingSyncConfig.id);
+            formConfigId = existingSyncConfig.id;
+          } else {
+            const { data: inserted } = await supabase
+              .from('meta_form_configs')
+              .insert({
+                account_id: accountId,
+                form_id: form.id,
+                form_name: formData.name,
+                source_type: 'meta',
+                is_configured: false,
+                hot_threshold: 3,
+                warm_threshold: 1,
+              })
               .select('id')
-              .eq('account_id', accountId)
-              .eq('form_id', form.id)
               .single();
+            formConfigId = inserted?.id;
+          }
 
-            if (existingConfig) {
-              formConfigId = existingConfig.id;
-            } else {
-              console.error(`Could not get form config for ${form.id}`);
-              continue;
-            }
+          if (!formConfigId) {
+            console.error(`Could not get form config for ${form.id}`);
+            continue;
           }
 
           // Process questions
