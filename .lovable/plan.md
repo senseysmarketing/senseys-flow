@@ -1,76 +1,72 @@
 
 
-## Diagnostico: Qualificacao de leads Meta ignorando regras de pontuacao
+## Diagnostico e Solucao: Variaveis de Formulario nos Templates WhatsApp
 
-### Causa raiz confirmada com dados do banco
+### O que esta acontecendo
 
-**Bug principal: Case mismatch no `meta-webhook` impede matching de scoring rules**
+Sua analise esta **100% correta**. O lead Cristal Lorca veio do formulario **Cidade-Jardim** (form_id: 1852010645681625) e possui estes campos salvos:
 
-Na `meta-webhook/index.ts` linha 120, os campos do lead sao indexados em lowercase:
-```js
-fields[f.name.toLowerCase()] = f.values?.[0] || "";
-// Resultado: fields["possui recursos para entrada?"] = "Sim, vou vender imóvel atual"
+- `você_já_investe_em_imóveis?` → sim, tenho portfólio...
+- `qual_seu_momento_de_decisão_para_investir?` → 6 meses
+- `qual_valor_você_considera_investir_neste_empreendimento?` → até R$ 300 mil
+
+O template que foi enviado provavelmente usa uma variavel do formulario **Ilha Pura** (ex: `{form_você_está_buscando_imóvel_para_moradia_própria_ou_para_investimento?_}`), que **nao existe** nos dados desse lead. Por isso aparece vazio na mensagem.
+
+### A conta tem 6+ formularios com perguntas sobrepostas
+
+- Art Wood, Cidade-Jardim, Ilha Pura v3/v4/v5/v6, Ipanema v2
+- Varias perguntas sao **iguais** entre formularios (ex: "fase da compra", "valor maximo")
+- Mas o Cidade-Jardim tem perguntas **exclusivas** (ex: "Voce ja investe em imoveis?")
+- Hoje o modal de templates mostra **todas as variaveis de todos os formularios misturadas**, sem indicar de qual formulario vem cada uma
+
+### Solucao: Duas mudancas
+
+#### 1. Confirmar a abordagem correta de configuracao (sem codigo)
+
+Sim, o correto e:
+- Criar **um template por formulario/imovel** com as variaveis especificas daquele formulario
+- Usar **regras condicionais de saudacao** (que ja existem no sistema) vinculadas a campanha, formulario ou imovel
+- Cada regra aponta para o template correto com as variaveis daquele formulario
+
+#### 2. Melhorar o seletor de variaveis no modal de templates (mudanca de codigo)
+
+Agrupar as variaveis por formulario no modal `WhatsAppTemplatesModal`, para ficar claro de qual formulario vem cada variavel.
+
+**Mudancas em `WhatsAppTemplatesModal.tsx`:**
+
+- Alterar `fetchFormVars` para buscar tambem o `form_name` via join com `meta_form_configs`
+- Na interface `FormVar`, adicionar campo `formName`
+- Na secao expandivel de variaveis, agrupar por nome do formulario com headers visuais (ex: "Cidade-Jardim", "Ilha Pura v6")
+- Cada grupo mostra apenas as variaveis daquele formulario
+
+**Layout proposto:**
+
+```text
+▼ Mostrar variaveis de formulario Meta (12)
+
+  ── Cidade-Jardim ──
+  {form_qual_seu_momento...}   Qual seu momento de decisao...
+  {form_você_já_investe...}    Voce ja investe em imoveis?
+  {form_qual_valor_você...}    Qual valor voce considera...
+
+  ── Ilha Pura v6 ──
+  {form_Para_entendermos...}   Para entendermos melhor...
+  {form_Qual_o_valor...}       Qual o valor maximo...
+  {form_Você_está_buscando...} Voce esta buscando...
+
+  ── Art Wood ──
+  ...
 ```
 
-Na linha 135, a busca usa `r.question_name` diretamente (sem lowercase):
-```js
-fields[r.question_name]  // r.question_name = "Possui recursos para entrada?"
-// Resultado: undefined! Key nao encontrada!
-```
-
-Dados comprovando (conta Braz, form AP0199-OSWG):
-
-| Origem | question_name / field_name | Case |
-|--------|--------------------------|------|
-| Scoring rule | `Possui recursos para entrada?` | Title Case |
-| Lead field (fields dict) | `possui recursos para entrada?` | lowercase |
-
-Score sempre = 0, temperatura = cold.
-
-Os leads que aparecem como "hot" foram corrigidos pelo `recalculate-lead-temperatures` (que usa normalized comparison corretamente), nao pelo webhook na hora da ingestao.
-
-**Bug secundario: sync-meta-forms reseta configuracao do usuario**
-
-O upsert com `ignoreDuplicates: false` sobrescreve `is_configured: false`, `hot_threshold: 3`, `warm_threshold: 1` toda vez que formularios sao sincronizados, destruindo a configuracao que o usuario fez.
-
-### Plano de correcao
-
-**1. Corrigir matching de scoring no `meta-webhook/index.ts`**
-
-Criar um mapa normalizado dos campos do lead e usar comparacao normalizada (incluindo remocao de `?` e underscores) para encontrar regras correspondentes:
-
-```typescript
-// Antes (bug):
-for (const r of rules || [])
-  if (fields[r.question_name] && normalize(fields[r.question_name]) === normalize(r.answer_value))
-    score += r.score;
-
-// Depois (fix):
-const fieldsByNorm: Record<string, string> = {};
-for (const [k, v] of Object.entries(fields)) fieldsByNorm[normalize(k)] = v;
-for (const r of rules || []) {
-  const val = fieldsByNorm[normalize(r.question_name)];
-  if (val && normalize(val) === normalize(r.answer_value)) score += r.score;
-}
-```
-
-Tambem atualizar `normalize()` para remover `?` (consistencia com `recalculate-lead-temperatures`).
-
-**2. Corrigir sync-meta-forms para nao sobrescrever config existente**
-
-Mudar os 3 upserts (linhas 235, 458 e o bloco sync-all) para usar `INSERT ... ON CONFLICT DO UPDATE` apenas nos campos que nao destroem a config do usuario:
-- Manter upsert apenas para `form_name` e `source_type`
-- NAO sobrescrever `is_configured`, `hot_threshold`, `warm_threshold`
-- Alternativa: usar insert com `ignoreDuplicates: true` e fazer update separado apenas do `form_name`
-
-**3. Deploy e reprocessamento**
-
-Apos o deploy, executar recalculo de temperatura para leads recentes que chegaram com temperatura errada.
-
-### Arquivos a modificar
+### Arquivo a modificar
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `supabase/functions/meta-webhook/index.ts` | Fix normalize + matching de scoring rules (case-insensitive lookup) |
-| `supabase/functions/sync-meta-forms/index.ts` | Upsert nao sobrescreve is_configured/thresholds |
+| `src/components/whatsapp/WhatsAppTemplatesModal.tsx` | Agrupar variaveis por formulario, buscar form_name via join |
+
+### Impacto
+
+- Nenhuma mudanca no backend ou edge functions
+- Apenas melhoria de UX no seletor de variaveis
+- O sistema de substituicao de variaveis ja funciona corretamente — o problema e de configuracao (template errado para o formulario do lead)
 
