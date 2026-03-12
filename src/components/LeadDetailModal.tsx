@@ -3,10 +3,10 @@ import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { 
-  Phone, 
-  Mail, 
-  Edit, 
+import {
+  Phone,
+  Mail,
+  Edit,
   Calendar,
   Clock,
   MapPin,
@@ -23,9 +23,9 @@ import {
   History,
   Building2,
   UserCheck,
-  AlertTriangle
+  AlertTriangle,
+  MessageCircle
 } from "lucide-react";
-import WhatsAppButton from "@/components/WhatsAppButton";
 import TemperatureBadge from "@/components/TemperatureBadge";
 import OriginBadge from "@/components/OriginBadge";
 import LeadActivityTimeline from "@/components/LeadActivityTimeline";
@@ -33,13 +33,15 @@ import LeadCustomFields from "@/components/LeadCustomFields";
 import LeadFormFields from "@/components/LeadFormFields";
 import { DISQUALIFICATION_REASONS } from "@/components/leads/DisqualifyLeadModal";
 import { toast } from "@/hooks/use-toast";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useLeadWhatsAppFailure } from "@/hooks/use-whatsapp-failures";
 import { useScheduledMessages, formatScheduledTime } from "@/hooks/use-scheduled-messages";
 import { useAccount } from "@/hooks/use-account";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { MessageSquareWarning, WifiOff, Timer } from "lucide-react";
+import { useMessages, Conversation } from "@/hooks/use-conversations";
+import { ChatView } from "@/components/conversations/ChatView";
 
 interface Lead {
   id: string;
@@ -89,12 +91,88 @@ interface DuplicateLeadInfo {
 
 const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalProps) => {
   const { account } = useAccount();
+  const [activeTab, setActiveTab] = useState<'details' | 'whatsapp'>('details');
   const [brokerName, setBrokerName] = useState<string | null>(null);
   const [propertyInfo, setPropertyInfo] = useState<{ title: string; city?: string } | null>(null);
   const [disqualificationData, setDisqualificationData] = useState<{ reasons: string[]; notes: string | null } | null>(null);
   const [duplicateLeadInfo, setDuplicateLeadInfo] = useState<DuplicateLeadInfo | null>(null);
   const { failure: whatsappFailure, isDisconnected: whatsappDisconnected } = useLeadWhatsAppFailure(lead?.id, account?.id ?? undefined);
   const { nextMessage: scheduledMessage, totalPending: scheduledCount } = useScheduledMessages(lead?.id);
+
+  // WhatsApp inline chat state
+  const [whatsappConversation, setWhatsappConversation] = useState<Conversation | null>(null);
+  const cleanPhone = (lead?.phone || '').replace(/\D/g, '');
+  const fullPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+  const remoteJid = `${fullPhone}@s.whatsapp.net`;
+  const { messages: whatsappMessages, loading: whatsappMessagesLoading, sendMessage: sendWhatsAppMessage } = useMessages(
+    activeTab === 'whatsapp' && whatsappConversation ? whatsappConversation.remote_jid : null,
+    activeTab === 'whatsapp' ? (whatsappConversation?.lead_id || lead?.id || null) : null
+  );
+
+  const loadWhatsAppConversation = useCallback(async () => {
+    if (!account?.id || !lead?.id) return;
+
+    const makeLeadObj = () => ({
+      id: lead.id,
+      name: lead.name,
+      phone: fullPhone,
+      email: null,
+      temperature: null,
+      status_id: null,
+      property_id: null,
+      assigned_broker_id: null,
+      origem: null,
+      interesse: null,
+      observacoes: null,
+    });
+
+    // 1. Try exact JID match
+    const { data: conv } = await supabase
+      .from('whatsapp_conversations')
+      .select('*')
+      .eq('account_id', account.id)
+      .eq('remote_jid', remoteJid)
+      .maybeSingle();
+
+    if (conv) {
+      setWhatsappConversation({ ...conv, unread_count: conv.unread_count ?? 0, last_message_is_from_me: conv.last_message_is_from_me ?? false, lead: makeLeadObj() });
+      return;
+    }
+
+    // 2. Fallback: search by lead_id (handles JID format differences)
+    const { data: convByLead } = await supabase
+      .from('whatsapp_conversations')
+      .select('*')
+      .eq('account_id', account.id)
+      .eq('lead_id', lead.id)
+      .not('remote_jid', 'like', '%@lid')
+      .maybeSingle();
+
+    if (convByLead) {
+      setWhatsappConversation({ ...convByLead, unread_count: convByLead.unread_count ?? 0, last_message_is_from_me: convByLead.last_message_is_from_me ?? false, lead: makeLeadObj() });
+      return;
+    }
+
+    // 3. Virtual conversation
+    setWhatsappConversation({
+      id: '', account_id: account.id, remote_jid: remoteJid, phone: fullPhone,
+      contact_name: lead.name, last_message: null, last_message_at: null,
+      last_message_is_from_me: false, unread_count: 0, lead_id: lead.id, lead: makeLeadObj(),
+    });
+  }, [account?.id, lead?.id, remoteJid]);
+
+  useEffect(() => {
+    if (activeTab === 'whatsapp' && open && !whatsappConversation) {
+      loadWhatsAppConversation();
+    }
+  }, [activeTab, open, whatsappConversation, loadWhatsAppConversation]);
+
+  useEffect(() => {
+    if (!open) {
+      setActiveTab('details');
+      setWhatsappConversation(null);
+    }
+  }, [open]);
 
   useEffect(() => {
     if (lead?.assigned_broker_id) {
@@ -255,7 +333,60 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
           </div>
         </div>
 
-        {/* Conteúdo principal */}
+        {/* Tab navigation */}
+        <div className="border-b px-6">
+          <div className="flex gap-1">
+            <button
+              onClick={() => setActiveTab('details')}
+              className={`flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'details'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <User className="h-4 w-4" />
+              Detalhes
+            </button>
+            <button
+              onClick={() => setActiveTab('whatsapp')}
+              className={`flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'whatsapp'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <MessageCircle className="h-4 w-4" />
+              WhatsApp
+            </button>
+          </div>
+        </div>
+
+        {/* WhatsApp tab content */}
+        {activeTab === 'whatsapp' && (
+          <div className="flex-1 overflow-hidden">
+            {whatsappConversation ? (
+              <ChatView
+                conversation={whatsappConversation}
+                messages={whatsappMessages}
+                loading={whatsappMessagesLoading}
+                onSend={async (text) => {
+                  const result = await sendWhatsAppMessage(text, fullPhone, lead.id);
+                  return result;
+                }}
+                onBack={() => setActiveTab('details')}
+                onShowLead={() => {}}
+                isMobile={false}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Detalhes tab content */}
+        {activeTab === 'details' && (
         <div className="p-6 space-y-6 overflow-y-auto flex-1">
           {/* Alerta de Lead Recorrente */}
           {lead.is_duplicate && duplicateLeadInfo && (
@@ -582,19 +713,17 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
             <LeadActivityTimeline leadId={lead.id} />
           </div>
         </div>
+        )}
 
         {/* Footer com ações */}
-        <div className="p-4 bg-muted/30 border-t flex items-center justify-end gap-3">
-          <WhatsAppButton 
-            phone={lead.phone} 
-            leadName={lead.name}
-            leadId={lead.id}
-            propertyName={propertyInfo?.title}
-            interesse={lead.interesse}
+        <div className="p-4 bg-muted/30 border-t flex items-center justify-between gap-3">
+          <Button
             variant="outline"
-            size="default"
-          />
-          <Button 
+            onClick={() => onOpenChange(false)}
+          >
+            Fechar
+          </Button>
+          <Button
             onClick={() => {
               onOpenChange(false);
               onEdit(lead);

@@ -513,7 +513,9 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any, inst
     }
 
     // Handle incoming message lead status changes
-    if (!isFromMe && !isLid) {
+    // Also handle resolved @lid messages (isLid=true but resolvedJid is set)
+    // The isLid && !resolvedJid && contactName case is already handled above (lead found by name)
+    if (!isFromMe && (!isLid || resolvedJid)) {
       // Prefer the lead already resolved by findLeadByPhone (exact account match).
       // Only fall back to phone-suffix ILIKE search when leadId is not yet known,
       // to avoid cancelling follow-ups for multiple leads sharing the same phone suffix.

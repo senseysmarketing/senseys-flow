@@ -79,8 +79,22 @@ export function WhatsAppChatModal({ open, onClose, leadName, leadId, phone, prop
   useEffect(() => {
     if (!open || !isConnected || !account?.id) return;
 
+    const makeLeadObj = () => ({
+      id: leadId || '',
+      name: leadName,
+      phone: fullPhone,
+      email: null,
+      temperature: null,
+      status_id: null,
+      property_id: null,
+      assigned_broker_id: null,
+      origem: null,
+      interesse: null,
+      observacoes: null,
+    });
+
     const findConversation = async () => {
-      // Try to find existing conversation by phone
+      // 1. Try exact JID match
       const { data: conv } = await supabase
         .from('whatsapp_conversations')
         .select('*')
@@ -93,53 +107,52 @@ export function WhatsAppChatModal({ open, onClose, leadName, leadId, phone, prop
           ...conv,
           unread_count: conv.unread_count ?? 0,
           last_message_is_from_me: conv.last_message_is_from_me ?? false,
-          lead: {
-            id: leadId || '',
-            name: leadName,
-            phone: fullPhone,
-            email: null,
-            temperature: null,
-            status_id: null,
-            property_id: null,
-            assigned_broker_id: null,
-            origem: null,
-            interesse: null,
-            observacoes: null,
-          }
+          lead: makeLeadObj(),
         });
         markAsRead();
-      } else {
-        // Create a virtual conversation object for ChatView
-        setConversation({
-          id: '',
-          account_id: account.id,
-          remote_jid: remoteJid,
-          phone: fullPhone,
-          contact_name: leadName,
-          last_message: null,
-          last_message_at: null,
-          last_message_is_from_me: false,
-          unread_count: 0,
-          lead_id: leadId || null,
-          lead: {
-            id: leadId || '',
-            name: leadName,
-            phone: fullPhone,
-            email: null,
-            temperature: null,
-            status_id: null,
-            property_id: null,
-            assigned_broker_id: null,
-            origem: null,
-            interesse: null,
-            observacoes: null,
-          }
-        });
+        return;
       }
+
+      // 2. Fallback: search by lead_id (handles JID format mismatches, e.g. 9th digit variation)
+      if (leadId) {
+        const { data: convByLead } = await supabase
+          .from('whatsapp_conversations')
+          .select('*')
+          .eq('account_id', account.id)
+          .eq('lead_id', leadId)
+          .not('remote_jid', 'like', '%@lid')
+          .maybeSingle();
+
+        if (convByLead) {
+          setConversation({
+            ...convByLead,
+            unread_count: convByLead.unread_count ?? 0,
+            last_message_is_from_me: convByLead.last_message_is_from_me ?? false,
+            lead: makeLeadObj(),
+          });
+          markAsRead();
+          return;
+        }
+      }
+
+      // 3. Create a virtual conversation object for ChatView
+      setConversation({
+        id: '',
+        account_id: account.id,
+        remote_jid: remoteJid,
+        phone: fullPhone,
+        contact_name: leadName,
+        last_message: null,
+        last_message_at: null,
+        last_message_is_from_me: false,
+        unread_count: 0,
+        lead_id: leadId || null,
+        lead: makeLeadObj(),
+      });
     };
 
     findConversation();
-  }, [open, isConnected, account?.id, remoteJid]);
+  }, [open, isConnected, account?.id, remoteJid, leadId]);
 
   // Reset state on close
   useEffect(() => {
