@@ -376,7 +376,30 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
         }
       }
 
-      // b3. Minimum window: prevent two messages within 2 minutes (anti-loop)
+      // b3. Phone-based fallback: catches @lid messages that were stored without lead_id
+      // (when @lid JID couldn't be resolved, the message phone field is the @lid identifier,
+      //  but the conversation.phone field always has the real phone number)
+      const recordPhoneSuffix = (record.phone || '').replace(/\D/g, '').slice(-9)
+      if (recordPhoneSuffix.length >= 8) {
+        const { data: convByPhone } = await supabase
+          .from('whatsapp_conversations')
+          .select('last_customer_message_at')
+          .eq('account_id', record.account_id)
+          .ilike('phone', `%${recordPhoneSuffix}%`)
+          .gt('last_customer_message_at', record.started_at)
+          .limit(1)
+
+        if (convByPhone && convByPhone.length > 0) {
+          await supabase
+            .from('whatsapp_automation_control')
+            .update({ status: 'responded', conversation_state: 'customer_replied', updated_at: new Date().toISOString() })
+            .eq('id', record.id)
+          console.log(`[automation-control] Lead ${record.lead_id} responded (phone-based conversation fallback), marking as responded`)
+          continue
+        }
+      }
+
+      // c-pre. Minimum window: prevent two messages within 2 minutes (anti-loop)
       const lastSendTimestamp = record.last_followup_sent_at || record.updated_at
       const timeSinceLastSend = Date.now() - new Date(lastSendTimestamp).getTime()
       if (timeSinceLastSend < 120_000) { // 2 minutes
@@ -451,6 +474,27 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
             .eq('id', record.id)
           console.log(`[automation-control] Lead ${record.lead_id} responded during waiting_response phase`)
           continue
+        }
+
+        // Phone-based fallback for waiting_response phase (catches @lid messages without lead_id)
+        const waitingPhoneSuffix = (record.phone || '').replace(/\D/g, '').slice(-9)
+        if (waitingPhoneSuffix.length >= 8) {
+          const { data: convByPhoneWaiting } = await supabase
+            .from('whatsapp_conversations')
+            .select('last_customer_message_at')
+            .eq('account_id', record.account_id)
+            .ilike('phone', `%${waitingPhoneSuffix}%`)
+            .gt('last_customer_message_at', record.started_at)
+            .limit(1)
+
+          if (convByPhoneWaiting && convByPhoneWaiting.length > 0) {
+            await supabase
+              .from('whatsapp_automation_control')
+              .update({ status: 'responded', conversation_state: 'customer_replied', updated_at: new Date().toISOString() })
+              .eq('id', record.id)
+            console.log(`[automation-control] Lead ${record.lead_id} responded during waiting_response (phone-based fallback)`)
+            continue
+          }
         }
 
         // Transition to followup
@@ -690,10 +734,20 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
         updateData.last_followup_sent_at = new Date().toISOString()
       }
 
-      await supabase
+      // Only update if still in 'processing' state — prevents overwriting 'responded'
+      // set by the webhook during a race condition (customer replied while we were sending)
+      const { data: updateResult } = await supabase
         .from('whatsapp_automation_control')
         .update(updateData)
         .eq('id', record.id)
+        .eq('status', 'processing')
+        .select('id')
+
+      if (!updateResult || updateResult.length === 0) {
+        console.log(`[automation-control] ⚠️ Record ${record.id} was already updated externally (race condition avoided), skipping state update`)
+        processed++
+        continue
+      }
 
       processed++
       console.log(`[automation-control] ✅ ${currentPhase}[${stepPos}] sent for lead ${record.lead_id} (record=${record.id}), phase=${currentPhase}, step=${stepPos}, next: ${updateData.status === 'active' ? updateData.next_execution_at : updateData.status}`)
