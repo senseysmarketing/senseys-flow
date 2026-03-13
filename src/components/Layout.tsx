@@ -73,7 +73,7 @@ const Layout = ({ children, fullHeight = false }: LayoutProps) => {
       {/* Main area — offset left for floating sidebar on desktop */}
       <div className={cn(
         "flex flex-col min-h-screen",
-        !isMobile && "ml-[80px]"
+        !isMobile && "ml-16"
       )}>
         {/* Support Mode Banner */}
         {isSupportMode && (
