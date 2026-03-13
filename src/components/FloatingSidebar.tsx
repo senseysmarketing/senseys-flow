@@ -102,9 +102,9 @@ export function FloatingSidebar() {
               )}
             >
               {isActive && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-primary" />
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-[#81afd1]" />
               )}
-              <item.icon className={cn("h-5 w-5 flex-shrink-0", isActive && "text-primary")} />
+              <item.icon className={cn("h-5 w-5 flex-shrink-0", isActive && "text-[#81afd1]")} />
               <AnimatePresence>
                 {isExpanded && (
                   <motion.span
