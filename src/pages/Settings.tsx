@@ -53,7 +53,7 @@ const PRESET_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "#
 
 
 
-type TabValue = 'profile' | 'team' | 'notifications' | 'statuses' | 'whatsapp' | 'followup' | 'distribution' | 'qualification' | 'metacapi' | 'permissions' | 'whitelabel' | 'import';
+type TabValue = 'profile' | 'team' | 'notifications' | 'statuses' | 'whatsapp' | 'followup' | 'distribution' | 'qualification' | 'metacapi' | 'permissions' | 'import';
 
 interface NavItem {
   value: TabValue;
