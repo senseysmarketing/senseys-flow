@@ -107,8 +107,7 @@ export function AppSidebar() {
     window.location.href = "/auth";
   };
 
-  const logoSrc = account?.logo_url || logoAlternativaBranca;
-  const companyName = account?.company_name || "";
+  const logoSrc = logoAlternativaBranca;
 
   return (
     <Sidebar className="w-64 border-r-0 z-50">
