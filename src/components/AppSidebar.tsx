@@ -25,7 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
-import { useAccount } from "@/hooks/use-account";
+
 import { useSuperAdmin } from "@/hooks/use-super-admin";
 import { usePermissions } from "@/hooks/use-permissions";
 import logoAlternativaBranca from "@/assets/logo-alternativa-branca.png";
