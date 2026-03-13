@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -293,20 +293,22 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
   const TempIcon = tempInfo.icon;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[650px] max-h-[90vh] p-0 gap-0 overflow-hidden flex flex-col">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="sm:max-w-[520px] w-full p-0 gap-0 overflow-hidden flex flex-col bg-[#2b2d2c] border-l border-white/10 [&>button]:text-[#a6c8e1] [&>button]:hover:text-white">
         <VisuallyHidden>
-          <DialogTitle>Detalhes do Lead: {lead.name}</DialogTitle>
+          <SheetTitle>Detalhes do Lead: {lead.name}</SheetTitle>
         </VisuallyHidden>
-        {/* Header com gradiente */}
-        <div className="relative bg-gradient-to-br from-primary/20 via-primary/10 to-transparent p-6 pb-8">
+        {/* Header */}
+        <div className="relative p-6 pb-5 border-b border-white/10">
           {/* Nome e Avatar */}
           <div className="flex items-start gap-4">
-            <div className="w-16 h-16 rounded-full bg-primary/20 border-2 border-primary/30 flex items-center justify-center">
-              <User className="h-8 w-8 text-primary" />
+            <div className="w-14 h-14 rounded-full bg-[#5a5f65] border border-white/10 flex items-center justify-center shadow-[0_0_15px_rgba(129,175,209,0.3)]">
+              <span className="text-lg font-bold text-[#81afd1]">
+                {lead.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
+              </span>
             </div>
             <div className="flex-1 min-w-0">
-              <h2 className="text-2xl font-bold text-foreground truncate">{lead.name}</h2>
+              <h2 className="text-2xl font-bold text-white truncate">{lead.name}</h2>
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 {lead.lead_status && (
                   <Badge 
@@ -323,25 +325,50 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
                 )}
                 <TemperatureBadge temperature={lead.temperature} size="sm" />
                 <OriginBadge origem={lead.origem} size="sm" />
-                {lead.interesse && (
-                  <span className="text-sm text-muted-foreground truncate">
-                    {lead.interesse}
-                  </span>
-                )}
               </div>
             </div>
+          </div>
+          {/* Quick action buttons */}
+          <div className="flex items-center gap-2 mt-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 text-[#a6c8e1] hover:text-white hover:bg-white/5"
+              onClick={() => {
+                const phone = lead.phone.replace(/\D/g, '');
+                const full = phone.startsWith('55') ? phone : `55${phone}`;
+                window.open(`https://wa.me/${full}`, '_blank');
+              }}
+            >
+              <MessageCircle className="h-4 w-4" />
+              WhatsApp
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 text-[#a6c8e1] hover:text-white hover:bg-white/5"
+              onClick={() => window.open(`tel:${lead.phone}`, '_self')}
+            >
+              <Phone className="h-4 w-4" />
+              Ligar
+            </Button>
+            {lead.interesse && (
+              <span className="text-xs text-[#a6c8e1] ml-auto truncate max-w-[150px]">
+                {lead.interesse}
+              </span>
+            )}
           </div>
         </div>
 
         {/* Tab navigation */}
-        <div className="border-b px-6">
+        <div className="border-b border-white/10 px-6">
           <div className="flex gap-1">
             <button
               onClick={() => setActiveTab('details')}
-              className={`flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === 'details'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                  ? 'border-[#81afd1] text-[#81afd1]'
+                  : 'border-transparent text-[#a6c8e1]/60 hover:text-[#a6c8e1]'
               }`}
             >
               <User className="h-4 w-4" />
@@ -349,10 +376,10 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
             </button>
             <button
               onClick={() => setActiveTab('whatsapp')}
-              className={`flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === 'whatsapp'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                  ? 'border-[#81afd1] text-[#81afd1]'
+                  : 'border-transparent text-[#a6c8e1]/60 hover:text-[#a6c8e1]'
               }`}
             >
               <MessageCircle className="h-4 w-4" />
@@ -387,11 +414,11 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
 
         {/* Detalhes tab content */}
         {activeTab === 'details' && (
-        <div className="p-6 space-y-6 overflow-y-auto flex-1">
+        <div className="p-6 space-y-5 overflow-y-auto flex-1">
           {/* Alerta de Lead Recorrente */}
           {lead.is_duplicate && duplicateLeadInfo && (
             <>
-              <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
                 <div className="flex items-center gap-2 mb-3">
                   <AlertTriangle className="h-5 w-5 text-amber-500" />
                   <h3 className="font-semibold text-amber-600 dark:text-amber-400">Lead Recorrente</h3>
@@ -498,129 +525,105 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
             </>
           )}
 
-          {/* Informações de Contato */}
+          {/* Informações de Contato — Bento Card */}
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+            <h3 className="text-xs font-semibold text-[#a6c8e1] uppercase tracking-wider">
               Informações de Contato
             </h3>
             <div className="grid gap-3">
               <div 
-                className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors group"
+                className="flex items-center gap-3 p-4 rounded-xl bg-[#5a5f65] border border-white/5 hover:border-white/10 cursor-pointer transition-colors group"
                 onClick={() => copyToClipboard(lead.phone, 'Telefone')}
               >
-                <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center">
-                  <Phone className="h-5 w-5 text-green-500" />
-                </div>
+                <Phone className="h-4 w-4 text-[#a6c8e1] shrink-0" />
                 <div className="flex-1">
-                  <p className="text-sm text-muted-foreground">Telefone</p>
-                  <p className="font-medium">{formatPhone(lead.phone)}</p>
+                  <p className="text-[11px] text-[#a6c8e1]/70">Telefone</p>
+                  <p className="font-medium text-white text-sm">{formatPhone(lead.phone)}</p>
                 </div>
-                <Copy className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                <Copy className="h-3.5 w-3.5 text-[#a6c8e1]/40 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
 
               {lead.email && (
                 <div 
-                  className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors group"
+                  className="flex items-center gap-3 p-4 rounded-xl bg-[#5a5f65] border border-white/5 hover:border-white/10 cursor-pointer transition-colors group"
                   onClick={() => copyToClipboard(lead.email!, 'Email')}
                 >
-                  <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
-                    <Mail className="h-5 w-5 text-blue-500" />
-                  </div>
+                  <Mail className="h-4 w-4 text-[#a6c8e1] shrink-0" />
                   <div className="flex-1">
-                    <p className="text-sm text-muted-foreground">Email</p>
-                    <p className="font-medium">{lead.email}</p>
+                    <p className="text-[11px] text-[#a6c8e1]/70">Email</p>
+                    <p className="font-medium text-white text-sm">{lead.email}</p>
                   </div>
-                  <Copy className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <Copy className="h-3.5 w-3.5 text-[#a6c8e1]/40 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
               )}
             </div>
           </div>
 
-          <Separator />
-
-          {/* Origem e Campanha */}
+          {/* Origem e Campanha — Bento Cards */}
           {(lead.origem || lead.campanha || lead.conjunto || lead.anuncio) && (
-            <>
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                  Origem do Lead
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {lead.origem && (
-                    <div className="p-3 rounded-lg bg-muted/50">
-                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                        <MapPin className="h-4 w-4" />
-                        <span className="text-xs">Origem</span>
-                      </div>
-                      <p className="font-medium text-sm">{lead.origem}</p>
-                    </div>
-                  )}
-                  {lead.campanha && (
-                    <div className="p-3 rounded-lg bg-muted/50">
-                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                        <Megaphone className="h-4 w-4" />
-                        <span className="text-xs">Campanha</span>
-                      </div>
-                      <p className="font-medium text-sm">{lead.campanha}</p>
-                    </div>
-                  )}
-                  {lead.conjunto && (
-                    <div className="p-3 rounded-lg bg-muted/50">
-                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                        <Target className="h-4 w-4" />
-                        <span className="text-xs">Conjunto</span>
-                      </div>
-                      <p className="font-medium text-sm">{lead.conjunto}</p>
-                    </div>
-                  )}
-                  {lead.anuncio && (
-                    <div className="p-3 rounded-lg bg-muted/50">
-                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                        <ExternalLink className="h-4 w-4" />
-                        <span className="text-xs">Anúncio</span>
-                      </div>
-                      <p className="font-medium text-sm">{lead.anuncio}</p>
-                    </div>
-                  )}
-                </div>
+            <div className="space-y-3">
+              <h3 className="text-xs font-semibold text-[#a6c8e1] uppercase tracking-wider">
+                Origem do Lead
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                {lead.origem && (
+                  <div className="p-4 rounded-xl bg-[#5a5f65] border border-white/5">
+                    <MapPin className="h-4 w-4 text-[#a6c8e1] mb-2" />
+                    <p className="text-[11px] text-[#a6c8e1]/70">Origem</p>
+                    <p className="font-medium text-white text-sm">{lead.origem}</p>
+                  </div>
+                )}
+                {lead.campanha && (
+                  <div className="p-4 rounded-xl bg-[#5a5f65] border border-white/5">
+                    <Megaphone className="h-4 w-4 text-[#a6c8e1] mb-2" />
+                    <p className="text-[11px] text-[#a6c8e1]/70">Campanha</p>
+                    <p className="font-medium text-white text-sm">{lead.campanha}</p>
+                  </div>
+                )}
+                {lead.conjunto && (
+                  <div className="p-4 rounded-xl bg-[#5a5f65] border border-white/5">
+                    <Target className="h-4 w-4 text-[#a6c8e1] mb-2" />
+                    <p className="text-[11px] text-[#a6c8e1]/70">Conjunto</p>
+                    <p className="font-medium text-white text-sm">{lead.conjunto}</p>
+                  </div>
+                )}
+                {lead.anuncio && (
+                  <div className="p-4 rounded-xl bg-[#5a5f65] border border-white/5">
+                    <ExternalLink className="h-4 w-4 text-[#a6c8e1] mb-2" />
+                    <p className="text-[11px] text-[#a6c8e1]/70">Anúncio</p>
+                    <p className="font-medium text-white text-sm">{lead.anuncio}</p>
+                  </div>
+                )}
               </div>
-              <Separator />
-            </>
+            </div>
           )}
 
-          {/* Corretor e Imóvel Atribuídos */}
+          {/* Corretor e Imóvel — Bento Cards */}
           {(brokerName || propertyInfo) && (
-            <>
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                  Atribuição
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {brokerName && (
-                    <div className="p-3 rounded-lg bg-muted/50">
-                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                        <UserCheck className="h-4 w-4" />
-                        <span className="text-xs">Corretor Responsável</span>
-                      </div>
-                      <p className="font-medium text-sm">{brokerName}</p>
-                    </div>
-                  )}
-                  {propertyInfo && (
-                    <div className="p-3 rounded-lg bg-muted/50">
-                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                        <Building2 className="h-4 w-4" />
-                        <span className="text-xs">Imóvel de Interesse</span>
-                      </div>
-                      <p className="font-medium text-sm">
-                        {propertyInfo.title}
-                        {propertyInfo.city && ` - ${propertyInfo.city}`}
-                      </p>
-                    </div>
-                  )}
-                </div>
+            <div className="space-y-3">
+              <h3 className="text-xs font-semibold text-[#a6c8e1] uppercase tracking-wider">
+                Atribuição
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                {brokerName && (
+                  <div className="p-4 rounded-xl bg-[#5a5f65] border border-white/5">
+                    <UserCheck className="h-4 w-4 text-[#a6c8e1] mb-2" />
+                    <p className="text-[11px] text-[#a6c8e1]/70">Corretor Responsável</p>
+                    <p className="font-medium text-white text-sm">{brokerName}</p>
+                  </div>
+                )}
+                {propertyInfo && (
+                  <div className="p-4 rounded-xl bg-[#5a5f65] border border-white/5">
+                    <Building2 className="h-4 w-4 text-[#a6c8e1] mb-2" />
+                    <p className="text-[11px] text-[#a6c8e1]/70">Imóvel de Interesse</p>
+                    <p className="font-medium text-white text-sm">
+                      {propertyInfo.title}
+                      {propertyInfo.city && ` - ${propertyInfo.city}`}
+                    </p>
+                  </div>
+                )}
               </div>
-              <Separator />
-            </>
+            </div>
           )}
 
           {/* Dados do Formulário */}
@@ -632,20 +635,17 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
 
           {/* Observações */}
           {lead.observacoes && (
-            <>
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                  Observações
-                </h3>
-                <div className="p-4 rounded-lg bg-muted/50">
-                  <div className="flex items-start gap-3">
-                    <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
-                    <p className="text-sm leading-relaxed">{lead.observacoes}</p>
-                  </div>
+            <div className="space-y-3">
+              <h3 className="text-xs font-semibold text-[#a6c8e1] uppercase tracking-wider">
+                Observações
+              </h3>
+              <div className="p-4 rounded-xl bg-[#5a5f65] border border-white/5">
+                <div className="flex items-start gap-3">
+                  <FileText className="h-4 w-4 text-[#a6c8e1] mt-0.5 shrink-0" />
+                  <p className="text-sm leading-relaxed text-white/80">{lead.observacoes}</p>
                 </div>
               </div>
-              <Separator />
-            </>
+            </div>
           )}
 
           {/* Motivo da Desqualificação */}
@@ -676,37 +676,31 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
             </>
           )}
 
-          {/* Datas */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Calendar className="h-4 w-4" />
-                <span className="text-xs">Criado em</span>
-              </div>
-              <p className="text-sm font-medium">{createdAt.date}</p>
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
+          {/* Datas — Bento */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-4 rounded-xl bg-[#5a5f65] border border-white/5">
+              <Calendar className="h-4 w-4 text-[#a6c8e1] mb-2" />
+              <p className="text-[11px] text-[#a6c8e1]/70">Criado em</p>
+              <p className="text-sm font-medium text-white">{createdAt.date}</p>
+              <p className="text-xs text-[#a6c8e1]/60 flex items-center gap-1 mt-0.5">
                 <Clock className="h-3 w-3" />
                 {createdAt.time}
               </p>
             </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Calendar className="h-4 w-4" />
-                <span className="text-xs">Atualizado em</span>
-              </div>
-              <p className="text-sm font-medium">{updatedAt.date}</p>
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <div className="p-4 rounded-xl bg-[#5a5f65] border border-white/5">
+              <Calendar className="h-4 w-4 text-[#a6c8e1] mb-2" />
+              <p className="text-[11px] text-[#a6c8e1]/70">Atualizado em</p>
+              <p className="text-sm font-medium text-white">{updatedAt.date}</p>
+              <p className="text-xs text-[#a6c8e1]/60 flex items-center gap-1 mt-0.5">
                 <Clock className="h-3 w-3" />
                 {updatedAt.time}
               </p>
             </div>
           </div>
 
-          <Separator />
-
           {/* Histórico de Atividades */}
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+            <h3 className="text-xs font-semibold text-[#a6c8e1] uppercase tracking-wider flex items-center gap-2">
               <History className="h-4 w-4" />
               Histórico de Atividades
             </h3>
@@ -715,11 +709,12 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
         </div>
         )}
 
-        {/* Footer com ações */}
-        <div className="p-4 bg-muted/30 border-t flex items-center justify-between gap-3">
+        {/* Footer */}
+        <div className="p-4 bg-[#2b2d2c] border-t border-white/10 flex items-center justify-between gap-3">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
+            className="border-white/10 text-[#a6c8e1] hover:text-white hover:bg-white/5"
           >
             Fechar
           </Button>
@@ -728,14 +723,14 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
               onOpenChange(false);
               onEdit(lead);
             }}
-            className="gap-2"
+            className="gap-2 bg-[#81afd1] text-white hover:bg-[#81afd1]/80"
           >
             <Edit className="h-4 w-4" />
             Editar Lead
           </Button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 };
 

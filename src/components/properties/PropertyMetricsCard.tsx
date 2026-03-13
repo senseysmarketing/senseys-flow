@@ -6,6 +6,7 @@ import { MapPin, Bed, Bath, Car, Eye, Edit2, Trash2, Users, Flame, DollarSign, T
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { format, subDays } from "date-fns";
+import { LineChart, Line, ResponsiveContainer } from "recharts";
 
 interface Property {
   id: string;
@@ -125,21 +126,25 @@ export function PropertyMetricsCard({
   };
 
   return (
-    <Card className="overflow-hidden cursor-pointer hover:shadow-lg hover:border-primary/50 transition-all group" onClick={onView}>
+    <Card className="overflow-hidden cursor-pointer hover:shadow-[0_0_20px_rgba(129,175,209,0.1)] hover:border-[#81afd1]/30 transition-all group bg-[#5a5f65]/80 backdrop-blur-md border border-white/10" onClick={onView}>
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <CardTitle className="text-lg truncate group-hover:text-primary transition-colors">
+            <CardTitle className="text-lg truncate text-white group-hover:text-[#81afd1] transition-colors">
               {property.title}
             </CardTitle>
             {property.neighborhood && property.city && (
-              <CardDescription className="flex items-center gap-1 mt-1">
+              <CardDescription className="flex items-center gap-1 mt-1 text-[#a6c8e1]/70">
                 <MapPin className="h-3 w-3" />
                 {property.neighborhood}, {property.city}
               </CardDescription>
             )}
           </div>
-          <Badge className={`${statusInfo.color} text-white shrink-0`}>
+          <Badge className={`shrink-0 ${
+            statusInfo.label === 'Disponível' 
+              ? 'bg-transparent border border-emerald-400/50 text-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.2)]' 
+              : `${statusInfo.color} text-white`
+          }`}>
             {statusInfo.label}
           </Badge>
         </div>
@@ -147,8 +152,8 @@ export function PropertyMetricsCard({
       
       <CardContent className="space-y-4">
         {/* Property specs */}
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-          <Badge variant="outline">{typeInfo?.label || property.type}</Badge>
+        <div className="flex items-center gap-4 text-sm text-[#a6c8e1]/70">
+          <Badge variant="outline" className="border-white/10 text-[#a6c8e1]">{typeInfo?.label || property.type}</Badge>
           {property.area_m2 && <span>{property.area_m2}m²</span>}
           {property.bedrooms && (
             <span className="flex items-center gap-1">
@@ -168,87 +173,93 @@ export function PropertyMetricsCard({
         </div>
 
         {/* Metrics row */}
-        <div className="grid grid-cols-4 gap-2 py-2 px-3 bg-muted/50 rounded-lg">
+        <div className="grid grid-cols-4 gap-2 py-3 px-3 bg-black/20 rounded-xl border border-white/5">
           <div className="text-center">
-            <div className="flex items-center justify-center gap-1 text-muted-foreground">
-              <Users className="h-3 w-3" />
-            </div>
-            <p className="text-sm font-semibold">{metrics.leadCount}</p>
-            <p className="text-[10px] text-muted-foreground">Leads</p>
+            <Users className="h-3 w-3 text-[#a6c8e1] mx-auto mb-1" />
+            <p className="text-sm font-semibold text-white tabular-nums">{metrics.leadCount}</p>
+            <p className="text-[10px] text-[#a6c8e1]/60">Leads</p>
           </div>
           <div className="text-center">
-            <div className="flex items-center justify-center gap-1 text-destructive">
-              <Flame className="h-3 w-3" />
-            </div>
-            <p className="text-sm font-semibold">{metrics.hotLeads}</p>
-            <p className="text-[10px] text-muted-foreground">Quentes</p>
+            <Flame className="h-3 w-3 text-red-400 mx-auto mb-1" />
+            <p className="text-sm font-semibold text-white tabular-nums">{metrics.hotLeads}</p>
+            <p className="text-[10px] text-[#a6c8e1]/60">Quentes</p>
           </div>
           <div className="text-center">
-            <div className="flex items-center justify-center gap-1 text-success">
-              <DollarSign className="h-3 w-3" />
-            </div>
-            <p className="text-sm font-semibold">{formatCurrency(metrics.investment)}</p>
-            <p className="text-[10px] text-muted-foreground">Invest.</p>
+            <DollarSign className="h-3 w-3 text-emerald-400 mx-auto mb-1" />
+            <p className="text-sm font-semibold text-white tabular-nums">{formatCurrency(metrics.investment)}</p>
+            <p className="text-[10px] text-[#a6c8e1]/60">Invest.</p>
           </div>
           <div className="text-center">
-            <div className="flex items-center justify-center gap-1 text-primary">
-              <TrendingUp className="h-3 w-3" />
+            <div className="flex items-center justify-center gap-1 mb-1">
+              <TrendingUp className="h-3 w-3 text-[#81afd1]" />
             </div>
-            <p className="text-sm font-semibold">{formatCurrency(metrics.cpl)}</p>
-            <p className="text-[10px] text-muted-foreground">CPL</p>
+            <p className="text-sm font-semibold text-white tabular-nums">{formatCurrency(metrics.cpl)}</p>
+            <p className="text-[10px] text-[#a6c8e1]/60">CPL</p>
           </div>
         </div>
+
+        {/* Mini sparkline */}
+        {metrics.investment > 0 && (
+          <div className="h-8 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={[0, 2, 1, 4, 3, 5, 4, 6].map((v, i) => ({ v, i }))}>
+                <Line type="monotone" dataKey="v" stroke="#81afd1" strokeWidth={1.5} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
 
         {/* Pricing */}
         <div className="space-y-1">
           {property.sale_price && (
-            <p className="text-lg font-bold text-primary">
+            <p className="text-lg font-bold text-[#81afd1]">
               Venda: {formatPrice(property.sale_price)}
             </p>
           )}
           {property.rent_price && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-[#a6c8e1]/70">
               Aluguel: {formatPrice(property.rent_price)}/mês
             </p>
           )}
         </div>
 
         {brokerName && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-[#a6c8e1]/60">
             Corretor: {brokerName}
           </p>
         )}
 
         {/* Actions */}
-        <div className="flex items-center gap-2 pt-2 border-t">
+        <div className="flex items-center gap-2 pt-3 border-t border-white/10">
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
               onView();
             }}
-            className="flex-1"
+            className="flex-1 text-[#a6c8e1] hover:text-white hover:bg-white/5"
           >
             <Eye className="h-3 w-3 mr-1" />
             Detalhes
           </Button>
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
               onEdit();
             }}
+            className="text-[#a6c8e1] hover:text-white hover:bg-white/5"
           >
             <Edit2 className="h-3 w-3" />
           </Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                className="text-destructive"
+                className="text-red-400 hover:text-red-300 hover:bg-white/5"
                 onClick={(e) => e.stopPropagation()}
               >
                 <Trash2 className="h-3 w-3" />

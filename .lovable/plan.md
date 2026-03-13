@@ -1,76 +1,72 @@
 
 
-## Refatoracao Visual Premium: 4 Componentes
+## Diagnostico e Solucao: Variaveis de Formulario nos Templates WhatsApp
 
-Este e um redesign visual extenso que toca 4 areas do sistema. Vou detalhar cada mudanca.
+### O que esta acontecendo
 
----
+Sua analise esta **100% correta**. O lead Cristal Lorca veio do formulario **Cidade-Jardim** (form_id: 1852010645681625) e possui estes campos salvos:
 
-### 1. Lead Detail: Dialog → Side Drawer (Sheet)
+- `você_já_investe_em_imóveis?` → sim, tenho portfólio...
+- `qual_seu_momento_de_decisão_para_investir?` → 6 meses
+- `qual_valor_você_considera_investir_neste_empreendimento?` → até R$ 300 mil
 
-**Arquivo**: `src/components/LeadDetailModal.tsx` (742 linhas)
+O template que foi enviado provavelmente usa uma variavel do formulario **Ilha Pura** (ex: `{form_você_está_buscando_imóvel_para_moradia_própria_ou_para_investimento?_}`), que **nao existe** nos dados desse lead. Por isso aparece vazio na mensagem.
 
-- **Substituir** `Dialog`/`DialogContent` por `Sheet`/`SheetContent` com `side="right"`
-- **Container**: `bg-[#2b2d2c] border-l border-white/10`, largura `sm:max-w-[520px]`
-- **Backdrop**: O Sheet ja aplica overlay escuro; adicionar `backdrop-blur-sm` no overlay
-- **Entrada com Framer Motion**: Wrap do conteudo com `motion.div` e `animate={{ x: 0 }}` (slide da direita)
-- **Header redesenhado**:
-  - Avatar com iniciais usando `AvatarFallbackColored` + `shadow-[0_0_15px_rgba(129,175,209,0.3)]` (glow sutil)
-  - Nome em `text-white text-2xl font-bold`
-  - Botoes de acao rapida (WhatsApp e Ligar) como icones minimalistas com `text-[#a6c8e1] hover:text-white`
-- **Corpo em Bento Layout**: Cada secao (Contato, Origem, Formulario) em mini-cards `bg-[#5a5f65] rounded-xl p-4` com icones `text-[#a6c8e1]`
-- **Tabs (Detalhes/WhatsApp)**: Manter logica, estilizar com border-bottom `border-[#81afd1]` no ativo
-- **Footer**: `bg-[#2b2d2c] border-t border-white/10`
-- **Manter toda a logica funcional** (WhatsApp inline, duplicates, scheduled messages, etc.)
+### A conta tem 6+ formularios com perguntas sobrepostas
 
-### 2. Property Cards Premium
+- Art Wood, Cidade-Jardim, Ilha Pura v3/v4/v5/v6, Ipanema v2
+- Varias perguntas sao **iguais** entre formularios (ex: "fase da compra", "valor maximo")
+- Mas o Cidade-Jardim tem perguntas **exclusivas** (ex: "Voce ja investe em imoveis?")
+- Hoje o modal de templates mostra **todas as variaveis de todos os formularios misturadas**, sem indicar de qual formulario vem cada uma
 
-**Arquivo**: `src/components/properties/PropertyMetricsCard.tsx` (276 linhas)
+### Solucao: Duas mudancas
 
-- **Card container**: `bg-[#5a5f65]/80 backdrop-blur-md border border-white/10 hover:border-[#81afd1]/30 hover:shadow-[0_0_20px_rgba(129,175,209,0.1)]`
-- **Status badge "Disponivel"**: Trocar `bg-green-500 text-white` por `bg-transparent border border-emerald-400/50 text-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.2)]` (glow neon)
-- **Metricas row**: Fundo `bg-black/20` com mini sparkline SVG na cor `#81afd1` ao lado do valor de investimento (usar Recharts `LineChart` compacto como ja feito no `BentoMetricCard`)
-- **Preco**: `text-[#81afd1]` ao inves de `text-primary`
-- **Botoes de acao**: Icones sutis com `text-[#a6c8e1] hover:text-white`, sem borders pesados
-- **Textos**: `text-white` para titulos, `text-[#a6c8e1]` para labels
+#### 1. Confirmar a abordagem correta de configuracao (sem codigo)
 
-### 3. Integracoes: Estilo "Painel de IA"
+Sim, o correto e:
+- Criar **um template por formulario/imovel** com as variaveis especificas daquele formulario
+- Usar **regras condicionais de saudacao** (que ja existem no sistema) vinculadas a campanha, formulario ou imovel
+- Cada regra aponta para o template correto com as variaveis daquele formulario
 
-**Arquivos**: `src/pages/Integrations.tsx` (87 linhas) + `src/components/whatsapp/WhatsAppIntegrationSettings.tsx` (1239 linhas)
+#### 2. Melhorar o seletor de variaveis no modal de templates (mudanca de codigo)
 
-**Integrations.tsx**:
-- Header com icone glow `shadow-[0_0_12px_rgba(129,175,209,0.3)]`
-- Tabs com fundo `bg-[#5a5f65]/50` e tab ativa com `bg-[#81afd1]/20 text-[#81afd1]`
+Agrupar as variaveis por formulario no modal `WhatsAppTemplatesModal`, para ficar claro de qual formulario vem cada variavel.
 
-**WhatsAppIntegrationSettings.tsx** (foco no Follow-up Timeline):
-- **Switches ativos**: `data-[state=checked]:bg-[#81afd1] data-[state=checked]:shadow-[0_0_8px_rgba(129,175,209,0.4)]`
-- **Timeline de Follow-up**: Transformar a lista de etapas em timeline vertical com:
-  - Linha vertical `w-0.5 bg-[#a6c8e1]/30` conectando os passos
-  - Pontos circulares `w-3 h-3 rounded-full bg-[#81afd1]` com glow quando ativos
-  - `AnimatePresence` + `motion.div` com `initial={{ opacity: 0, y: -10 }}` ao adicionar etapas
-- Cards de etapa com fundo `bg-[#5a5f65] border border-white/10`
+**Mudancas em `WhatsAppTemplatesModal.tsx`:**
 
-### 4. Chat View: Bolhas Branded
+- Alterar `fetchFormVars` para buscar tambem o `form_name` via join com `meta_form_configs`
+- Na interface `FormVar`, adicionar campo `formName`
+- Na secao expandivel de variaveis, agrupar por nome do formulario com headers visuais (ex: "Cidade-Jardim", "Ilha Pura v6")
+- Cada grupo mostra apenas as variaveis daquele formulario
 
-**Arquivo**: `src/components/conversations/ChatView.tsx` (231 linhas)
+**Layout proposto:**
 
-- **Bolhas da imobiliaria** (is_from_me): `bg-[#81afd1] text-white rounded-br-sm`
-- **Bolhas do cliente**: `bg-[#5a5f65] text-white rounded-bl-sm`
-- **Timestamp**: `text-white/60` em ambas
-- **Input bar**: `bg-[#2b2d2c]/80 backdrop-blur-md border-t border-white/10`
-- **Botao enviar**: `bg-[#81afd1] hover:bg-[#81afd1]/80 hover:shadow-[0_0_12px_rgba(129,175,209,0.4)] hover:scale-105 transition-all`
-- **Header**: `border-b border-white/10`, botao WhatsApp Web mantido em verde
-- **Date separator**: `bg-[#5a5f65] text-[#a6c8e1]`
+```text
+▼ Mostrar variaveis de formulario Meta (12)
 
----
+  ── Cidade-Jardim ──
+  {form_qual_seu_momento...}   Qual seu momento de decisao...
+  {form_você_já_investe...}    Voce ja investe em imoveis?
+  {form_qual_valor_você...}    Qual valor voce considera...
 
-### Resumo de arquivos
+  ── Ilha Pura v6 ──
+  {form_Para_entendermos...}   Para entendermos melhor...
+  {form_Qual_o_valor...}       Qual o valor maximo...
+  {form_Você_está_buscando...} Voce esta buscando...
 
-| Arquivo | Escopo |
-|---------|--------|
-| `src/components/LeadDetailModal.tsx` | Dialog → Sheet, dark theme, bento layout |
-| `src/components/properties/PropertyMetricsCard.tsx` | Glassmorphism, glow badges, sparklines |
-| `src/pages/Integrations.tsx` | Tabs estilizadas, header glow |
-| `src/components/whatsapp/WhatsAppIntegrationSettings.tsx` | Switches glow, timeline follow-up |
-| `src/components/conversations/ChatView.tsx` | Bolhas branded, input translucido |
+  ── Art Wood ──
+  ...
+```
+
+### Arquivo a modificar
+
+| Arquivo | Mudanca |
+|---------|---------|
+| `src/components/whatsapp/WhatsAppTemplatesModal.tsx` | Agrupar variaveis por formulario, buscar form_name via join |
+
+### Impacto
+
+- Nenhuma mudanca no backend ou edge functions
+- Apenas melhoria de UX no seletor de variaveis
+- O sistema de substituicao de variaveis ja funciona corretamente — o problema e de configuracao (template errado para o formulario do lead)
 

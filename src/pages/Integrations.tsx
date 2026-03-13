@@ -55,22 +55,25 @@ const Integrations = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <div className="p-2 rounded-lg bg-primary/10">
-          <Plug className="h-6 w-6 text-primary" />
+        <div className="p-2.5 rounded-xl bg-[#81afd1]/10 shadow-[0_0_12px_rgba(129,175,209,0.3)]">
+          <Plug className="h-6 w-6 text-[#81afd1]" />
         </div>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Integrações</h1>
-          <p className="text-muted-foreground">Gerencie as conexões com portais e plataformas externas</p>
+          <h1 className="text-3xl font-bold tracking-tight text-white">Integrações</h1>
+          <p className="text-[#a6c8e1]/70">Gerencie as conexões com portais e plataformas externas</p>
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)} className="w-full">
-        <TabsList className={cn("flex flex-wrap h-auto gap-1 bg-muted p-1", isMobile && "w-full")}>
+        <TabsList className={cn("flex flex-wrap h-auto gap-1 p-1 bg-[#5a5f65]/50 border border-white/10 rounded-xl", isMobile && "w-full")}>
           {tabs.map((tab) => (
             <TabsTrigger
               key={tab.value}
               value={tab.value}
-              className={cn("gap-2", isMobile && "text-xs px-2 py-1.5")}
+              className={cn(
+                "gap-2 rounded-lg data-[state=active]:bg-[#81afd1]/20 data-[state=active]:text-[#81afd1] data-[state=active]:shadow-none text-[#a6c8e1]/70",
+                isMobile && "text-xs px-2 py-1.5"
+              )}
             >
               {tab.icon}
               <span className={isMobile ? "truncate" : ""}>{tab.label}</span>

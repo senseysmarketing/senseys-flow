@@ -89,9 +89,9 @@ export function ChatView({ conversation, messages, loading, onSend, onBack, onSh
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="h-14 border-b border-border flex items-center gap-3 px-4 flex-shrink-0">
+      <div className="h-14 border-b border-white/10 flex items-center gap-3 px-4 flex-shrink-0">
         {(isMobile) && (
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onBack}>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-[#a6c8e1] hover:text-white hover:bg-white/5" onClick={onBack}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
         )}
@@ -99,8 +99,8 @@ export function ChatView({ conversation, messages, loading, onSend, onBack, onSh
         <AvatarFallbackColored name={displayName} size="sm" />
 
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{displayName}</p>
-          <p className="text-[11px] text-muted-foreground truncate">
+          <p className="text-sm font-medium truncate text-white">{displayName}</p>
+          <p className="text-[11px] text-[#a6c8e1]/60 truncate">
             {conversation.lead?.phone 
               ? formatPhoneForDisplay(conversation.lead.phone) 
               : formatPhoneForDisplay(conversation.phone) || conversation.contact_name || ''
@@ -123,7 +123,7 @@ export function ChatView({ conversation, messages, loading, onSend, onBack, onSh
         </Button>
 
         {conversation.lead && (
-          <Button variant="outline" size="sm" onClick={onShowLead} className="gap-1.5 text-xs">
+          <Button variant="ghost" size="sm" onClick={onShowLead} className="gap-1.5 text-xs text-[#a6c8e1] hover:text-white hover:bg-white/5 border border-white/10">
             <User className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Lead</span>
           </Button>
@@ -150,7 +150,7 @@ export function ChatView({ conversation, messages, loading, onSend, onBack, onSh
               <div key={group.date}>
                 {/* Date separator */}
                 <div className="flex items-center justify-center my-3">
-                  <span className="text-[10px] bg-muted px-3 py-1 rounded-full text-muted-foreground font-medium">
+                  <span className="text-[10px] bg-[#5a5f65] px-3 py-1 rounded-full text-[#a6c8e1] font-medium">
                     {group.date}
                   </span>
                 </div>
@@ -167,8 +167,8 @@ export function ChatView({ conversation, messages, loading, onSend, onBack, onSh
                       className={cn(
                         "max-w-[75%] rounded-2xl px-3 py-2 text-sm",
                         msg.is_from_me
-                          ? "bg-primary text-primary-foreground rounded-br-sm"
-                          : "bg-muted text-foreground rounded-bl-sm"
+                          ? "bg-[#81afd1] text-white rounded-br-sm"
+                          : "bg-[#5a5f65] text-white rounded-bl-sm"
                       )}
                     >
                       {msg.media_type !== 'text' && (
@@ -184,7 +184,7 @@ export function ChatView({ conversation, messages, loading, onSend, onBack, onSh
                       )}>
                         <span className={cn(
                           "text-[10px]",
-                          msg.is_from_me ? "text-primary-foreground/60" : "text-muted-foreground"
+                          msg.is_from_me ? "text-white/60" : "text-white/50"
                         )}>
                           {format(new Date(msg.timestamp), "HH:mm")}
                         </span>
@@ -200,7 +200,7 @@ export function ChatView({ conversation, messages, loading, onSend, onBack, onSh
       </ScrollArea>
 
       {/* Input */}
-      <div className="border-t border-border p-3 flex-shrink-0">
+      <div className="border-t border-white/10 p-3 flex-shrink-0 bg-[#2b2d2c]/80 backdrop-blur-md">
         <div className="flex items-end gap-2">
           <QuickTemplatesPopover 
             onSelect={handleTemplateSelect} 
@@ -213,14 +213,14 @@ export function ChatView({ conversation, messages, loading, onSend, onBack, onSh
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Digite sua mensagem..."
-            className="min-h-[40px] max-h-[120px] resize-none text-sm rounded-xl"
+            className="min-h-[40px] max-h-[120px] resize-none text-sm rounded-xl bg-[#5a5f65]/50 border-white/10 text-white placeholder:text-[#a6c8e1]/40"
             rows={1}
           />
           <Button
             size="icon"
             onClick={handleSend}
             disabled={!text.trim() || sending}
-            className="h-10 w-10 rounded-xl flex-shrink-0"
+            className="h-10 w-10 rounded-xl flex-shrink-0 bg-[#81afd1] hover:bg-[#81afd1]/80 hover:shadow-[0_0_12px_rgba(129,175,209,0.4)] hover:scale-105 transition-all text-white"
           >
             <Send className="h-4 w-4" />
           </Button>
