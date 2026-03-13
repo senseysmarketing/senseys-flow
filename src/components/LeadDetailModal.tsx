@@ -340,8 +340,8 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
                 window.open(`https://wa.me/${full}`, '_blank');
               }}
             >
-              <MessageCircle className="h-4 w-4" />
-              WhatsApp
+              <ExternalLink className="h-4 w-4" />
+              WhatsApp Web
             </Button>
             <Button
               variant="ghost"
