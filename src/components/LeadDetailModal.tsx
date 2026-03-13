@@ -598,39 +598,32 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
             </div>
           )}
 
-          {/* Corretor e Imóvel Atribuídos */}
+          {/* Corretor e Imóvel — Bento Cards */}
           {(brokerName || propertyInfo) && (
-            <>
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                  Atribuição
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {brokerName && (
-                    <div className="p-3 rounded-lg bg-muted/50">
-                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                        <UserCheck className="h-4 w-4" />
-                        <span className="text-xs">Corretor Responsável</span>
-                      </div>
-                      <p className="font-medium text-sm">{brokerName}</p>
-                    </div>
-                  )}
-                  {propertyInfo && (
-                    <div className="p-3 rounded-lg bg-muted/50">
-                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                        <Building2 className="h-4 w-4" />
-                        <span className="text-xs">Imóvel de Interesse</span>
-                      </div>
-                      <p className="font-medium text-sm">
-                        {propertyInfo.title}
-                        {propertyInfo.city && ` - ${propertyInfo.city}`}
-                      </p>
-                    </div>
-                  )}
-                </div>
+            <div className="space-y-3">
+              <h3 className="text-xs font-semibold text-[#a6c8e1] uppercase tracking-wider">
+                Atribuição
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                {brokerName && (
+                  <div className="p-4 rounded-xl bg-[#5a5f65] border border-white/5">
+                    <UserCheck className="h-4 w-4 text-[#a6c8e1] mb-2" />
+                    <p className="text-[11px] text-[#a6c8e1]/70">Corretor Responsável</p>
+                    <p className="font-medium text-white text-sm">{brokerName}</p>
+                  </div>
+                )}
+                {propertyInfo && (
+                  <div className="p-4 rounded-xl bg-[#5a5f65] border border-white/5">
+                    <Building2 className="h-4 w-4 text-[#a6c8e1] mb-2" />
+                    <p className="text-[11px] text-[#a6c8e1]/70">Imóvel de Interesse</p>
+                    <p className="font-medium text-white text-sm">
+                      {propertyInfo.title}
+                      {propertyInfo.city && ` - ${propertyInfo.city}`}
+                    </p>
+                  </div>
+                )}
               </div>
-              <Separator />
-            </>
+            </div>
           )}
 
           {/* Dados do Formulário */}
