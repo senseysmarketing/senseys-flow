@@ -170,7 +170,7 @@ const Dashboard = () => {
                   onClick={() => insight.action?.path && navigate(insight.action.path)}
                 >
                   <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0" />
-                  <p className="text-sm text-accent leading-relaxed">{insight.description}</p>
+                  <p className="text-sm text-[hsl(208,47%,77%)] leading-relaxed">{insight.description}</p>
                 </div>
               ))
             )}
