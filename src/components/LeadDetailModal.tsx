@@ -293,20 +293,22 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
   const TempIcon = tempInfo.icon;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[650px] max-h-[90vh] p-0 gap-0 overflow-hidden flex flex-col">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="sm:max-w-[520px] w-full p-0 gap-0 overflow-hidden flex flex-col bg-[#2b2d2c] border-l border-white/10 [&>button]:text-[#a6c8e1] [&>button]:hover:text-white">
         <VisuallyHidden>
-          <DialogTitle>Detalhes do Lead: {lead.name}</DialogTitle>
+          <SheetTitle>Detalhes do Lead: {lead.name}</SheetTitle>
         </VisuallyHidden>
-        {/* Header com gradiente */}
-        <div className="relative bg-gradient-to-br from-primary/20 via-primary/10 to-transparent p-6 pb-8">
+        {/* Header */}
+        <div className="relative p-6 pb-5 border-b border-white/10">
           {/* Nome e Avatar */}
           <div className="flex items-start gap-4">
-            <div className="w-16 h-16 rounded-full bg-primary/20 border-2 border-primary/30 flex items-center justify-center">
-              <User className="h-8 w-8 text-primary" />
+            <div className="w-14 h-14 rounded-full bg-[#5a5f65] border border-white/10 flex items-center justify-center shadow-[0_0_15px_rgba(129,175,209,0.3)]">
+              <span className="text-lg font-bold text-[#81afd1]">
+                {lead.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
+              </span>
             </div>
             <div className="flex-1 min-w-0">
-              <h2 className="text-2xl font-bold text-foreground truncate">{lead.name}</h2>
+              <h2 className="text-2xl font-bold text-white truncate">{lead.name}</h2>
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 {lead.lead_status && (
                   <Badge 
@@ -323,13 +325,38 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
                 )}
                 <TemperatureBadge temperature={lead.temperature} size="sm" />
                 <OriginBadge origem={lead.origem} size="sm" />
-                {lead.interesse && (
-                  <span className="text-sm text-muted-foreground truncate">
-                    {lead.interesse}
-                  </span>
-                )}
               </div>
             </div>
+          </div>
+          {/* Quick action buttons */}
+          <div className="flex items-center gap-2 mt-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 text-[#a6c8e1] hover:text-white hover:bg-white/5"
+              onClick={() => {
+                const phone = lead.phone.replace(/\D/g, '');
+                const full = phone.startsWith('55') ? phone : `55${phone}`;
+                window.open(`https://wa.me/${full}`, '_blank');
+              }}
+            >
+              <MessageCircle className="h-4 w-4" />
+              WhatsApp
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 text-[#a6c8e1] hover:text-white hover:bg-white/5"
+              onClick={() => window.open(`tel:${lead.phone}`, '_self')}
+            >
+              <Phone className="h-4 w-4" />
+              Ligar
+            </Button>
+            {lead.interesse && (
+              <span className="text-xs text-[#a6c8e1] ml-auto truncate max-w-[150px]">
+                {lead.interesse}
+              </span>
+            )}
           </div>
         </div>
 
