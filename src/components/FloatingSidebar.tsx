@@ -67,7 +67,7 @@ export function FloatingSidebar() {
 
   return (
     <motion.nav
-      className="fixed left-4 top-1/2 -translate-y-1/2 z-50 flex flex-col rounded-2xl bg-secondary overflow-hidden shadow-elevated"
+      className="fixed left-4 top-1/2 -translate-y-1/2 z-50 flex flex-col rounded-2xl bg-[#465666] overflow-hidden shadow-elevated"
       initial={false}
       animate={{ width: isExpanded ? 200 : 64 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
@@ -97,14 +97,14 @@ export function FloatingSidebar() {
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative group min-h-[40px]",
                 isActive
-                  ? "bg-primary/15 text-primary"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                  ? "bg-white/10 text-white"
+                  : "text-white/70 hover:bg-white/10 hover:text-white"
               )}
             >
               {isActive && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-primary" />
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-[#81afd1]" />
               )}
-              <item.icon className={cn("h-5 w-5 flex-shrink-0", isActive && "text-primary")} />
+              <item.icon className={cn("h-5 w-5 flex-shrink-0", isActive && "text-[#81afd1]")} />
               <AnimatePresence>
                 {isExpanded && (
                   <motion.span
@@ -132,8 +132,8 @@ export function FloatingSidebar() {
             className={cn(
               "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 min-h-[40px]",
               location.pathname === "/agency-admin"
-                ? "bg-warning/15 text-warning"
-                : "text-warning/70 hover:bg-warning/10 hover:text-warning"
+                ? "bg-[#81afd1]/15 text-[#81afd1]"
+                : "text-[#81afd1]/70 hover:bg-[#81afd1]/10 hover:text-[#81afd1]"
             )}
           >
             <Shield className="h-5 w-5 flex-shrink-0" />
@@ -162,8 +162,8 @@ export function FloatingSidebar() {
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 min-h-[40px]",
                 isActive
-                  ? "bg-primary/15 text-primary"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                  ? "bg-white/10 text-white"
+                  : "text-white/70 hover:bg-white/10 hover:text-white"
               )}
             >
               <item.icon className="h-5 w-5 flex-shrink-0" />
@@ -187,7 +187,7 @@ export function FloatingSidebar() {
         {/* Logout */}
         <button
           onClick={handleSignOut}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-sidebar-foreground/70 hover:bg-destructive/10 hover:text-destructive min-h-[40px] w-full"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-white/70 hover:bg-white/10 hover:text-red-400 min-h-[40px] w-full"
         >
           <LogOut className="h-5 w-5 flex-shrink-0" />
           <AnimatePresence>

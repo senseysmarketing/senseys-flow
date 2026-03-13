@@ -54,8 +54,6 @@ export const LeadsHeroStats = ({ leads, className, onFilterChange }: LeadsHeroSt
       trend: todayTotal,
       percentage: null as number | null,
       icon: Users,
-      gradient: "from-primary/20 to-primary/5",
-      iconBg: "bg-primary/20",
       iconColor: "text-primary",
       ringColor: "ring-primary/50",
       filterValue: null,
@@ -67,8 +65,6 @@ export const LeadsHeroStats = ({ leads, className, onFilterChange }: LeadsHeroSt
       trend: todayHot,
       percentage: pct(hot),
       icon: Flame,
-      gradient: "from-orange-500/20 to-orange-500/5",
-      iconBg: "bg-orange-500/20",
       iconColor: "text-orange-500",
       ringColor: "ring-orange-500/50",
       filterValue: "hot",
@@ -80,8 +76,6 @@ export const LeadsHeroStats = ({ leads, className, onFilterChange }: LeadsHeroSt
       trend: todayWarm,
       percentage: pct(warm),
       icon: Thermometer,
-      gradient: "from-yellow-500/20 to-yellow-500/5",
-      iconBg: "bg-yellow-500/20",
       iconColor: "text-yellow-500",
       ringColor: "ring-yellow-500/50",
       filterValue: "warm",
@@ -93,8 +87,6 @@ export const LeadsHeroStats = ({ leads, className, onFilterChange }: LeadsHeroSt
       trend: todayCold,
       percentage: pct(cold),
       icon: Snowflake,
-      gradient: "from-blue-400/20 to-blue-400/5",
-      iconBg: "bg-blue-400/20",
       iconColor: "text-blue-400",
       ringColor: "ring-blue-400/50",
       filterValue: "cold",
@@ -106,8 +98,6 @@ export const LeadsHeroStats = ({ leads, className, onFilterChange }: LeadsHeroSt
       trend: null,
       percentage: null,
       icon: UserX,
-      gradient: "from-muted to-muted/50",
-      iconBg: "bg-muted",
       iconColor: "text-muted-foreground",
       ringColor: "ring-muted-foreground/50",
       filterValue: "unassigned",
@@ -126,33 +116,23 @@ export const LeadsHeroStats = ({ leads, className, onFilterChange }: LeadsHeroSt
             onClick={() => handleClick(stat.key, stat.filterValue)}
             className={cn(
               "relative overflow-hidden rounded-xl p-4 text-left transition-all duration-300 min-w-0",
-              "bg-gradient-to-br border",
-              stat.gradient,
+              "glass",
               isActive
                 ? `ring-2 ${stat.ringColor} border-transparent shadow-lg scale-[1.02]`
-                : "border-border/50 hover:border-border hover:shadow-md hover:scale-[1.01]",
+                : "hover:border-white/20 hover:shadow-md hover:scale-[1.01]",
               "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             )}
           >
-            {/* Background glow effect */}
-            <div
-              className={cn(
-                "absolute -top-10 -right-10 w-24 h-24 rounded-full blur-2xl opacity-30 transition-opacity",
-                stat.iconBg,
-                isActive && "opacity-50"
-              )}
-            />
-
             <div className="relative flex items-start justify-between gap-2">
               <div className="space-y-1.5">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   {stat.label}
                 </p>
-                <p className="text-2xl sm:text-3xl font-bold tracking-tight">
+                <p className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
                   {stat.value}
                 </p>
                 {stat.trend !== null && stat.trend > 0 && (
-                  <div className="flex items-center gap-1 text-xs font-medium text-success">
+                  <div className="flex items-center gap-1 text-xs font-medium text-green-400">
                     <TrendingUp className="h-3 w-3" />
                     <span>+{stat.trend} hoje{stat.percentage !== null ? ` · ${stat.percentage}%` : ''}</span>
                   </div>
@@ -169,20 +149,13 @@ export const LeadsHeroStats = ({ leads, className, onFilterChange }: LeadsHeroSt
                 )}
               </div>
 
-              <div
-                className={cn(
-                  "flex items-center justify-center rounded-xl p-2.5 transition-all duration-300",
-                  stat.iconBg,
-                  isActive && "scale-110"
-                )}
-              >
+              <div className="flex items-center justify-center rounded-xl p-2.5">
                 <Icon className={cn("h-5 w-5", stat.iconColor)} />
               </div>
             </div>
 
-            {/* Active indicator */}
             {isActive && (
-              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-current to-transparent opacity-50" />
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-primary/50" />
             )}
           </button>
         );

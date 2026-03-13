@@ -152,7 +152,7 @@ const Dashboard = () => {
         isMobile ? "grid-cols-1" : "grid-cols-2"
       )}>
         {/* AI Insights Panel */}
-        <div className="glass rounded-2xl p-6 flex flex-col gap-4">
+        <div className="glass rounded-2xl p-6 flex flex-col gap-4 border border-white/5 backdrop-blur-md">
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-xl bg-primary/10">
               <Sparkles className="h-5 w-5 text-primary" />
@@ -178,7 +178,7 @@ const Dashboard = () => {
         </div>
 
         {/* Conversion Funnel */}
-        <div className="glass rounded-2xl p-6 flex flex-col gap-4">
+        <div className="glass rounded-2xl p-6 flex flex-col gap-4 border border-white/5 backdrop-blur-md">
           <h2 className="text-base font-semibold text-foreground">Funil de Conversão</h2>
           {funnelData.length === 0 ? (
             <p className="text-sm text-muted-foreground">Sem dados de funil ainda.</p>
@@ -208,7 +208,7 @@ const Dashboard = () => {
       </div>
 
       {/* Priority Leads */}
-      <div className="glass rounded-2xl p-6">
+      <div className="glass rounded-2xl p-6 border border-white/5 backdrop-blur-md">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-foreground">Leads Prioritários</h2>
           <Button variant="ghost" size="sm" onClick={() => navigate('/leads')} className="gap-1 text-muted-foreground hover:text-foreground">
