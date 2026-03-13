@@ -1371,7 +1371,7 @@ export function WhatsAppIntegrationSettings() {
       <GreetingSequenceModal
         open={showSequenceModal}
         onClose={() => { setShowSequenceModal(false); setSequenceTarget(null); }}
-        onSaved={fetchSequenceCounts}
+        onSaved={() => { fetchSequenceCounts(); fetchGreetingSequenceSteps(); }}
         templates={templates}
         automationRuleId={sequenceTarget?.automationRuleId}
         greetingRuleId={sequenceTarget?.greetingRuleId}
