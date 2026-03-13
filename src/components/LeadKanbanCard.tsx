@@ -83,7 +83,7 @@ export function LeadKanbanCard({
         onDoubleClick={() => onViewDetails(lead)}
       >
         {/* Header: Avatar + Name + Time badge + Menu */}
-        <div className="flex items-start gap-3">
+        <div className="flex items-center gap-3">
           <AvatarFallbackColored name={lead.name} size="sm" />
           
           <div className="flex-1 min-w-0">
