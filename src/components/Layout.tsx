@@ -114,12 +114,12 @@ const Layout = ({ children, fullHeight = false }: LayoutProps) => {
               <Button
                 variant="ghost"
                 size="sm"
-                className="flex items-center gap-2 text-muted-foreground hover:text-foreground px-4 h-9 rounded-xl glass"
+                className="flex items-center gap-2 min-w-[280px] px-4 h-9 rounded-xl bg-[#5a5f65]/50 border border-white/10 text-[#a6c8e1] hover:bg-[#5a5f65]/70 hover:text-white"
               >
-                <Search className="h-4 w-4" />
-                <span className="text-sm">Buscar...</span>
-                <kbd className="hidden lg:inline-flex h-5 items-center gap-1 rounded border border-border/50 bg-muted/50 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
-                  ⌘K
+                <Search className="h-4 w-4 opacity-60" />
+                <span className="text-sm flex-1 text-left opacity-70">Buscar ou executar comando...</span>
+                <kbd className="inline-flex h-5 items-center gap-1 rounded-md bg-white/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-[#a6c8e1]">
+                  ⌘ K
                 </kbd>
               </Button>
             </div>
