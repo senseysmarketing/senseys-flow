@@ -20,6 +20,7 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import logoAlternativaBranca from "@/assets/logo-alternativa-branca.png";
+import logoIcon from "@/assets/logo-icon.png";
 
 const menuItems = [
   { title: "Dashboard", url: "/dashboard", icon: Home },
