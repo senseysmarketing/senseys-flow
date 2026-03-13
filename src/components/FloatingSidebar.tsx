@@ -67,7 +67,7 @@ export function FloatingSidebar() {
 
   return (
     <motion.nav
-      className="fixed left-4 top-1/2 -translate-y-1/2 z-50 flex flex-col rounded-2xl bg-secondary overflow-hidden shadow-elevated"
+      className="fixed left-4 top-1/2 -translate-y-1/2 z-50 flex flex-col rounded-2xl bg-[#465666] overflow-hidden shadow-elevated"
       initial={false}
       animate={{ width: isExpanded ? 200 : 64 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
