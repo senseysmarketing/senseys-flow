@@ -170,7 +170,7 @@ const Dashboard = () => {
                   onClick={() => insight.action?.path && navigate(insight.action.path)}
                 >
                   <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0" />
-                  <p className="text-sm text-accent leading-relaxed">{insight.description}</p>
+                  <p className="text-sm text-[hsl(208,47%,77%)] leading-relaxed">{insight.description}</p>
                 </div>
               ))
             )}
@@ -190,8 +190,8 @@ const Dashboard = () => {
                   <YAxis
                     type="category"
                     dataKey="name"
-                    width={90}
-                    tick={{ fill: "hsl(208,47%,77%)", fontSize: 12 }}
+                    width={130}
+                    tick={{ fill: "hsl(208,47%,77%)", fontSize: 12, style: { whiteSpace: 'nowrap' } }}
                     axisLine={false}
                     tickLine={false}
                   />
@@ -238,6 +238,7 @@ const Dashboard = () => {
                     phone={lead.phone}
                     leadName={lead.name}
                     leadId={lead.id}
+                    variant="icon"
                     className="h-9 w-9 p-0 rounded-full hover:shadow-glow transition-shadow"
                   />
                   <Button

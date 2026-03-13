@@ -1,32 +1,72 @@
 
 
-## Ajustes no Dashboard: 3 Correções
+## Diagnostico e Solucao: Variaveis de Formulario nos Templates WhatsApp
 
-### 1. Funil de Conversão — Títulos em uma linha só
+### O que esta acontecendo
 
-**Arquivo**: `src/pages/Dashboard.tsx` (linha 190-196)
+Sua analise esta **100% correta**. O lead Cristal Lorca veio do formulario **Cidade-Jardim** (form_id: 1852010645681625) e possui estes campos salvos:
 
-O `YAxis` do Recharts tem `width={90}`, insuficiente para nomes longos como "Aguard. 1ª resp 3d". Aumentar para `width={120}` e adicionar `tickFormatter` para não quebrar linha, ou simplesmente aumentar a largura e usar `white-space: nowrap` via tick customizado. Solução mais direta: aumentar `width` para ~130.
+- `você_já_investe_em_imóveis?` → sim, tenho portfólio...
+- `qual_seu_momento_de_decisão_para_investir?` → 6 meses
+- `qual_valor_você_considera_investir_neste_empreendimento?` → até R$ 300 mil
 
-### 2. Leads Prioritários — Botão WhatsApp
+O template que foi enviado provavelmente usa uma variavel do formulario **Ilha Pura** (ex: `{form_você_está_buscando_imóvel_para_moradia_própria_ou_para_investimento?_}`), que **nao existe** nos dados desse lead. Por isso aparece vazio na mensagem.
 
-**Arquivo**: `src/pages/Dashboard.tsx` (linhas 237-242)
+### A conta tem 6+ formularios com perguntas sobrepostas
 
-O `WhatsAppButton` usa variante `default` que renderiza um botão `outline` com texto "WhatsApp" e largura `w-full`. A classe `h-9 w-9 p-0 rounded-full` conflita com o conteúdo (texto + ícone). Solução: passar `variant="icon"` para renderizar apenas o ícone, e ajustar o className para o círculo correto.
+- Art Wood, Cidade-Jardim, Ilha Pura v3/v4/v5/v6, Ipanema v2
+- Varias perguntas sao **iguais** entre formularios (ex: "fase da compra", "valor maximo")
+- Mas o Cidade-Jardim tem perguntas **exclusivas** (ex: "Voce ja investe em imoveis?")
+- Hoje o modal de templates mostra **todas as variaveis de todos os formularios misturadas**, sem indicar de qual formulario vem cada uma
 
-### 3. AI Insights — Texto escuro
+### Solucao: Duas mudancas
 
-**Arquivo**: `src/pages/Dashboard.tsx` (linha 173)
+#### 1. Confirmar a abordagem correta de configuracao (sem codigo)
 
-O texto usa `text-accent` que é escuro no tema dark. Trocar para `text-[#a6c8e1]` (azul claro da paleta).
+Sim, o correto e:
+- Criar **um template por formulario/imovel** com as variaveis especificas daquele formulario
+- Usar **regras condicionais de saudacao** (que ja existem no sistema) vinculadas a campanha, formulario ou imovel
+- Cada regra aponta para o template correto com as variaveis daquele formulario
 
----
+#### 2. Melhorar o seletor de variaveis no modal de templates (mudanca de codigo)
 
-### Resumo das edições (todas em `src/pages/Dashboard.tsx`)
+Agrupar as variaveis por formulario no modal `WhatsAppTemplatesModal`, para ficar claro de qual formulario vem cada variavel.
 
-| Linha | Mudança |
-|-------|---------|
-| 193 | `width={90}` → `width={130}` |
-| 173 | `text-accent` → `text-[#a6c8e1]` |
-| 237-241 | Adicionar `variant="icon"` ao WhatsAppButton e ajustar className |
+**Mudancas em `WhatsAppTemplatesModal.tsx`:**
+
+- Alterar `fetchFormVars` para buscar tambem o `form_name` via join com `meta_form_configs`
+- Na interface `FormVar`, adicionar campo `formName`
+- Na secao expandivel de variaveis, agrupar por nome do formulario com headers visuais (ex: "Cidade-Jardim", "Ilha Pura v6")
+- Cada grupo mostra apenas as variaveis daquele formulario
+
+**Layout proposto:**
+
+```text
+▼ Mostrar variaveis de formulario Meta (12)
+
+  ── Cidade-Jardim ──
+  {form_qual_seu_momento...}   Qual seu momento de decisao...
+  {form_você_já_investe...}    Voce ja investe em imoveis?
+  {form_qual_valor_você...}    Qual valor voce considera...
+
+  ── Ilha Pura v6 ──
+  {form_Para_entendermos...}   Para entendermos melhor...
+  {form_Qual_o_valor...}       Qual o valor maximo...
+  {form_Você_está_buscando...} Voce esta buscando...
+
+  ── Art Wood ──
+  ...
+```
+
+### Arquivo a modificar
+
+| Arquivo | Mudanca |
+|---------|---------|
+| `src/components/whatsapp/WhatsAppTemplatesModal.tsx` | Agrupar variaveis por formulario, buscar form_name via join |
+
+### Impacto
+
+- Nenhuma mudanca no backend ou edge functions
+- Apenas melhoria de UX no seletor de variaveis
+- O sistema de substituicao de variaveis ja funciona corretamente — o problema e de configuracao (template errado para o formulario do lead)
 
