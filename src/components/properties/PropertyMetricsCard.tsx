@@ -126,21 +126,25 @@ export function PropertyMetricsCard({
   };
 
   return (
-    <Card className="overflow-hidden cursor-pointer hover:shadow-lg hover:border-primary/50 transition-all group" onClick={onView}>
+    <Card className="overflow-hidden cursor-pointer hover:shadow-[0_0_20px_rgba(129,175,209,0.1)] hover:border-[#81afd1]/30 transition-all group bg-[#5a5f65]/80 backdrop-blur-md border border-white/10" onClick={onView}>
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <CardTitle className="text-lg truncate group-hover:text-primary transition-colors">
+            <CardTitle className="text-lg truncate text-white group-hover:text-[#81afd1] transition-colors">
               {property.title}
             </CardTitle>
             {property.neighborhood && property.city && (
-              <CardDescription className="flex items-center gap-1 mt-1">
+              <CardDescription className="flex items-center gap-1 mt-1 text-[#a6c8e1]/70">
                 <MapPin className="h-3 w-3" />
                 {property.neighborhood}, {property.city}
               </CardDescription>
             )}
           </div>
-          <Badge className={`${statusInfo.color} text-white shrink-0`}>
+          <Badge className={`shrink-0 ${
+            statusInfo.label === 'Disponível' 
+              ? 'bg-transparent border border-emerald-400/50 text-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.2)]' 
+              : `${statusInfo.color} text-white`
+          }`}>
             {statusInfo.label}
           </Badge>
         </div>
