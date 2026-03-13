@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 interface AvatarFallbackColoredProps {
   name: string;
   size?: "sm" | "md" | "lg" | "xl";
+  variant?: "gradient" | "dark";
   className?: string;
 }
 
@@ -48,16 +49,21 @@ function getInitials(name: string): string {
 export function AvatarFallbackColored({
   name,
   size = "md",
+  variant = "gradient",
   className,
 }: AvatarFallbackColoredProps) {
   const initials = getInitials(name);
   const gradientColor = getColorFromName(name);
 
+  const variantClasses = variant === "dark"
+    ? "bg-[hsl(210,15%,33%)] text-[hsl(207,36%,77%)]"
+    : `bg-gradient-to-br ${gradientColor} text-white`;
+
   return (
     <div
       className={cn(
-        "flex items-center justify-center rounded-full bg-gradient-to-br font-semibold text-white shadow-md",
-        gradientColor,
+        "flex items-center justify-center rounded-full font-semibold shadow-md",
+        variantClasses,
         sizeClasses[size],
         className
       )}
