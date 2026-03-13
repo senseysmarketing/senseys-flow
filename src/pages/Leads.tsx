@@ -1248,7 +1248,7 @@ const Leads = () => {
               <div className="h-full flex flex-col overflow-hidden">
                 {/* Kanban columns container - horizontal scroll ONLY here */}
                 <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden custom-scrollbar pb-2">
-                  <div className="flex gap-4 h-full min-w-max px-1">
+                  <div className="flex gap-6 h-full min-w-max px-1">
                     {statuses.filter(s => !hiddenColumns.includes(s.id)).map((status) => {
                       const statusLeads = getLeadsByStatus(status.id);
                       return (
@@ -1264,7 +1264,7 @@ const Leads = () => {
                               className="w-2.5 h-2.5 rounded-full" 
                               style={{ backgroundColor: status.color, boxShadow: `0 0 8px ${status.color}60` }}
                             />
-                            <h3 className="font-semibold text-sm flex-1">{status.name}</h3>
+                            <h3 className="text-gray-300 font-medium text-sm flex-1">{status.name}</h3>
                             <Badge 
                               variant="secondary" 
                               className="font-bold text-xs px-2 py-0.5"
