@@ -1,72 +1,78 @@
 
 
-## Diagnostico e Solucao: Variaveis de Formulario nos Templates WhatsApp
+## Refatoração: Tela de Imóveis — Visual "Portfólio de Luxo / Home Broker"
 
-### O que esta acontecendo
+### Componentes afetados
 
-Sua analise esta **100% correta**. O lead Cristal Lorca veio do formulario **Cidade-Jardim** (form_id: 1852010645681625) e possui estes campos salvos:
+1. **`src/components/properties/PropertyMetricsCard.tsx`** — reescrever completamente
+2. **`src/components/properties/PropertiesKPIs.tsx`** — converter em barra contínua
+3. **`src/pages/Properties.tsx`** — ajustar barra de filtros e grid
 
-- `você_já_investe_em_imóveis?` → sim, tenho portfólio...
-- `qual_seu_momento_de_decisão_para_investir?` → 6 meses
-- `qual_valor_você_considera_investir_neste_empreendimento?` → até R$ 300 mil
+---
 
-O template que foi enviado provavelmente usa uma variavel do formulario **Ilha Pura** (ex: `{form_você_está_buscando_imóvel_para_moradia_própria_ou_para_investimento?_}`), que **nao existe** nos dados desse lead. Por isso aparece vazio na mensagem.
+### 1. PropertyMetricsCard — Card Premium com Thumbnail
 
-### A conta tem 6+ formularios com perguntas sobrepostas
-
-- Art Wood, Cidade-Jardim, Ilha Pura v3/v4/v5/v6, Ipanema v2
-- Varias perguntas sao **iguais** entre formularios (ex: "fase da compra", "valor maximo")
-- Mas o Cidade-Jardim tem perguntas **exclusivas** (ex: "Voce ja investe em imoveis?")
-- Hoje o modal de templates mostra **todas as variaveis de todos os formularios misturadas**, sem indicar de qual formulario vem cada uma
-
-### Solucao: Duas mudancas
-
-#### 1. Confirmar a abordagem correta de configuracao (sem codigo)
-
-Sim, o correto e:
-- Criar **um template por formulario/imovel** com as variaveis especificas daquele formulario
-- Usar **regras condicionais de saudacao** (que ja existem no sistema) vinculadas a campanha, formulario ou imovel
-- Cada regra aponta para o template correto com as variaveis daquele formulario
-
-#### 2. Melhorar o seletor de variaveis no modal de templates (mudanca de codigo)
-
-Agrupar as variaveis por formulario no modal `WhatsAppTemplatesModal`, para ficar claro de qual formulario vem cada variavel.
-
-**Mudancas em `WhatsAppTemplatesModal.tsx`:**
-
-- Alterar `fetchFormVars` para buscar tambem o `form_name` via join com `meta_form_configs`
-- Na interface `FormVar`, adicionar campo `formName`
-- Na secao expandivel de variaveis, agrupar por nome do formulario com headers visuais (ex: "Cidade-Jardim", "Ilha Pura v6")
-- Cada grupo mostra apenas as variaveis daquele formulario
-
-**Layout proposto:**
+**Estrutura do novo card:**
 
 ```text
-▼ Mostrar variaveis de formulario Meta (12)
-
-  ── Cidade-Jardim ──
-  {form_qual_seu_momento...}   Qual seu momento de decisao...
-  {form_você_já_investe...}    Voce ja investe em imoveis?
-  {form_qual_valor_você...}    Qual valor voce considera...
-
-  ── Ilha Pura v6 ──
-  {form_Para_entendermos...}   Para entendermos melhor...
-  {form_Qual_o_valor...}       Qual o valor maximo...
-  {form_Você_está_buscando...} Voce esta buscando...
-
-  ── Art Wood ──
-  ...
+┌──────────────────────────────────┐
+│  ┌────────────────────────────┐  │
+│  │   THUMBNAIL / PLACEHOLDER  │  │  ← gradient bg + ícone de arquitetura
+│  │                            │  │  ← hover: scale-105 interno
+│  │            [Disponível]    │  │  ← badge neon flutuante canto sup. dir.
+│  └────────────────────────────┘  │
+│                                  │
+│  Ap Jd Barão                     │  ← text-white font-bold
+│  R$ 350.000                      │  ← text-[#81afd1] font-bold text-lg
+│  📍 Centro, Campinas            │  ← MapPin + text-white/50 text-xs
+│                                  │
+│  [🛏 3] [🚿 2] [🚗 1] [85m²]   │  ← pills bg-white/5 rounded-md
+│                                  │
+│  ─────────────────────────────── │  ← border-t border-white/5
+│  👥 11  🔥 0  💰 CPL R$ 0      │  ← rodapé compacto inline
+│  [👁 Detalhes] [✏] [🗑]        │  ← ações
+└──────────────────────────────────┘
 ```
 
-### Arquivo a modificar
+**Detalhes técnicos:**
 
-| Arquivo | Mudanca |
-|---------|---------|
-| `src/components/whatsapp/WhatsAppTemplatesModal.tsx` | Agrupar variaveis por formulario, buscar form_name via join |
+- **Container**: `bg-[#5a5f65]/30 backdrop-blur-md border border-white/10 rounded-xl overflow-hidden`
+- **Hover**: `hover:border-[#81afd1]/40 hover:shadow-[0_0_20px_rgba(129,175,209,0.15)]` + thumbnail `group-hover:scale-105 transition-transform duration-500`
+- **Thumbnail**: `div` com `h-40 overflow-hidden` contendo um inner div com `bg-gradient-to-br from-[#2b2d2c] to-[#81afd1]/20` e ícone `Building2` centralizado (h-12 w-12 text-white/10)
+- **Status badge neon**: Posição `absolute top-3 right-3` sobre a imagem. Disponível: `bg-emerald-500/10 border border-emerald-400/40 text-emerald-400`. Reservado: `bg-yellow-500/10 border border-yellow-400/40 text-yellow-400`. Etc.
+- **Preço**: Logo abaixo do título, `text-[#81afd1] font-bold text-lg tabular-nums`
+- **Localização**: `MapPin` h-3 w-3 + texto `text-white/50 text-xs`
+- **Specs pills**: `flex flex-wrap gap-1.5`, cada pill: `bg-white/5 px-2 py-1 rounded-md text-xs text-white/60 flex items-center gap-1`
+- **Rodapé métricas**: Uma única linha `flex items-center gap-4 text-xs text-white/40` separada por `border-t border-white/5 pt-3`. Formato: `👥 11 | 🔥 0 | CPL R$ 0`
+- **Remover**: O bloco grid 4-cols de métricas pesado e o sparkline
+- **Ações**: Manter no final, mesma linha, mas simplificado
 
-### Impacto
+---
 
-- Nenhuma mudanca no backend ou edge functions
-- Apenas melhoria de UX no seletor de variaveis
-- O sistema de substituicao de variaveis ja funciona corretamente — o problema e de configuracao (template errado para o formulario do lead)
+### 2. PropertiesKPIs — Barra Contínua (Bento Header)
+
+**Mudança**: Trocar o grid de 6 `MiniMetricCard` separados por uma **barra contínua única** com divisórias internas.
+
+- Container: `flex items-center bg-[#5a5f65]/30 backdrop-blur-sm border border-white/10 rounded-xl p-0 divide-x divide-white/10`
+- Cada métrica: `flex-1 flex items-center gap-2 px-4 py-3` (inline, compacto)
+- Ícone menor (h-4 w-4) + valor em `font-bold text-sm` + título em `text-[10px] text-white/40`
+- Reduz altura vertical significativamente vs 6 cards separados
+
+---
+
+### 3. Barra de Filtros — Linha Elegante
+
+**Mudança** em `Properties.tsx` (linhas 598-633):
+
+- Envolver busca + selects em um container com `bg-[#5a5f65]/20 backdrop-blur-sm border border-white/10 rounded-xl p-2 flex items-center gap-2`
+- Input de busca e selects com `bg-[#2b2d2c]/50 border-white/10` — tudo numa única linha alinhada
+- Manter a mesma lógica funcional
+
+---
+
+### O que NÃO muda
+- Toda a lógica de state, fetch, CRUD em `Properties.tsx`
+- O Dialog de criação/edição de imóvel
+- Os modais `PropertyDetailModal` e `LeadDetailModal`
+- O componente `PropertiesKPIs` continua buscando os mesmos dados — só muda o visual
 
