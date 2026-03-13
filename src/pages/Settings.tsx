@@ -19,7 +19,7 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { useIsMobile } from "@/hooks/use-mobile";
 import FollowUpSettings from "@/components/FollowUpSettings";
 import TeamManagement from "@/components/TeamManagement";
-import WhiteLabelSettings from "@/components/WhiteLabelSettings";
+
 import RolePermissionsManager from "@/components/RolePermissionsManager";
 import DistributionRulesManager from "@/components/DistributionRulesManager";
 import MetaFormScoringManager from "@/components/MetaFormScoringManager";
