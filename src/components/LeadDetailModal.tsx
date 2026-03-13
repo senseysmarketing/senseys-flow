@@ -525,45 +525,39 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
             </>
           )}
 
-          {/* Informações de Contato */}
+          {/* Informações de Contato — Bento Card */}
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+            <h3 className="text-xs font-semibold text-[#a6c8e1] uppercase tracking-wider">
               Informações de Contato
             </h3>
             <div className="grid gap-3">
               <div 
-                className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors group"
+                className="flex items-center gap-3 p-4 rounded-xl bg-[#5a5f65] border border-white/5 hover:border-white/10 cursor-pointer transition-colors group"
                 onClick={() => copyToClipboard(lead.phone, 'Telefone')}
               >
-                <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center">
-                  <Phone className="h-5 w-5 text-green-500" />
-                </div>
+                <Phone className="h-4 w-4 text-[#a6c8e1] shrink-0" />
                 <div className="flex-1">
-                  <p className="text-sm text-muted-foreground">Telefone</p>
-                  <p className="font-medium">{formatPhone(lead.phone)}</p>
+                  <p className="text-[11px] text-[#a6c8e1]/70">Telefone</p>
+                  <p className="font-medium text-white text-sm">{formatPhone(lead.phone)}</p>
                 </div>
-                <Copy className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                <Copy className="h-3.5 w-3.5 text-[#a6c8e1]/40 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
 
               {lead.email && (
                 <div 
-                  className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors group"
+                  className="flex items-center gap-3 p-4 rounded-xl bg-[#5a5f65] border border-white/5 hover:border-white/10 cursor-pointer transition-colors group"
                   onClick={() => copyToClipboard(lead.email!, 'Email')}
                 >
-                  <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
-                    <Mail className="h-5 w-5 text-blue-500" />
-                  </div>
+                  <Mail className="h-4 w-4 text-[#a6c8e1] shrink-0" />
                   <div className="flex-1">
-                    <p className="text-sm text-muted-foreground">Email</p>
-                    <p className="font-medium">{lead.email}</p>
+                    <p className="text-[11px] text-[#a6c8e1]/70">Email</p>
+                    <p className="font-medium text-white text-sm">{lead.email}</p>
                   </div>
-                  <Copy className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <Copy className="h-3.5 w-3.5 text-[#a6c8e1]/40 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
               )}
             </div>
           </div>
-
-          <Separator />
 
           {/* Origem e Campanha */}
           {(lead.origem || lead.campanha || lead.conjunto || lead.anuncio) && (
