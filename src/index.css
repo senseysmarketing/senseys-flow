@@ -2,126 +2,118 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Design System - Senseys CRM
+/* Design System - Senseys CRM Premium
    All colors MUST be HSL.
+   Palette: Grafite #2b2d2c, Chumbo #5a5f65, Menu #465666, Glow #81afd1, Text #a6c8e1
 */
 
 @layer base {
-  /* Light theme */
+  /* Light theme (fallback — app defaults to dark) */
   :root {
-    --background: 220 20% 97%;
-    --foreground: 210 13% 17%;
+    --background: 150 3% 17%;
+    --foreground: 0 0% 100%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 210 13% 17%;
+    --card: 212 5% 37%;
+    --card-foreground: 0 0% 100%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 210 13% 17%;
+    --popover: 212 5% 37%;
+    --popover-foreground: 0 0% 100%;
 
-    /* #81afd1 - Blue primary */
-    --primary: 207 54% 67%;
+    --primary: 207 45% 66%;
     --primary-foreground: 0 0% 100%;
 
-    /* #a6c8e1 - Light blue secondary */
-    --secondary: 208 52% 78%;
-    --secondary-foreground: 210 13% 17%;
+    --secondary: 208 47% 77%;
+    --secondary-foreground: 150 3% 17%;
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 150 3% 22%;
+    --muted-foreground: 208 47% 77%;
 
-    /* #5a5f65 - Blue gray accent */
-    --accent: 212 9% 39%;
+    --accent: 210 18% 34%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 207 54% 67%;
+    --border: 210 10% 25%;
+    --input: 210 10% 25%;
+    --ring: 207 45% 66%;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 212 9% 39%;
+    --sidebar-background: 210 18% 34%;
     --sidebar-foreground: 0 0% 100%;
-    --sidebar-primary: 207 54% 67%;
+    --sidebar-primary: 207 45% 66%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 13% 35%;
+    --sidebar-accent: 210 18% 28%;
     --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 210 13% 35%;
-    --sidebar-ring: 207 54% 67%;
+    --sidebar-border: 210 18% 28%;
+    --sidebar-ring: 207 45% 66%;
 
-    /* Success color */
     --success: 142 76% 36%;
     --success-foreground: 0 0% 100%;
 
-    /* Warning color */
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 0%;
 
-    /* Extended palette */
-    --primary-glow: 207 54% 75%;
-    --glass-bg: 0 0% 100% / 0.7;
-    --glass-border: 0 0% 100% / 0.2;
+    --primary-glow: 207 45% 75%;
+    --glass-bg: 212 5% 37% / 0.6;
+    --glass-border: 0 0% 100% / 0.1;
   }
 
   /* Dark theme (default) */
   .dark {
-    /* #1a1d21 - Darker background */
-    --background: 216 14% 11%;
-    --foreground: 210 20% 98%;
+    /* #2b2d2c - Grafite Escuro */
+    --background: 150 3% 17%;
+    --foreground: 0 0% 100%;
 
-    /* #252a31 - Card background */
-    --card: 212 14% 17%;
-    --card-foreground: 210 20% 98%;
+    /* #5a5f65 - Cinza Chumbo */
+    --card: 212 5% 37%;
+    --card-foreground: 0 0% 100%;
 
-    --popover: 212 14% 17%;
-    --popover-foreground: 210 20% 98%;
+    --popover: 212 5% 32%;
+    --popover-foreground: 0 0% 100%;
 
-    /* #81afd1 - Blue primary */
-    --primary: 207 54% 67%;
-    --primary-foreground: 210 13% 10%;
+    /* #81afd1 - Azul Médio (Glow) */
+    --primary: 207 45% 66%;
+    --primary-foreground: 150 3% 10%;
 
-    /* #5a5f65 - Blue gray secondary */
-    --secondary: 212 12% 28%;
-    --secondary-foreground: 210 20% 98%;
+    /* #465666 secondary */
+    --secondary: 210 18% 34%;
+    --secondary-foreground: 0 0% 100%;
 
-    --muted: 212 14% 22%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 150 3% 22%;
+    --muted-foreground: 208 47% 77%;
 
-    /* #a6c8e1 - Light blue accent */
-    --accent: 208 52% 78%;
-    --accent-foreground: 210 13% 10%;
+    /* #a6c8e1 - Azul Claro */
+    --accent: 208 47% 77%;
+    --accent-foreground: 150 3% 10%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 212 14% 22%;
-    --input: 212 14% 22%;
-    --ring: 207 54% 67%;
+    --border: 210 10% 25%;
+    --input: 210 10% 25%;
+    --ring: 207 45% 66%;
 
-    /* Sidebar */
-    --sidebar-background: 216 14% 8%;
-    --sidebar-foreground: 210 20% 98%;
-    --sidebar-primary: 207 54% 67%;
-    --sidebar-primary-foreground: 210 13% 10%;
-    --sidebar-accent: 212 14% 17%;
-    --sidebar-accent-foreground: 210 20% 98%;
-    --sidebar-border: 212 14% 17%;
-    --sidebar-ring: 207 54% 67%;
+    /* #465666 - Azul Acinzentado Escuro */
+    --sidebar-background: 210 18% 34%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 207 45% 66%;
+    --sidebar-primary-foreground: 150 3% 10%;
+    --sidebar-accent: 210 18% 28%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 210 18% 28%;
+    --sidebar-ring: 207 45% 66%;
 
-    /* Success color */
     --success: 142 71% 45%;
     --success-foreground: 0 0% 100%;
 
-    /* Warning color */
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 0%;
 
-    /* Extended palette */
-    --primary-glow: 207 54% 55%;
-    --glass-bg: 212 14% 17% / 0.8;
-    --glass-border: 210 20% 98% / 0.1;
+    --primary-glow: 207 45% 55%;
+    --glass-bg: 212 5% 37% / 0.5;
+    --glass-border: 0 0% 100% / 0.08;
   }
 }
 
@@ -152,11 +144,17 @@
 @layer components {
   /* Glass morphism */
   .glass {
-    @apply bg-card/80 backdrop-blur-xl border border-border/50;
+    background: hsl(var(--glass-bg));
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid hsl(var(--glass-border));
   }
 
   .glass-strong {
-    @apply bg-card/90 backdrop-blur-2xl border border-border/30;
+    background: hsl(212 5% 37% / 0.7);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid hsl(0 0% 100% / 0.12);
   }
 
   /* Gradient backgrounds */
@@ -201,7 +199,10 @@
 
   /* Stat card styling */
   .stat-card {
-    @apply relative overflow-hidden rounded-xl border bg-card p-6 transition-all duration-300;
+    @apply relative overflow-hidden rounded-xl p-6 transition-all duration-300;
+    background: hsl(var(--glass-bg));
+    backdrop-filter: blur(16px);
+    border: 1px solid hsl(var(--glass-border));
   }
 
   .stat-card::before {
@@ -215,7 +216,8 @@
   }
 
   .stat-card:hover {
-    @apply border-primary/30 shadow-lg;
+    border-color: hsl(var(--primary) / 0.3);
+    box-shadow: 0 8px 32px -8px hsl(var(--primary) / 0.2);
     transform: translateY(-2px);
   }
 
@@ -237,7 +239,6 @@
     animation: pulse-whatsapp 2s infinite;
   }
 
-  /* Mobile: position above BottomNav */
   @media (max-width: 768px) {
     .whatsapp-float {
       bottom: 90px;
@@ -263,17 +264,23 @@
 
   /* Lead cards */
   .lead-card {
-    @apply bg-card border border-border rounded-xl p-4 shadow-sm transition-all duration-200;
+    background: hsl(var(--glass-bg));
+    backdrop-filter: blur(12px);
+    border: 1px solid hsl(0 0% 100% / 0.1);
+    @apply rounded-xl p-4 shadow-sm transition-all duration-200;
   }
 
   .lead-card:hover {
-    @apply shadow-lg border-primary/20;
+    border-color: hsl(var(--primary) / 0.3);
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.15);
     transform: translateY(-2px);
   }
 
   /* Kanban column */
   .kanban-column {
-    @apply bg-muted/30 rounded-xl p-4 border border-border/50;
+    @apply rounded-xl p-4;
+    background: transparent;
+    border: 1px solid hsl(0 0% 100% / 0.05);
   }
 
   /* Sidebar active indicator */
@@ -358,6 +365,12 @@
 
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     @apply bg-muted-foreground/50;
+  }
+
+  /* Tabular numbers for dashboard metrics */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
   }
 }
 

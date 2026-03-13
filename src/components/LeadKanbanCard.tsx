@@ -1,4 +1,5 @@
 import { Phone, Mail, MoreVertical, Eye, Edit, Trash, Building2, AlertTriangle, MessageSquareWarning } from "lucide-react";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -55,25 +56,6 @@ function getRelativeTime(dateString: string) {
   return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
 
-// Temperature-based gradient backgrounds
-const temperatureStyles = {
-  hot: {
-    gradient: "bg-gradient-to-br from-orange-500/10 via-transparent to-transparent",
-    ring: "ring-orange-500/30",
-    avatarRing: "ring-2 ring-orange-500",
-  },
-  warm: {
-    gradient: "bg-gradient-to-br from-yellow-500/10 via-transparent to-transparent",
-    ring: "ring-yellow-500/30",
-    avatarRing: "ring-2 ring-yellow-500",
-  },
-  cold: {
-    gradient: "bg-gradient-to-br from-blue-400/10 via-transparent to-transparent",
-    ring: "ring-blue-400/30",
-    avatarRing: "ring-2 ring-blue-400",
-  },
-};
-
 export function LeadKanbanCard({ 
   lead, 
   onViewDetails, 
@@ -82,29 +64,26 @@ export function LeadKanbanCard({
   isDragging = false,
   whatsappError = null,
 }: LeadKanbanCardProps) {
-  const temp = (lead.temperature as keyof typeof temperatureStyles) || 'warm';
-  const styles = temperatureStyles[temp] || temperatureStyles.warm;
-
   return (
-    <div
+    <motion.div
+      whileHover={isDragging ? undefined : { scale: 1.02, y: -5 }}
+      transition={{ type: "spring", stiffness: 400, damping: 25 }}
       className={cn(
-        "relative overflow-hidden bg-card border rounded-xl p-4 transition-all duration-200 cursor-pointer group",
-        styles.gradient,
+        "relative overflow-hidden rounded-xl p-4 transition-all duration-200 cursor-pointer group",
+        "bg-card/80 backdrop-blur-sm border border-border/30",
         isDragging 
           ? "rotate-1 scale-105 shadow-xl ring-2 ring-primary/40" 
-          : "hover:shadow-lg hover:border-primary/20 hover:-translate-y-0.5"
+          : "hover:shadow-[0_0_20px_hsl(207_45%_66%/0.2)] hover:border-primary/30"
       )}
       onDoubleClick={() => onViewDetails(lead)}
     >
       {/* Header with Avatar and Name */}
       <div className="flex items-start gap-3 mb-3">
-        <div className={cn("rounded-full", styles.avatarRing)}>
-          <AvatarFallbackColored name={lead.name} size="sm" />
-        </div>
+        <AvatarFallbackColored name={lead.name} size="sm" />
         
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h4 className="font-semibold text-sm truncate max-w-[140px]">{lead.name}</h4>
+            <h4 className="font-semibold text-sm truncate max-w-[140px] text-foreground">{lead.name}</h4>
           </div>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-xs text-muted-foreground">
@@ -149,7 +128,7 @@ export function LeadKanbanCard({
       <div className="space-y-1.5 text-xs mb-3">
         <div className="flex items-center gap-2 text-muted-foreground">
           <Phone className="h-3 w-3 flex-shrink-0" />
-          <span className="truncate font-mono">{formatPhone(lead.phone)}</span>
+          <span className="truncate font-mono tabular-nums">{formatPhone(lead.phone)}</span>
         </div>
         {lead.email && (
           <div className="flex items-center gap-2 text-muted-foreground">
@@ -159,10 +138,10 @@ export function LeadKanbanCard({
         )}
       </div>
 
-      {/* Tags Row - Simplified */}
+      {/* Tags Row */}
       <div className="flex items-center gap-2 flex-wrap mb-3">
         {lead.is_duplicate && (
-          <span className="inline-flex items-center gap-1 text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full border border-amber-500/20">
+          <span className="inline-flex items-center gap-1 text-xs bg-warning/10 text-warning px-2 py-0.5 rounded-full border border-warning/20">
             <AlertTriangle className="h-3 w-3" />
             Recorrente
           </span>
@@ -176,13 +155,13 @@ export function LeadKanbanCard({
         )}
       </div>
 
-      {/* Action Button - Full width */}
+      {/* Action Button */}
       <div className="relative">
         {whatsappError && (
           <Tooltip>
             <TooltipTrigger asChild>
               <div className="absolute -top-2 -right-2 z-10">
-                <MessageSquareWarning className="h-4 w-4 text-amber-500" />
+                <MessageSquareWarning className="h-4 w-4 text-warning" />
               </div>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-[200px] text-xs">
@@ -202,6 +181,6 @@ export function LeadKanbanCard({
           onShowLead={() => onViewDetails(lead)}
         />
       </div>
-    </div>
+    </motion.div>
   );
 }
