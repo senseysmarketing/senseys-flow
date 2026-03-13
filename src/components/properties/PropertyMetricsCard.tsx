@@ -152,8 +152,8 @@ export function PropertyMetricsCard({
       
       <CardContent className="space-y-4">
         {/* Property specs */}
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-          <Badge variant="outline">{typeInfo?.label || property.type}</Badge>
+        <div className="flex items-center gap-4 text-sm text-[#a6c8e1]/70">
+          <Badge variant="outline" className="border-white/10 text-[#a6c8e1]">{typeInfo?.label || property.type}</Badge>
           {property.area_m2 && <span>{property.area_m2}m²</span>}
           {property.bedrooms && (
             <span className="flex items-center gap-1">
