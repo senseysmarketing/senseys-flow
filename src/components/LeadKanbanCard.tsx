@@ -135,7 +135,7 @@ export function LeadKanbanCard({
         </div>
 
         {/* Tags row — subtle */}
-        {(lead.is_duplicate || lead.origem || lead.properties) && (
+        {(lead.is_duplicate || lead.origem || lead.properties || lead.temperature) && (
           <div className="flex items-center gap-1.5 flex-wrap mt-2.5">
             {lead.is_duplicate && (
               <span className="inline-flex items-center gap-1 text-[11px] bg-warning/10 text-warning px-1.5 py-0.5 rounded-full border border-warning/20">
@@ -144,6 +144,7 @@ export function LeadKanbanCard({
               </span>
             )}
             <OriginBadge origem={lead.origem} showLabel={false} size="sm" />
+            <TemperatureBadge temperature={lead.temperature} showLabel={true} size="sm" />
             {lead.properties && (
               <span className="inline-flex items-center gap-1 text-[11px] bg-white/5 px-1.5 py-0.5 rounded-full text-gray-400 truncate max-w-[130px]">
                 <Building2 className="h-2.5 w-2.5" />
