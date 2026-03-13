@@ -60,14 +60,13 @@ export function FloatingSidebar() {
     window.location.href = "/auth";
   };
 
-  // Hide on mobile — BottomNav handles navigation there
   if (isMobile) return null;
 
   const logoSrc = account?.logo_url || logoAlternativaBranca;
 
   return (
     <motion.nav
-      className="fixed left-4 top-1/2 -translate-y-1/2 z-50 flex flex-col rounded-2xl bg-[#465666] overflow-hidden shadow-elevated"
+      className="fixed left-0 top-0 h-screen z-50 flex flex-col bg-[#1e1e20] border-r border-white/5 overflow-hidden"
       initial={false}
       animate={{ width: isExpanded ? 200 : 64 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
@@ -75,7 +74,7 @@ export function FloatingSidebar() {
       onMouseLeave={() => setIsExpanded(false)}
     >
       {/* Logo */}
-      <div className="flex items-center justify-center px-3 py-4 border-b border-border/30">
+      <div className="flex items-center justify-center px-3 py-4 border-b border-white/5">
         <img 
           src={logoSrc} 
           alt="Logo" 
@@ -95,10 +94,10 @@ export function FloatingSidebar() {
               key={item.url}
               to={item.url}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative group min-h-[40px]",
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 relative group min-h-[40px]",
                 isActive
-                  ? "bg-white/10 text-white"
-                  : "text-white/70 hover:bg-white/10 hover:text-white"
+                  ? "bg-white/5 text-white"
+                  : "text-[#a6c8e1] hover:bg-white/5 hover:text-white"
               )}
             >
               {isActive && (
@@ -124,16 +123,15 @@ export function FloatingSidebar() {
       </div>
 
       {/* Bottom section */}
-      <div className="border-t border-border/30 py-3 px-2 flex flex-col gap-1">
-        {/* Agency Admin — super admin only */}
+      <div className="border-t border-white/5 py-3 px-2 flex flex-col gap-1">
         {isSuperAdmin && (
           <NavLink
             to="/agency-admin"
             className={cn(
-              "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 min-h-[40px]",
+              "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 min-h-[40px]",
               location.pathname === "/agency-admin"
-                ? "bg-[#81afd1]/15 text-[#81afd1]"
-                : "text-[#81afd1]/70 hover:bg-[#81afd1]/10 hover:text-[#81afd1]"
+                ? "bg-white/5 text-[#81afd1]"
+                : "text-[#81afd1]/70 hover:bg-white/5 hover:text-[#81afd1]"
             )}
           >
             <Shield className="h-5 w-5 flex-shrink-0" />
@@ -160,10 +158,10 @@ export function FloatingSidebar() {
               key={item.url}
               to={item.url}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 min-h-[40px]",
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 min-h-[40px]",
                 isActive
-                  ? "bg-white/10 text-white"
-                  : "text-white/70 hover:bg-white/10 hover:text-white"
+                  ? "bg-white/5 text-white"
+                  : "text-[#a6c8e1] hover:bg-white/5 hover:text-white"
               )}
             >
               <item.icon className="h-5 w-5 flex-shrink-0" />
@@ -187,7 +185,7 @@ export function FloatingSidebar() {
         {/* Logout */}
         <button
           onClick={handleSignOut}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-white/70 hover:bg-white/10 hover:text-red-400 min-h-[40px] w-full"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-[#a6c8e1] hover:bg-white/5 hover:text-red-400 min-h-[40px] w-full"
         >
           <LogOut className="h-5 w-5 flex-shrink-0" />
           <AnimatePresence>
