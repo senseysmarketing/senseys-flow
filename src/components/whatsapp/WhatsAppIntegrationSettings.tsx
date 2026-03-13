@@ -62,6 +62,30 @@ interface FollowUpStep {
   is_active: boolean;
 }
 
+interface GreetingSequenceStep {
+  id: string;
+  account_id: string;
+  automation_rule_id: string | null;
+  greeting_rule_id: string | null;
+  template_id: string;
+  name: string;
+  position: number;
+  delay_seconds: number;
+  is_active: boolean;
+}
+
+const GREETING_DELAY_OPTIONS = [
+  { value: 0, label: 'Imediato' },
+  { value: 3, label: '3 segundos' },
+  { value: 5, label: '5 segundos' },
+  { value: 10, label: '10 segundos' },
+  { value: 15, label: '15 segundos' },
+  { value: 30, label: '30 segundos' },
+  { value: 60, label: '1 minuto' },
+  { value: 120, label: '2 minutos' },
+  { value: 300, label: '5 minutos' },
+];
+
 interface GreetingRule {
   id: string;
   name: string;
