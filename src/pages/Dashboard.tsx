@@ -152,7 +152,7 @@ const Dashboard = () => {
         isMobile ? "grid-cols-1" : "grid-cols-2"
       )}>
         {/* AI Insights Panel */}
-        <div className="glass rounded-2xl p-6 flex flex-col gap-4">
+        <div className="glass rounded-2xl p-6 flex flex-col gap-4 border border-white/5 backdrop-blur-md">
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-xl bg-primary/10">
               <Sparkles className="h-5 w-5 text-primary" />
