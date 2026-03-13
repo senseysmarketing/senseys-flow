@@ -62,6 +62,30 @@ interface FollowUpStep {
   is_active: boolean;
 }
 
+interface GreetingSequenceStep {
+  id: string;
+  account_id: string;
+  automation_rule_id: string | null;
+  greeting_rule_id: string | null;
+  template_id: string;
+  name: string;
+  position: number;
+  delay_seconds: number;
+  is_active: boolean;
+}
+
+const GREETING_DELAY_OPTIONS = [
+  { value: 0, label: 'Imediato' },
+  { value: 3, label: '3 segundos' },
+  { value: 5, label: '5 segundos' },
+  { value: 10, label: '10 segundos' },
+  { value: 15, label: '15 segundos' },
+  { value: 30, label: '30 segundos' },
+  { value: 60, label: '1 minuto' },
+  { value: 120, label: '2 minutos' },
+  { value: 300, label: '5 minutos' },
+];
+
 interface GreetingRule {
   id: string;
   name: string;
@@ -131,6 +155,7 @@ export function WhatsAppIntegrationSettings() {
   const [showTemplatesModal, setShowTemplatesModal] = useState(false);
   const [pendingAutoCreate, setPendingAutoCreate] = useState(false);
   const [followUpSteps, setFollowUpSteps] = useState<FollowUpStep[]>([]);
+  const [greetingSequenceSteps, setGreetingSequenceSteps] = useState<GreetingSequenceStep[]>([]);
   const [reconfiguring, setReconfiguring] = useState(false);
   const [showGreetingRuleModal, setShowGreetingRuleModal] = useState(false);
   const [editingRule, setEditingRule] = useState<GreetingRule | null>(null);
@@ -273,6 +298,14 @@ export function WhatsAppIntegrationSettings() {
     setFollowUpSteps((data || []) as FollowUpStep[]);
   }, []);
 
+  const fetchGreetingSequenceSteps = useCallback(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase.from('whatsapp_greeting_sequence_steps' as any) as any)
+      .select('*')
+      .order('position');
+    setGreetingSequenceSteps((data || []) as GreetingSequenceStep[]);
+  }, []);
+
   const fetchSendingSchedule = useCallback(async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data } = await (supabase.from('whatsapp_sending_schedule' as any) as any)
@@ -327,14 +360,14 @@ export function WhatsAppIntegrationSettings() {
 
     const loadData = async () => {
       setLoading(true);
-      await Promise.all([fetchSession(), fetchTemplates(), fetchAutomationRules(), fetchGreetingRules(), fetchFollowUpSteps(), fetchSequenceCounts(), fetchSendingSchedule()]);
+      await Promise.all([fetchSession(), fetchTemplates(), fetchAutomationRules(), fetchGreetingRules(), fetchFollowUpSteps(), fetchGreetingSequenceSteps(), fetchSequenceCounts(), fetchSendingSchedule()]);
       setLoading(false);
     };
 
     if (user) {
       loadData();
     }
-  }, [user, fetchSession, fetchTemplates, fetchAutomationRules, fetchGreetingRules, fetchFollowUpSteps, fetchSequenceCounts, fetchSendingSchedule]);
+  }, [user, fetchSession, fetchTemplates, fetchAutomationRules, fetchGreetingRules, fetchFollowUpSteps, fetchGreetingSequenceSteps, fetchSequenceCounts, fetchSendingSchedule]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -840,48 +873,123 @@ export function WhatsAppIntegrationSettings() {
                           <Settings2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
-                      {/* Sequence section */}
-                      <div className="flex items-center gap-2 flex-wrap mt-3">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-[11px] px-2.5 text-white/50 hover:text-white hover:bg-white/10"
-                          onClick={() => {
-                            setSequenceTarget({ automationRuleId: newLeadRule.id, label: 'Template Padrão (fallback)' });
-                            setShowSequenceModal(true);
-                          }}
-                        >
-                          <Edit2 className="h-3 w-3 mr-1.5" />
-                          {sequenceCounts[newLeadRule.id] ? 'Editar Sequência' : 'Configurar Sequência'}
-                        </Button>
-                        {sequenceCounts[newLeadRule.id] ? (
-                          <>
-                            <span className="text-[11px] text-green-400/80 flex items-center gap-1">
-                              ✓ {sequenceCounts[newLeadRule.id]} msgs
-                            </span>
-                            <Button variant="ghost" size="sm" className="h-7 text-[11px] px-2 text-white/40 hover:text-white hover:bg-white/10" onClick={() => handleDisableSequence(newLeadRule.id)}>
-                              Desativar
-                            </Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive/60 hover:text-destructive hover:bg-destructive/10">
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Excluir sequência?</AlertDialogTitle>
-                                  <AlertDialogDescription>Todas as mensagens da sequência serão removidas permanentemente.</AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => handleDeleteSequence(newLeadRule.id)}>Excluir</AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </>
-                        ) : null}
-                      </div>
+                      {/* Inline greeting sequence steps */}
+                      {(() => {
+                        const ruleSteps = greetingSequenceSteps.filter(s => s.automation_rule_id === newLeadRule.id);
+                        const MAX_GREETING_STEPS = 5;
+                        return (
+                          <div className="mt-3 space-y-2">
+                            <AnimatePresence initial={false}>
+                              {ruleSteps.map((step, index) => (
+                                <motion.div
+                                  key={step.id}
+                                  initial={{ opacity: 0, y: -8 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  exit={{ opacity: 0, y: -8 }}
+                                  transition={{ duration: 0.2 }}
+                                  className="relative pl-4 border-l-2 border-white/10 ml-1"
+                                >
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <span className="text-[11px] font-medium text-white/60">Etapa {index + 2}</span>
+                                    <div className="flex items-center gap-1">
+                                      <Switch
+                                        checked={step.is_active}
+                                        onCheckedChange={async (checked) => {
+                                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                          await (supabase.from('whatsapp_greeting_sequence_steps' as any) as any)
+                                            .update({ is_active: checked })
+                                            .eq('id', step.id);
+                                          fetchGreetingSequenceSteps();
+                                        }}
+                                        className="data-[state=checked]:bg-[hsl(207,37%,66%)] scale-75"
+                                      />
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
+                                        onClick={async () => {
+                                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                          await (supabase.from('whatsapp_greeting_sequence_steps' as any) as any)
+                                            .delete()
+                                            .eq('id', step.id);
+                                          fetchGreetingSequenceSteps();
+                                        }}
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Select
+                                      value={step.template_id}
+                                      onValueChange={async (value) => {
+                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                        await (supabase.from('whatsapp_greeting_sequence_steps' as any) as any)
+                                          .update({ template_id: value })
+                                          .eq('id', step.id);
+                                        fetchGreetingSequenceSteps();
+                                      }}
+                                    >
+                                      <SelectTrigger className="h-7 text-xs flex-1 bg-[hsl(160,3%,17%)/0.5] border-white/10 text-white">
+                                        <SelectValue placeholder="Template" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {templates.map((t) => (
+                                          <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <Select
+                                      value={String(step.delay_seconds)}
+                                      onValueChange={async (value) => {
+                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                        await (supabase.from('whatsapp_greeting_sequence_steps' as any) as any)
+                                          .update({ delay_seconds: parseInt(value) })
+                                          .eq('id', step.id);
+                                        fetchGreetingSequenceSteps();
+                                      }}
+                                    >
+                                      <SelectTrigger className="h-7 text-xs w-[120px] bg-[hsl(160,3%,17%)/0.5] border-white/10 text-white">
+                                        <Clock className="h-3 w-3 mr-1 text-white/40" />
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {GREETING_DELAY_OPTIONS.map(opt => (
+                                          <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                </motion.div>
+                              ))}
+                            </AnimatePresence>
+                            {ruleSteps.length < MAX_GREETING_STEPS && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const { data: accountData } = await supabase.rpc('get_user_account_id');
+                                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                  await (supabase.from('whatsapp_greeting_sequence_steps' as any) as any).insert({
+                                    account_id: accountData,
+                                    automation_rule_id: newLeadRule.id,
+                                    template_id: templates[0]?.id,
+                                    name: `Mensagem ${ruleSteps.length + 2}`,
+                                    position: ruleSteps.length + 1,
+                                    delay_seconds: 5,
+                                    is_active: true,
+                                  });
+                                  fetchGreetingSequenceSteps();
+                                }}
+                                disabled={templates.length === 0}
+                                className="w-full flex items-center justify-center gap-1.5 py-2 border border-dashed border-white/15 rounded-lg text-[11px] text-white/40 hover:text-white/70 hover:border-white/30 transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                              >
+                                <Plus className="h-3 w-3" />
+                                Adicionar Etapa {ruleSteps.length > 0 ? `(${ruleSteps.length + 1}/${MAX_GREETING_STEPS + 1})` : ''}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* ── STEP 3: Conditions ── */}
@@ -1263,7 +1371,7 @@ export function WhatsAppIntegrationSettings() {
       <GreetingSequenceModal
         open={showSequenceModal}
         onClose={() => { setShowSequenceModal(false); setSequenceTarget(null); }}
-        onSaved={fetchSequenceCounts}
+        onSaved={() => { fetchSequenceCounts(); fetchGreetingSequenceSteps(); }}
         templates={templates}
         automationRuleId={sequenceTarget?.automationRuleId}
         greetingRuleId={sequenceTarget?.greetingRuleId}

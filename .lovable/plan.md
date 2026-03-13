@@ -1,53 +1,72 @@
 
 
-## Simplificar Sequência de Saudação: Inline Steps ao invés de Modal
+## Diagnostico e Solucao: Variaveis de Formulario nos Templates WhatsApp
 
-### Problema
-O botão "Configurar Sequência" abre um modal separado, o que é confuso e adiciona uma camada desnecessária. O follow-up já usa etapas inline com "Adicionar Etapa" — devemos replicar esse padrão na saudação.
+### O que esta acontecendo
 
-### Solução
+Sua analise esta **100% correta**. O lead Cristal Lorca veio do formulario **Cidade-Jardim** (form_id: 1852010645681625) e possui estes campos salvos:
 
-Substituir o botão "Configurar Sequência" e o modal por **etapas inline** renderizadas diretamente no Step 2 do flow builder, com um botão "+ Adicionar Etapa" no final — igual ao follow-up.
+- `você_já_investe_em_imóveis?` → sim, tenho portfólio...
+- `qual_seu_momento_de_decisão_para_investir?` → 6 meses
+- `qual_valor_você_considera_investir_neste_empreendimento?` → até R$ 300 mil
 
-### Mudanças no arquivo `WhatsAppIntegrationSettings.tsx`
+O template que foi enviado provavelmente usa uma variavel do formulario **Ilha Pura** (ex: `{form_você_está_buscando_imóvel_para_moradia_própria_ou_para_investimento?_}`), que **nao existe** nos dados desse lead. Por isso aparece vazio na mensagem.
 
-**Step 2 (linhas 843-885)**: Remover o bloco do botão "Configurar Sequência" / "Editar Sequência" e substituir por:
+### A conta tem 6+ formularios com perguntas sobrepostas
 
-1. **Fetch dos steps inline**: Criar um novo state `greetingSequenceSteps` e uma função `fetchGreetingSequenceSteps` que carrega os steps da tabela `whatsapp_greeting_sequence_steps` filtrados pelo `automation_rule_id` do `newLeadRule`. Carregar junto com os outros dados no `loadData`.
+- Art Wood, Cidade-Jardim, Ilha Pura v3/v4/v5/v6, Ipanema v2
+- Varias perguntas sao **iguais** entre formularios (ex: "fase da compra", "valor maximo")
+- Mas o Cidade-Jardim tem perguntas **exclusivas** (ex: "Voce ja investe em imoveis?")
+- Hoje o modal de templates mostra **todas as variaveis de todos os formularios misturadas**, sem indicar de qual formulario vem cada uma
 
-2. **Renderizar steps como timeline** (similar ao follow-up):
-   - Cada step mostra: "Etapa 2", "Etapa 3", etc. (a etapa 1 é o template principal já configurado acima)
-   - Select de template + select de delay em linha
-   - Toggle de ativo/inativo + botão de excluir
-   - Linha vertical conectora entre etapas
+### Solucao: Duas mudancas
 
-3. **Botão "+ Adicionar Etapa"**: Estilo dashed border, insere diretamente na tabela `whatsapp_greeting_sequence_steps` (como o follow-up faz com `whatsapp_followup_steps`), max 5 etapas
+#### 1. Confirmar a abordagem correta de configuracao (sem codigo)
 
-4. **Remover referências ao `showSequenceModal`/`sequenceTarget`** do bloco da saudação padrão (manter para as regras condicionais do Step 3, que continuam usando o modal)
+Sim, o correto e:
+- Criar **um template por formulario/imovel** com as variaveis especificas daquele formulario
+- Usar **regras condicionais de saudacao** (que ja existem no sistema) vinculadas a campanha, formulario ou imovel
+- Cada regra aponta para o template correto com as variaveis daquele formulario
 
-5. **Manter o modal `GreetingSequenceModal`** — ainda é usado pelas regras condicionais no Step 3
+#### 2. Melhorar o seletor de variaveis no modal de templates (mudanca de codigo)
 
-### Estrutura visual resultante no Step 2
+Agrupar as variaveis por formulario no modal `WhatsAppTemplatesModal`, para ficar claro de qual formulario vem cada variavel.
+
+**Mudancas em `WhatsAppTemplatesModal.tsx`:**
+
+- Alterar `fetchFormVars` para buscar tambem o `form_name` via join com `meta_form_configs`
+- Na interface `FormVar`, adicionar campo `formName`
+- Na secao expandivel de variaveis, agrupar por nome do formulario com headers visuais (ex: "Cidade-Jardim", "Ilha Pura v6")
+- Cada grupo mostra apenas as variaveis daquele formulario
+
+**Layout proposto:**
 
 ```text
-2. ENVIAR A SEGUINTE MENSAGEM:
-  [Template ▾]  [⏱ Delay ▾]  [⚙]     ← Etapa 1 (principal)
-  
-  ┃ Etapa 2                    [ON] [🗑]
-  ┃ [Template ▾]  [⏱ Delay ▾]
-  ┃
-  ┃ Etapa 3                    [ON] [🗑]
-  ┃ [Template ▾]  [⏱ Delay ▾]
-  
-  [+ Adicionar Etapa]
+▼ Mostrar variaveis de formulario Meta (12)
+
+  ── Cidade-Jardim ──
+  {form_qual_seu_momento...}   Qual seu momento de decisao...
+  {form_você_já_investe...}    Voce ja investe em imoveis?
+  {form_qual_valor_você...}    Qual valor voce considera...
+
+  ── Ilha Pura v6 ──
+  {form_Para_entendermos...}   Para entendermos melhor...
+  {form_Qual_o_valor...}       Qual o valor maximo...
+  {form_Você_está_buscando...} Voce esta buscando...
+
+  ── Art Wood ──
+  ...
 ```
 
-### Detalhes técnicos
+### Arquivo a modificar
 
-- Novo state: `greetingSteps: SequenceStep[]`
-- Novo fetch: query `whatsapp_greeting_sequence_steps` where `automation_rule_id = newLeadRule.id`, ordered by `position`
-- Insert: mesma lógica do follow-up — insert direto com `account_id` via `get_user_account_id`, `automation_rule_id`, position, delay default (5s para greeting vs minutos para follow-up)
-- Delete/toggle: update/delete direto na tabela, re-fetch
-- Remover `sequenceCounts` da saudação padrão (calcular inline pelo length do array)
-- Estilo: usar o mesmo visual de flow com dots + linhas verticais já usado no Step 2
+| Arquivo | Mudanca |
+|---------|---------|
+| `src/components/whatsapp/WhatsAppTemplatesModal.tsx` | Agrupar variaveis por formulario, buscar form_name via join |
+
+### Impacto
+
+- Nenhuma mudanca no backend ou edge functions
+- Apenas melhoria de UX no seletor de variaveis
+- O sistema de substituicao de variaveis ja funciona corretamente — o problema e de configuracao (template errado para o formulario do lead)
 
