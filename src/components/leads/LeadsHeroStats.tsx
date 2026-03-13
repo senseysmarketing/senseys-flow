@@ -116,33 +116,23 @@ export const LeadsHeroStats = ({ leads, className, onFilterChange }: LeadsHeroSt
             onClick={() => handleClick(stat.key, stat.filterValue)}
             className={cn(
               "relative overflow-hidden rounded-xl p-4 text-left transition-all duration-300 min-w-0",
-              "bg-gradient-to-br border",
-              stat.gradient,
+              "glass",
               isActive
                 ? `ring-2 ${stat.ringColor} border-transparent shadow-lg scale-[1.02]`
-                : "border-border/50 hover:border-border hover:shadow-md hover:scale-[1.01]",
+                : "hover:border-white/20 hover:shadow-md hover:scale-[1.01]",
               "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             )}
           >
-            {/* Background glow effect */}
-            <div
-              className={cn(
-                "absolute -top-10 -right-10 w-24 h-24 rounded-full blur-2xl opacity-30 transition-opacity",
-                stat.iconBg,
-                isActive && "opacity-50"
-              )}
-            />
-
             <div className="relative flex items-start justify-between gap-2">
               <div className="space-y-1.5">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   {stat.label}
                 </p>
-                <p className="text-2xl sm:text-3xl font-bold tracking-tight">
+                <p className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
                   {stat.value}
                 </p>
                 {stat.trend !== null && stat.trend > 0 && (
-                  <div className="flex items-center gap-1 text-xs font-medium text-success">
+                  <div className="flex items-center gap-1 text-xs font-medium text-green-400">
                     <TrendingUp className="h-3 w-3" />
                     <span>+{stat.trend} hoje{stat.percentage !== null ? ` · ${stat.percentage}%` : ''}</span>
                   </div>
@@ -159,20 +149,13 @@ export const LeadsHeroStats = ({ leads, className, onFilterChange }: LeadsHeroSt
                 )}
               </div>
 
-              <div
-                className={cn(
-                  "flex items-center justify-center rounded-xl p-2.5 transition-all duration-300",
-                  stat.iconBg,
-                  isActive && "scale-110"
-                )}
-              >
+              <div className="flex items-center justify-center rounded-xl p-2.5">
                 <Icon className={cn("h-5 w-5", stat.iconColor)} />
               </div>
             </div>
 
-            {/* Active indicator */}
             {isActive && (
-              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-current to-transparent opacity-50" />
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-primary/50" />
             )}
           </button>
         );

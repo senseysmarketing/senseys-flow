@@ -1254,7 +1254,7 @@ const Leads = () => {
                       return (
                         <div 
                           key={status.id} 
-                          className="w-[330px] flex-shrink-0 h-full flex flex-col rounded-xl p-3 border border-border/20"
+                          className="w-[330px] flex-shrink-0 h-full flex flex-col rounded-xl p-3 bg-transparent"
                         >
                           {/* Column header - Compact */}
                           <div 

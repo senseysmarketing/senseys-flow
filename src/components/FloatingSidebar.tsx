@@ -187,7 +187,7 @@ export function FloatingSidebar() {
         {/* Logout */}
         <button
           onClick={handleSignOut}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-sidebar-foreground/70 hover:bg-destructive/10 hover:text-destructive min-h-[40px] w-full"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-white/70 hover:bg-white/10 hover:text-red-400 min-h-[40px] w-full"
         >
           <LogOut className="h-5 w-5 flex-shrink-0" />
           <AnimatePresence>

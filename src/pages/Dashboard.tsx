@@ -208,7 +208,7 @@ const Dashboard = () => {
       </div>
 
       {/* Priority Leads */}
-      <div className="glass rounded-2xl p-6">
+      <div className="glass rounded-2xl p-6 border border-white/5 backdrop-blur-md">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-foreground">Leads Prioritários</h2>
           <Button variant="ghost" size="sm" onClick={() => navigate('/leads')} className="gap-1 text-muted-foreground hover:text-foreground">
