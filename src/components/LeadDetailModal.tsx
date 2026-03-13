@@ -559,54 +559,43 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
             </div>
           </div>
 
-          {/* Origem e Campanha */}
+          {/* Origem e Campanha — Bento Cards */}
           {(lead.origem || lead.campanha || lead.conjunto || lead.anuncio) && (
-            <>
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                  Origem do Lead
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {lead.origem && (
-                    <div className="p-3 rounded-lg bg-muted/50">
-                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                        <MapPin className="h-4 w-4" />
-                        <span className="text-xs">Origem</span>
-                      </div>
-                      <p className="font-medium text-sm">{lead.origem}</p>
-                    </div>
-                  )}
-                  {lead.campanha && (
-                    <div className="p-3 rounded-lg bg-muted/50">
-                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                        <Megaphone className="h-4 w-4" />
-                        <span className="text-xs">Campanha</span>
-                      </div>
-                      <p className="font-medium text-sm">{lead.campanha}</p>
-                    </div>
-                  )}
-                  {lead.conjunto && (
-                    <div className="p-3 rounded-lg bg-muted/50">
-                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                        <Target className="h-4 w-4" />
-                        <span className="text-xs">Conjunto</span>
-                      </div>
-                      <p className="font-medium text-sm">{lead.conjunto}</p>
-                    </div>
-                  )}
-                  {lead.anuncio && (
-                    <div className="p-3 rounded-lg bg-muted/50">
-                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                        <ExternalLink className="h-4 w-4" />
-                        <span className="text-xs">Anúncio</span>
-                      </div>
-                      <p className="font-medium text-sm">{lead.anuncio}</p>
-                    </div>
-                  )}
-                </div>
+            <div className="space-y-3">
+              <h3 className="text-xs font-semibold text-[#a6c8e1] uppercase tracking-wider">
+                Origem do Lead
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                {lead.origem && (
+                  <div className="p-4 rounded-xl bg-[#5a5f65] border border-white/5">
+                    <MapPin className="h-4 w-4 text-[#a6c8e1] mb-2" />
+                    <p className="text-[11px] text-[#a6c8e1]/70">Origem</p>
+                    <p className="font-medium text-white text-sm">{lead.origem}</p>
+                  </div>
+                )}
+                {lead.campanha && (
+                  <div className="p-4 rounded-xl bg-[#5a5f65] border border-white/5">
+                    <Megaphone className="h-4 w-4 text-[#a6c8e1] mb-2" />
+                    <p className="text-[11px] text-[#a6c8e1]/70">Campanha</p>
+                    <p className="font-medium text-white text-sm">{lead.campanha}</p>
+                  </div>
+                )}
+                {lead.conjunto && (
+                  <div className="p-4 rounded-xl bg-[#5a5f65] border border-white/5">
+                    <Target className="h-4 w-4 text-[#a6c8e1] mb-2" />
+                    <p className="text-[11px] text-[#a6c8e1]/70">Conjunto</p>
+                    <p className="font-medium text-white text-sm">{lead.conjunto}</p>
+                  </div>
+                )}
+                {lead.anuncio && (
+                  <div className="p-4 rounded-xl bg-[#5a5f65] border border-white/5">
+                    <ExternalLink className="h-4 w-4 text-[#a6c8e1] mb-2" />
+                    <p className="text-[11px] text-[#a6c8e1]/70">Anúncio</p>
+                    <p className="font-medium text-white text-sm">{lead.anuncio}</p>
+                  </div>
+                )}
               </div>
-              <Separator />
-            </>
+            </div>
           )}
 
           {/* Corretor e Imóvel Atribuídos */}
