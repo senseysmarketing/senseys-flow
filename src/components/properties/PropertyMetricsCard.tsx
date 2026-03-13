@@ -230,26 +230,27 @@ export function PropertyMetricsCard({
         )}
 
         {/* Actions */}
-        <div className="flex items-center gap-2 pt-2 border-t">
+        <div className="flex items-center gap-2 pt-3 border-t border-white/10">
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
               onView();
             }}
-            className="flex-1"
+            className="flex-1 text-[#a6c8e1] hover:text-white hover:bg-white/5"
           >
             <Eye className="h-3 w-3 mr-1" />
             Detalhes
           </Button>
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
               onEdit();
             }}
+            className="text-[#a6c8e1] hover:text-white hover:bg-white/5"
           >
             <Edit2 className="h-3 w-3" />
           </Button>
