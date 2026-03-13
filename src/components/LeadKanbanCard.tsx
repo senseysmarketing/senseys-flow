@@ -57,11 +57,6 @@ function getRelativeTime(dateString: string) {
   return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
 
-function getWhatsAppLink(phone: string) {
-  const cleaned = phone.replace(/\D/g, '');
-  const number = cleaned.startsWith('55') ? cleaned : `55${cleaned}`;
-  return `https://wa.me/${number}`;
-}
 
 export function LeadKanbanCard({ 
   lead, 
