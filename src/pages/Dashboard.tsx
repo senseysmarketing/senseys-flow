@@ -178,7 +178,7 @@ const Dashboard = () => {
         </div>
 
         {/* Conversion Funnel */}
-        <div className="glass rounded-2xl p-6 flex flex-col gap-4">
+        <div className="glass rounded-2xl p-6 flex flex-col gap-4 border border-white/5 backdrop-blur-md">
           <h2 className="text-base font-semibold text-foreground">Funil de Conversão</h2>
           {funnelData.length === 0 ? (
             <p className="text-sm text-muted-foreground">Sem dados de funil ainda.</p>
