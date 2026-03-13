@@ -9,7 +9,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Edit2, Trash2, Move, User, Bell, MessageCircle, Users, Building2, Shield } from "lucide-react";
+import { Plus, Edit2, Trash2, Move, User, Bell, MessageCircle, Users, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -19,7 +19,7 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { useIsMobile } from "@/hooks/use-mobile";
 import FollowUpSettings from "@/components/FollowUpSettings";
 import TeamManagement from "@/components/TeamManagement";
-import WhiteLabelSettings from "@/components/WhiteLabelSettings";
+
 import RolePermissionsManager from "@/components/RolePermissionsManager";
 import DistributionRulesManager from "@/components/DistributionRulesManager";
 import MetaFormScoringManager from "@/components/MetaFormScoringManager";
@@ -53,7 +53,7 @@ const PRESET_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "#
 
 
 
-type TabValue = 'profile' | 'team' | 'notifications' | 'statuses' | 'whatsapp' | 'followup' | 'distribution' | 'qualification' | 'metacapi' | 'permissions' | 'whitelabel' | 'import';
+type TabValue = 'profile' | 'team' | 'notifications' | 'statuses' | 'whatsapp' | 'followup' | 'distribution' | 'qualification' | 'metacapi' | 'permissions' | 'import';
 
 interface NavItem {
   value: TabValue;
@@ -69,7 +69,7 @@ const SettingsPage = () => {
   const [searchParams] = useSearchParams();
   const initialTab = useMemo(() => {
     const param = searchParams.get('tab');
-    const validTabs: TabValue[] = ['profile','team','notifications','statuses','whatsapp','followup','distribution','qualification','metacapi','permissions','whitelabel','import'];
+    const validTabs: TabValue[] = ['profile','team','notifications','statuses','whatsapp','followup','distribution','qualification','metacapi','permissions','import'];
     return validTabs.includes(param as TabValue) ? (param as TabValue) : 'profile';
   }, []);
   const [activeTab, setActiveTab] = useState<TabValue>(initialTab);
@@ -92,7 +92,6 @@ const SettingsPage = () => {
     { value: 'team', label: 'Equipe', icon: <Users className="h-4 w-4" /> },
     { value: 'notifications', label: 'Notificações', icon: <Bell className="h-4 w-4" /> },
     { value: 'permissions', label: 'Permissões', icon: <Shield className="h-4 w-4" />, permission: 'settings.manage' },
-    { value: 'whitelabel', label: 'White Label', icon: <Building2 className="h-4 w-4" /> },
   ];
 
   const visibleNavItems = navItems.filter(item => !item.permission || hasPermission(item.permission));
@@ -734,8 +733,6 @@ const SettingsPage = () => {
       case 'permissions':
         return hasPermission('settings.manage') ? <RolePermissionsManager /> : null;
 
-      case 'whitelabel':
-        return <WhiteLabelSettings />;
 
       case 'import':
         return <DataImporter />;

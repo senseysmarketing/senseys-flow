@@ -15,12 +15,12 @@ import {
 } from "lucide-react";
 import { signOut } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
-import { useAccount } from "@/hooks/use-account";
 import { useSuperAdmin } from "@/hooks/use-super-admin";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import logoAlternativaBranca from "@/assets/logo-alternativa-branca.png";
+import logoIcon from "@/assets/logo-icon.png";
 
 const menuItems = [
   { title: "Dashboard", url: "/dashboard", icon: Home },
@@ -39,7 +39,6 @@ const bottomItems = [
 export function FloatingSidebar() {
   const [isExpanded, setIsExpanded] = useState(false);
   const location = useLocation();
-  const { account } = useAccount();
   const { isSuperAdmin } = useSuperAdmin();
   const { hasPermission } = usePermissions();
   const isMobile = useIsMobile();
@@ -62,8 +61,6 @@ export function FloatingSidebar() {
 
   if (isMobile) return null;
 
-  const logoSrc = account?.logo_url || logoAlternativaBranca;
-
   return (
     <motion.nav
       className="fixed left-0 top-0 h-screen z-50 flex flex-col bg-[#1e1e20] border-r border-white/5 overflow-hidden"
@@ -75,14 +72,31 @@ export function FloatingSidebar() {
     >
       {/* Logo */}
       <div className="flex items-center justify-center px-3 py-4 border-b border-white/5">
-        <img 
-          src={logoSrc} 
-          alt="Logo" 
-          className={cn(
-            "object-contain transition-all duration-300",
-            isExpanded ? "h-7 w-auto max-w-[140px]" : "h-7 w-7"
+        <AnimatePresence mode="wait">
+          {isExpanded ? (
+            <motion.img
+              key="full"
+              src={logoAlternativaBranca}
+              alt="Logo"
+              className="h-7 w-auto max-w-[140px] object-contain"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+            />
+          ) : (
+            <motion.img
+              key="icon"
+              src={logoIcon}
+              alt="Logo"
+              className="h-7 w-7 object-contain"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+            />
           )}
-        />
+        </AnimatePresence>
       </div>
 
       {/* Main menu */}

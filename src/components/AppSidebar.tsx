@@ -25,7 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
-import { useAccount } from "@/hooks/use-account";
+
 import { useSuperAdmin } from "@/hooks/use-super-admin";
 import { usePermissions } from "@/hooks/use-permissions";
 import logoAlternativaBranca from "@/assets/logo-alternativa-branca.png";
@@ -78,7 +78,6 @@ const bottomItems = [
 ];
 
 export function AppSidebar() {
-  const { account } = useAccount();
   const { isSuperAdmin } = useSuperAdmin();
   const { hasPermission } = usePermissions();
   const location = useLocation();
@@ -108,8 +107,7 @@ export function AppSidebar() {
     window.location.href = "/auth";
   };
 
-  const logoSrc = account?.logo_url || logoAlternativaBranca;
-  const companyName = account?.company_name || "";
+  const logoSrc = logoAlternativaBranca;
 
   return (
     <Sidebar className="w-64 border-r-0 z-50">
@@ -120,7 +118,7 @@ export function AppSidebar() {
             <div className="relative">
               <img 
                 src={logoSrc} 
-                alt={companyName || "Logo"} 
+                alt="Logo" 
                 className="h-9 w-auto max-w-[160px] object-contain"
               />
               <div className="absolute -top-1 -right-1">
