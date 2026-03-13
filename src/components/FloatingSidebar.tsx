@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import { signOut } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
-import { useAccount } from "@/hooks/use-account";
 import { useSuperAdmin } from "@/hooks/use-super-admin";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useIsMobile } from "@/hooks/use-mobile";
