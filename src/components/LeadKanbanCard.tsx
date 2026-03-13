@@ -87,10 +87,7 @@ export function LeadKanbanCard({
           <AvatarFallbackColored name={lead.name} size="sm" />
           
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <h4 className="font-semibold text-sm truncate max-w-[120px] text-white">{lead.name}</h4>
-              <TemperatureBadge temperature={lead.temperature} showLabel={false} size="sm" />
-            </div>
+            <h4 className="font-semibold text-sm truncate max-w-[120px] text-white">{lead.name}</h4>
           </div>
 
           {/* Time badge */}
