@@ -150,7 +150,7 @@ export function ChatView({ conversation, messages, loading, onSend, onBack, onSh
               <div key={group.date}>
                 {/* Date separator */}
                 <div className="flex items-center justify-center my-3">
-                  <span className="text-[10px] bg-muted px-3 py-1 rounded-full text-muted-foreground font-medium">
+                  <span className="text-[10px] bg-[#5a5f65] px-3 py-1 rounded-full text-[#a6c8e1] font-medium">
                     {group.date}
                   </span>
                 </div>
