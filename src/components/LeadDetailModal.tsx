@@ -361,14 +361,14 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
         </div>
 
         {/* Tab navigation */}
-        <div className="border-b px-6">
+        <div className="border-b border-white/10 px-6">
           <div className="flex gap-1">
             <button
               onClick={() => setActiveTab('details')}
-              className={`flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === 'details'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                  ? 'border-[#81afd1] text-[#81afd1]'
+                  : 'border-transparent text-[#a6c8e1]/60 hover:text-[#a6c8e1]'
               }`}
             >
               <User className="h-4 w-4" />
@@ -376,10 +376,10 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
             </button>
             <button
               onClick={() => setActiveTab('whatsapp')}
-              className={`flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === 'whatsapp'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                  ? 'border-[#81afd1] text-[#81afd1]'
+                  : 'border-transparent text-[#a6c8e1]/60 hover:text-[#a6c8e1]'
               }`}
             >
               <MessageCircle className="h-4 w-4" />
