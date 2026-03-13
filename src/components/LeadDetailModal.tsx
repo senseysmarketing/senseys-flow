@@ -676,37 +676,31 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
             </>
           )}
 
-          {/* Datas */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Calendar className="h-4 w-4" />
-                <span className="text-xs">Criado em</span>
-              </div>
-              <p className="text-sm font-medium">{createdAt.date}</p>
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
+          {/* Datas — Bento */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-4 rounded-xl bg-[#5a5f65] border border-white/5">
+              <Calendar className="h-4 w-4 text-[#a6c8e1] mb-2" />
+              <p className="text-[11px] text-[#a6c8e1]/70">Criado em</p>
+              <p className="text-sm font-medium text-white">{createdAt.date}</p>
+              <p className="text-xs text-[#a6c8e1]/60 flex items-center gap-1 mt-0.5">
                 <Clock className="h-3 w-3" />
                 {createdAt.time}
               </p>
             </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Calendar className="h-4 w-4" />
-                <span className="text-xs">Atualizado em</span>
-              </div>
-              <p className="text-sm font-medium">{updatedAt.date}</p>
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <div className="p-4 rounded-xl bg-[#5a5f65] border border-white/5">
+              <Calendar className="h-4 w-4 text-[#a6c8e1] mb-2" />
+              <p className="text-[11px] text-[#a6c8e1]/70">Atualizado em</p>
+              <p className="text-sm font-medium text-white">{updatedAt.date}</p>
+              <p className="text-xs text-[#a6c8e1]/60 flex items-center gap-1 mt-0.5">
                 <Clock className="h-3 w-3" />
                 {updatedAt.time}
               </p>
             </div>
           </div>
 
-          <Separator />
-
           {/* Histórico de Atividades */}
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+            <h3 className="text-xs font-semibold text-[#a6c8e1] uppercase tracking-wider flex items-center gap-2">
               <History className="h-4 w-4" />
               Histórico de Atividades
             </h3>
