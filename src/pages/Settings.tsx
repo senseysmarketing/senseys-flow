@@ -92,7 +92,6 @@ const SettingsPage = () => {
     { value: 'team', label: 'Equipe', icon: <Users className="h-4 w-4" /> },
     { value: 'notifications', label: 'Notificações', icon: <Bell className="h-4 w-4" /> },
     { value: 'permissions', label: 'Permissões', icon: <Shield className="h-4 w-4" />, permission: 'settings.manage' },
-    { value: 'whitelabel', label: 'White Label', icon: <Building2 className="h-4 w-4" /> },
   ];
 
   const visibleNavItems = navItems.filter(item => !item.permission || hasPermission(item.permission));
