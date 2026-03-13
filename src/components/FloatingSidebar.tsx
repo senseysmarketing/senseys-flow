@@ -39,7 +39,6 @@ const bottomItems = [
 export function FloatingSidebar() {
   const [isExpanded, setIsExpanded] = useState(false);
   const location = useLocation();
-  const { account } = useAccount();
   const { isSuperAdmin } = useSuperAdmin();
   const { hasPermission } = usePermissions();
   const isMobile = useIsMobile();
