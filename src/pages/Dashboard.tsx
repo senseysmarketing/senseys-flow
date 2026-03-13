@@ -230,7 +230,7 @@ const Dashboard = () => {
                   <h4 className="font-medium text-sm text-foreground truncate">{lead.name}</h4>
                   <p className="text-xs text-muted-foreground">
                     {lead.temperature === 'hot' ? '🔥 Quente' : lead.temperature === 'warm' ? '🌡️ Morno' : '❄️ Frio'}
-                    {' • '}{lead.waitingTime}
+                    {' • '}{lead.daysSinceUpdate > 0 ? `${lead.daysSinceUpdate}d sem contato` : 'Recente'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
