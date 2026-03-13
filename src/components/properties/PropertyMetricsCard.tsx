@@ -6,6 +6,7 @@ import { MapPin, Bed, Bath, Car, Eye, Edit2, Trash2, Users, Flame, DollarSign, T
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { format, subDays } from "date-fns";
+import { LineChart, Line, ResponsiveContainer } from "recharts";
 
 interface Property {
   id: string;
