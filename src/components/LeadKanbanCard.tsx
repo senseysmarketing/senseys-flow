@@ -146,7 +146,7 @@ export function LeadKanbanCard({
             <OriginBadge origem={lead.origem} showLabel={true} size="sm" />
             <TemperatureBadge temperature={lead.temperature} showLabel={true} size="sm" />
             {lead.properties && (
-              <span className="inline-flex items-center gap-1 text-[11px] bg-white/5 px-1.5 py-0.5 rounded-full text-gray-400 truncate max-w-[130px]">
+              <span className="inline-flex items-center gap-1 text-[11px] bg-white/5 px-1.5 py-0.5 rounded-full text-gray-400">
                 <Building2 className="h-2.5 w-2.5" />
                 {lead.properties.title}
               </span>
