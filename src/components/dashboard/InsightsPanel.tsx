@@ -122,7 +122,7 @@ export const InsightsPanel = ({
                     <Icon className="h-5 w-5" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-medium text-sm">{insight.title}</h4>
+                    <h4 className="font-medium text-sm text-foreground">{insight.title}</h4>
                     {!compact && (
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {insight.description}
