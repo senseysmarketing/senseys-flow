@@ -257,9 +257,9 @@ export function PropertyMetricsCard({
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                className="text-destructive"
+                className="text-red-400 hover:text-red-300 hover:bg-white/5"
                 onClick={(e) => e.stopPropagation()}
               >
                 <Trash2 className="h-3 w-3" />

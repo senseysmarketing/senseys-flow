@@ -200,7 +200,7 @@ export function ChatView({ conversation, messages, loading, onSend, onBack, onSh
       </ScrollArea>
 
       {/* Input */}
-      <div className="border-t border-border p-3 flex-shrink-0">
+      <div className="border-t border-white/10 p-3 flex-shrink-0 bg-[#2b2d2c]/80 backdrop-blur-md">
         <div className="flex items-end gap-2">
           <QuickTemplatesPopover 
             onSelect={handleTemplateSelect} 
@@ -213,14 +213,14 @@ export function ChatView({ conversation, messages, loading, onSend, onBack, onSh
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Digite sua mensagem..."
-            className="min-h-[40px] max-h-[120px] resize-none text-sm rounded-xl"
+            className="min-h-[40px] max-h-[120px] resize-none text-sm rounded-xl bg-[#5a5f65]/50 border-white/10 text-white placeholder:text-[#a6c8e1]/40"
             rows={1}
           />
           <Button
             size="icon"
             onClick={handleSend}
             disabled={!text.trim() || sending}
-            className="h-10 w-10 rounded-xl flex-shrink-0"
+            className="h-10 w-10 rounded-xl flex-shrink-0 bg-[#81afd1] hover:bg-[#81afd1]/80 hover:shadow-[0_0_12px_rgba(129,175,209,0.4)] hover:scale-105 transition-all text-white"
           >
             <Send className="h-4 w-4" />
           </Button>
