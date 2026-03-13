@@ -1248,7 +1248,7 @@ const Leads = () => {
               <div className="h-full flex flex-col overflow-hidden">
                 {/* Kanban columns container - horizontal scroll ONLY here */}
                 <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden custom-scrollbar pb-2">
-                  <div className="flex gap-4 h-full min-w-max px-1">
+                  <div className="flex gap-6 h-full min-w-max px-1">
                     {statuses.filter(s => !hiddenColumns.includes(s.id)).map((status) => {
                       const statusLeads = getLeadsByStatus(status.id);
                       return (
