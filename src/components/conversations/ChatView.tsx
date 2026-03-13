@@ -184,7 +184,7 @@ export function ChatView({ conversation, messages, loading, onSend, onBack, onSh
                       )}>
                         <span className={cn(
                           "text-[10px]",
-                          msg.is_from_me ? "text-primary-foreground/60" : "text-muted-foreground"
+                          msg.is_from_me ? "text-white/60" : "text-white/50"
                         )}>
                           {format(new Date(msg.timestamp), "HH:mm")}
                         </span>
