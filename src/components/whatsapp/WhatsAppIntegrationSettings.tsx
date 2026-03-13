@@ -1032,18 +1032,29 @@ export function WhatsAppIntegrationSettings() {
 
             {/* Timeline stepper */}
             <div className="relative">
+              <AnimatePresence initial={false}>
               {followUpSteps.map((step, index) => (
-                <div key={step.id} className="flex gap-3 pb-4 relative">
+                <motion.div
+                  key={step.id}
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.3 }}
+                  className="flex gap-3 pb-4 relative"
+                >
                   {index < followUpSteps.length - 1 && (
-                    <div className="absolute left-[7px] top-4 bottom-0 w-px bg-border" />
+                    <div className={cn(
+                      "absolute left-[7px] top-4 bottom-0 w-0.5 transition-colors",
+                      step.is_active ? "bg-[#a6c8e1]/30" : "bg-white/10"
+                    )} />
                   )}
                   <div className={cn(
-                    "w-3.5 h-3.5 rounded-full border-2 mt-0.5 shrink-0 z-10",
-                    step.is_active ? "bg-primary border-primary" : "bg-muted border-muted-foreground/30"
+                    "w-3.5 h-3.5 rounded-full border-2 mt-0.5 shrink-0 z-10 transition-all",
+                    step.is_active ? "bg-[#81afd1] border-[#81afd1] shadow-[0_0_8px_rgba(129,175,209,0.4)]" : "bg-[#5a5f65] border-white/20"
                   )} />
                   <div className="flex-1 min-w-0 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Etapa {step.position + 1}</span>
+                      <span className="text-sm font-medium text-white">Etapa {step.position + 1}</span>
                       <div className="flex items-center gap-1">
                         <Switch
                           checked={step.is_active}
@@ -1053,11 +1064,12 @@ export function WhatsAppIntegrationSettings() {
                             fetchFollowUpSteps();
                           }}
                           disabled={!isConnected}
+                          className="data-[state=checked]:bg-[#81afd1] data-[state=checked]:shadow-[0_0_8px_rgba(129,175,209,0.4)]"
                         />
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          className="h-7 w-7 text-red-400 hover:text-red-300 hover:bg-white/5"
                           onClick={async () => {
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             await (supabase.from('whatsapp_followup_steps' as any) as any).delete().eq('id', step.id);
@@ -1069,7 +1081,7 @@ export function WhatsAppIntegrationSettings() {
                       </div>
                     </div>
                     {step.is_active && (
-                      <div className="space-y-2">
+                      <div className="space-y-2 p-3 rounded-xl bg-[#5a5f65] border border-white/10">
                         <Select
                           value={step.template_id}
                           onValueChange={async (value) => {
@@ -1086,7 +1098,7 @@ export function WhatsAppIntegrationSettings() {
                           </SelectContent>
                         </Select>
                         <div className="flex items-center gap-2">
-                          <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <Clock className="h-3.5 w-3.5 text-[#a6c8e1] shrink-0" />
                           <Select
                             value={String(step.delay_minutes)}
                             onValueChange={async (value) => {
@@ -1111,8 +1123,9 @@ export function WhatsAppIntegrationSettings() {
                       </div>
                     )}
                   </div>
-                </div>
+                </motion.div>
               ))}
+              </AnimatePresence>
 
               <Button
                 variant="outline"
