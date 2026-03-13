@@ -78,7 +78,6 @@ const bottomItems = [
 ];
 
 export function AppSidebar() {
-  const { account } = useAccount();
   const { isSuperAdmin } = useSuperAdmin();
   const { hasPermission } = usePermissions();
   const location = useLocation();
