@@ -191,7 +191,7 @@ const Dashboard = () => {
                     type="category"
                     dataKey="name"
                     width={90}
-                    tick={{ fill: "hsl(208,47%,77%)", fontSize: 12 }}
+                    tick={{ fill: "hsl(208,47%,77%)", fontSize: 12, style: { whiteSpace: 'nowrap' } }}
                     axisLine={false}
                     tickLine={false}
                   />
