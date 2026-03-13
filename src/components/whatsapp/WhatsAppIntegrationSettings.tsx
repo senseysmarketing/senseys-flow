@@ -155,6 +155,7 @@ export function WhatsAppIntegrationSettings() {
   const [showTemplatesModal, setShowTemplatesModal] = useState(false);
   const [pendingAutoCreate, setPendingAutoCreate] = useState(false);
   const [followUpSteps, setFollowUpSteps] = useState<FollowUpStep[]>([]);
+  const [greetingSequenceSteps, setGreetingSequenceSteps] = useState<GreetingSequenceStep[]>([]);
   const [reconfiguring, setReconfiguring] = useState(false);
   const [showGreetingRuleModal, setShowGreetingRuleModal] = useState(false);
   const [editingRule, setEditingRule] = useState<GreetingRule | null>(null);
