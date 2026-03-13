@@ -298,6 +298,14 @@ export function WhatsAppIntegrationSettings() {
     setFollowUpSteps((data || []) as FollowUpStep[]);
   }, []);
 
+  const fetchGreetingSequenceSteps = useCallback(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase.from('whatsapp_greeting_sequence_steps' as any) as any)
+      .select('*')
+      .order('position');
+    setGreetingSequenceSteps((data || []) as GreetingSequenceStep[]);
+  }, []);
+
   const fetchSendingSchedule = useCallback(async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data } = await (supabase.from('whatsapp_sending_schedule' as any) as any)
