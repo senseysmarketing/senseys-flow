@@ -69,7 +69,7 @@ const SettingsPage = () => {
   const [searchParams] = useSearchParams();
   const initialTab = useMemo(() => {
     const param = searchParams.get('tab');
-    const validTabs: TabValue[] = ['profile','team','notifications','statuses','whatsapp','followup','distribution','qualification','metacapi','permissions','whitelabel','import'];
+    const validTabs: TabValue[] = ['profile','team','notifications','statuses','whatsapp','followup','distribution','qualification','metacapi','permissions','import'];
     return validTabs.includes(param as TabValue) ? (param as TabValue) : 'profile';
   }, []);
   const [activeTab, setActiveTab] = useState<TabValue>(initialTab);
