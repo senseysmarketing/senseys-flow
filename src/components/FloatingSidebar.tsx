@@ -132,8 +132,8 @@ export function FloatingSidebar() {
             className={cn(
               "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 min-h-[40px]",
               location.pathname === "/agency-admin"
-                ? "bg-warning/15 text-warning"
-                : "text-warning/70 hover:bg-warning/10 hover:text-warning"
+                ? "bg-[#81afd1]/15 text-[#81afd1]"
+                : "text-[#81afd1]/70 hover:bg-[#81afd1]/10 hover:text-[#81afd1]"
             )}
           >
             <Shield className="h-5 w-5 flex-shrink-0" />
