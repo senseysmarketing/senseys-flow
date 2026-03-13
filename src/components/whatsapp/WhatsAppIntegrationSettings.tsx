@@ -360,7 +360,7 @@ export function WhatsAppIntegrationSettings() {
 
     const loadData = async () => {
       setLoading(true);
-      await Promise.all([fetchSession(), fetchTemplates(), fetchAutomationRules(), fetchGreetingRules(), fetchFollowUpSteps(), fetchSequenceCounts(), fetchSendingSchedule()]);
+      await Promise.all([fetchSession(), fetchTemplates(), fetchAutomationRules(), fetchGreetingRules(), fetchFollowUpSteps(), fetchGreetingSequenceSteps(), fetchSequenceCounts(), fetchSendingSchedule()]);
       setLoading(false);
     };
 
