@@ -167,8 +167,8 @@ export function ChatView({ conversation, messages, loading, onSend, onBack, onSh
                       className={cn(
                         "max-w-[75%] rounded-2xl px-3 py-2 text-sm",
                         msg.is_from_me
-                          ? "bg-primary text-primary-foreground rounded-br-sm"
-                          : "bg-muted text-foreground rounded-bl-sm"
+                          ? "bg-[#81afd1] text-white rounded-br-sm"
+                          : "bg-[#5a5f65] text-white rounded-bl-sm"
                       )}
                     >
                       {msg.media_type !== 'text' && (
