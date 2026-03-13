@@ -367,7 +367,7 @@ export function WhatsAppIntegrationSettings() {
     if (user) {
       loadData();
     }
-  }, [user, fetchSession, fetchTemplates, fetchAutomationRules, fetchGreetingRules, fetchFollowUpSteps, fetchSequenceCounts, fetchSendingSchedule]);
+  }, [user, fetchSession, fetchTemplates, fetchAutomationRules, fetchGreetingRules, fetchFollowUpSteps, fetchGreetingSequenceSteps, fetchSequenceCounts, fetchSendingSchedule]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
