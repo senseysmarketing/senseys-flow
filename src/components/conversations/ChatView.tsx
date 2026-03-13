@@ -89,9 +89,9 @@ export function ChatView({ conversation, messages, loading, onSend, onBack, onSh
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="h-14 border-b border-border flex items-center gap-3 px-4 flex-shrink-0">
+      <div className="h-14 border-b border-white/10 flex items-center gap-3 px-4 flex-shrink-0">
         {(isMobile) && (
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onBack}>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-[#a6c8e1] hover:text-white hover:bg-white/5" onClick={onBack}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
         )}
@@ -99,8 +99,8 @@ export function ChatView({ conversation, messages, loading, onSend, onBack, onSh
         <AvatarFallbackColored name={displayName} size="sm" />
 
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{displayName}</p>
-          <p className="text-[11px] text-muted-foreground truncate">
+          <p className="text-sm font-medium truncate text-white">{displayName}</p>
+          <p className="text-[11px] text-[#a6c8e1]/60 truncate">
             {conversation.lead?.phone 
               ? formatPhoneForDisplay(conversation.lead.phone) 
               : formatPhoneForDisplay(conversation.phone) || conversation.contact_name || ''
@@ -123,7 +123,7 @@ export function ChatView({ conversation, messages, loading, onSend, onBack, onSh
         </Button>
 
         {conversation.lead && (
-          <Button variant="outline" size="sm" onClick={onShowLead} className="gap-1.5 text-xs">
+          <Button variant="ghost" size="sm" onClick={onShowLead} className="gap-1.5 text-xs text-[#a6c8e1] hover:text-white hover:bg-white/5 border border-white/10">
             <User className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Lead</span>
           </Button>
