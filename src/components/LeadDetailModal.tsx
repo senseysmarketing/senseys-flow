@@ -383,7 +383,7 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
               }`}
             >
               <MessageCircle className="h-4 w-4" />
-              WhatsApp
+              Chat
             </button>
           </div>
         </div>
