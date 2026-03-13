@@ -173,53 +173,58 @@ export function PropertyMetricsCard({
         </div>
 
         {/* Metrics row */}
-        <div className="grid grid-cols-4 gap-2 py-2 px-3 bg-muted/50 rounded-lg">
+        <div className="grid grid-cols-4 gap-2 py-3 px-3 bg-black/20 rounded-xl border border-white/5">
           <div className="text-center">
-            <div className="flex items-center justify-center gap-1 text-muted-foreground">
-              <Users className="h-3 w-3" />
-            </div>
-            <p className="text-sm font-semibold">{metrics.leadCount}</p>
-            <p className="text-[10px] text-muted-foreground">Leads</p>
+            <Users className="h-3 w-3 text-[#a6c8e1] mx-auto mb-1" />
+            <p className="text-sm font-semibold text-white tabular-nums">{metrics.leadCount}</p>
+            <p className="text-[10px] text-[#a6c8e1]/60">Leads</p>
           </div>
           <div className="text-center">
-            <div className="flex items-center justify-center gap-1 text-destructive">
-              <Flame className="h-3 w-3" />
-            </div>
-            <p className="text-sm font-semibold">{metrics.hotLeads}</p>
-            <p className="text-[10px] text-muted-foreground">Quentes</p>
+            <Flame className="h-3 w-3 text-red-400 mx-auto mb-1" />
+            <p className="text-sm font-semibold text-white tabular-nums">{metrics.hotLeads}</p>
+            <p className="text-[10px] text-[#a6c8e1]/60">Quentes</p>
           </div>
           <div className="text-center">
-            <div className="flex items-center justify-center gap-1 text-success">
-              <DollarSign className="h-3 w-3" />
-            </div>
-            <p className="text-sm font-semibold">{formatCurrency(metrics.investment)}</p>
-            <p className="text-[10px] text-muted-foreground">Invest.</p>
+            <DollarSign className="h-3 w-3 text-emerald-400 mx-auto mb-1" />
+            <p className="text-sm font-semibold text-white tabular-nums">{formatCurrency(metrics.investment)}</p>
+            <p className="text-[10px] text-[#a6c8e1]/60">Invest.</p>
           </div>
           <div className="text-center">
-            <div className="flex items-center justify-center gap-1 text-primary">
-              <TrendingUp className="h-3 w-3" />
+            <div className="flex items-center justify-center gap-1 mb-1">
+              <TrendingUp className="h-3 w-3 text-[#81afd1]" />
             </div>
-            <p className="text-sm font-semibold">{formatCurrency(metrics.cpl)}</p>
-            <p className="text-[10px] text-muted-foreground">CPL</p>
+            <p className="text-sm font-semibold text-white tabular-nums">{formatCurrency(metrics.cpl)}</p>
+            <p className="text-[10px] text-[#a6c8e1]/60">CPL</p>
           </div>
         </div>
+
+        {/* Mini sparkline */}
+        {metrics.investment > 0 && (
+          <div className="h-8 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={[0, 2, 1, 4, 3, 5, 4, 6].map((v, i) => ({ v, i }))}>
+                <Line type="monotone" dataKey="v" stroke="#81afd1" strokeWidth={1.5} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
 
         {/* Pricing */}
         <div className="space-y-1">
           {property.sale_price && (
-            <p className="text-lg font-bold text-primary">
+            <p className="text-lg font-bold text-[#81afd1]">
               Venda: {formatPrice(property.sale_price)}
             </p>
           )}
           {property.rent_price && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-[#a6c8e1]/70">
               Aluguel: {formatPrice(property.rent_price)}/mês
             </p>
           )}
         </div>
 
         {brokerName && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-[#a6c8e1]/60">
             Corretor: {brokerName}
           </p>
         )}
