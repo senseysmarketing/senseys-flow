@@ -709,11 +709,12 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
         </div>
         )}
 
-        {/* Footer com ações */}
-        <div className="p-4 bg-muted/30 border-t flex items-center justify-between gap-3">
+        {/* Footer */}
+        <div className="p-4 bg-[#2b2d2c] border-t border-white/10 flex items-center justify-between gap-3">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
+            className="border-white/10 text-[#a6c8e1] hover:text-white hover:bg-white/5"
           >
             Fechar
           </Button>
@@ -722,14 +723,14 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
               onOpenChange(false);
               onEdit(lead);
             }}
-            className="gap-2"
+            className="gap-2 bg-[#81afd1] text-white hover:bg-[#81afd1]/80"
           >
             <Edit className="h-4 w-4" />
             Editar Lead
           </Button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 };
 
