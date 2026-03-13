@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -596,19 +595,19 @@ const PropertiesPage = () => {
       <PropertiesKPIs />
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-4">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <div className="flex items-center gap-2 bg-[hsl(var(--card))]/20 backdrop-blur-sm border border-white/10 rounded-xl p-2">
+        <div className="relative flex-1 min-w-[180px]">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-white/30" />
           <Input
             placeholder="Buscar imóveis..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            className="pl-9"
+            className="pl-9 bg-[hsl(var(--background))]/50 border-white/10 h-9 text-sm"
           />
         </div>
         
         <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-40">
+          <SelectTrigger className="w-36 bg-[hsl(var(--background))]/50 border-white/10 h-9 text-sm">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -620,7 +619,7 @@ const PropertiesPage = () => {
         </Select>
         
         <Select value={filterType} onValueChange={setFilterType}>
-          <SelectTrigger className="w-40">
+          <SelectTrigger className="w-36 bg-[hsl(var(--background))]/50 border-white/10 h-9 text-sm">
             <SelectValue placeholder="Tipo" />
           </SelectTrigger>
           <SelectContent>
