@@ -118,7 +118,7 @@ export function AppSidebar() {
             <div className="relative">
               <img 
                 src={logoSrc} 
-                alt={companyName || "Logo"} 
+                alt="Logo" 
                 className="h-9 w-auto max-w-[160px] object-contain"
               />
               <div className="absolute -top-1 -right-1">

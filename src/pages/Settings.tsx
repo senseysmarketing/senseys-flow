@@ -733,8 +733,6 @@ const SettingsPage = () => {
       case 'permissions':
         return hasPermission('settings.manage') ? <RolePermissionsManager /> : null;
 
-      case 'whitelabel':
-        return <WhiteLabelSettings />;
 
       case 'import':
         return <DataImporter />;

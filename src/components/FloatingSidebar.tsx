@@ -72,14 +72,31 @@ export function FloatingSidebar() {
     >
       {/* Logo */}
       <div className="flex items-center justify-center px-3 py-4 border-b border-white/5">
-        <img 
-          src={logoSrc} 
-          alt="Logo" 
-          className={cn(
-            "object-contain transition-all duration-300",
-            isExpanded ? "h-7 w-auto max-w-[140px]" : "h-7 w-7"
+        <AnimatePresence mode="wait">
+          {isExpanded ? (
+            <motion.img
+              key="full"
+              src={logoAlternativaBranca}
+              alt="Logo"
+              className="h-7 w-auto max-w-[140px] object-contain"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+            />
+          ) : (
+            <motion.img
+              key="icon"
+              src={logoIcon}
+              alt="Logo"
+              className="h-7 w-7 object-contain"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+            />
           )}
-        />
+        </AnimatePresence>
       </div>
 
       {/* Main menu */}
