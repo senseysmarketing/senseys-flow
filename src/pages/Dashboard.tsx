@@ -190,7 +190,7 @@ const Dashboard = () => {
                   <YAxis
                     type="category"
                     dataKey="name"
-                    width={90}
+                    width={130}
                     tick={{ fill: "hsl(208,47%,77%)", fontSize: 12, style: { whiteSpace: 'nowrap' } }}
                     axisLine={false}
                     tickLine={false}
