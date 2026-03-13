@@ -726,26 +726,32 @@ export function WhatsAppIntegrationSettings() {
 
 
         {/* COLUNA ESQUERDA: Saudação Automática */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Zap className="h-4 w-4 text-primary" />
-                <CardTitle className="text-base">Saudação Automática</CardTitle>
+        <div className="bg-[hsl(210_4%_37%/0.4)] backdrop-blur-sm border border-white/10 rounded-xl overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between p-5 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-[hsl(207_37%_66%/0.15)]">
+                <Zap className="h-4 w-4 text-[hsl(207,37%,66%)]" />
               </div>
-              {newLeadRule && (
-                <Switch
-                  checked={newLeadRule.is_active}
-                  onCheckedChange={(checked) => handleAutomationToggle(newLeadRule.id, checked)}
-                  disabled={!isConnected}
-                />
-              )}
+              <div>
+                <h3 className="text-sm font-semibold text-white">Saudação Automática</h3>
+                <p className="text-xs text-white/40 mt-0.5">Mensagem enviada quando um novo lead chegar</p>
+              </div>
             </div>
-            <CardDescription className="text-xs">Mensagem enviada quando um novo lead chegar</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            {newLeadRule && (
+              <Switch
+                checked={newLeadRule.is_active}
+                onCheckedChange={(checked) => handleAutomationToggle(newLeadRule.id, checked)}
+                disabled={!isConnected}
+                className="data-[state=checked]:bg-[hsl(207,37%,66%)] data-[state=checked]:shadow-[0_0_12px_rgba(129,175,209,0.4)]"
+              />
+            )}
+          </div>
+
+          {/* Content */}
+          <div className="px-5 pb-5">
             {!isConnected && (
-              <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-sm text-amber-600 dark:text-amber-400">
+              <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-sm text-amber-400 mb-4">
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 Conecte seu WhatsApp para ativar as automações
               </div>
@@ -754,257 +760,272 @@ export function WhatsAppIntegrationSettings() {
             {newLeadRule ? (
               <>
                 {newLeadRule.is_active && (
-                  <>
-                    {/* Default template + delay + templates button */}
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <div className="h-px flex-1 bg-border" />
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-2">Template Padrão (fallback)</span>
-                        <div className="h-px flex-1 bg-border" />
+                  <div className="relative pl-7">
+                    {/* Vertical flow line */}
+                    <div className="absolute left-[11px] top-2 bottom-2 w-px bg-white/10" />
+
+                    {/* ── STEP 1: Triggers ── */}
+                    <div className="relative mb-6">
+                      <div className="absolute left-[-18px] top-[3px] w-[9px] h-[9px] rounded-full bg-[hsl(207,37%,66%)] border-2 border-[hsl(160,3%,17%)]" />
+                      <p className="text-[11px] text-white/50 uppercase tracking-wider font-medium mb-2.5">
+                        1. Quando um lead chegar de:
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { key: 'manual', label: 'Cadastro Manual' },
+                          { key: 'meta', label: 'Meta Ads' },
+                          { key: 'webhook', label: 'Webhook' },
+                          { key: 'olx', label: 'Grupo OLX' },
+                        ].map(({ key, label }) => {
+                          const isSelected = (newLeadRule.trigger_sources as Record<string, boolean> | null)?.[key] !== false;
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => updateRuleSources(newLeadRule.id, {
+                                ...newLeadRule.trigger_sources,
+                                [key]: !isSelected,
+                              })}
+                              className={cn(
+                                "px-3 py-1.5 rounded-full text-xs border transition-all duration-200 cursor-pointer",
+                                isSelected
+                                  ? "bg-[hsl(160,3%,17%)/0.6] border-[hsl(207,37%,66%)] text-white"
+                                  : "bg-transparent border-white/15 text-white/40 hover:border-white/30 hover:text-white/60"
+                              )}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
                       </div>
-                      <div className="grid gap-3">
+                    </div>
+
+                    {/* ── STEP 2: Action ── */}
+                    <div className="relative mb-6">
+                      <div className="absolute left-[-18px] top-[3px] w-[9px] h-[9px] rounded-full bg-[hsl(207,37%,66%)] border-2 border-[hsl(160,3%,17%)]" />
+                      <p className="text-[11px] text-white/50 uppercase tracking-wider font-medium mb-2.5">
+                        2. Enviar a seguinte mensagem:
+                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
                         <Select value={newLeadRule.template_id || ''} onValueChange={(value) => updateRuleTemplate(newLeadRule.id, value)}>
-                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecione um template" /></SelectTrigger>
+                          <SelectTrigger className="h-8 text-xs flex-1 min-w-[160px] bg-[hsl(160,3%,17%)/0.5] border-white/10 text-white">
+                            <SelectValue placeholder="Selecione um template" />
+                          </SelectTrigger>
                           <SelectContent>
                             {templates.map((t) => (
                               <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <Select value={String(newLeadRule.delay_seconds)} onValueChange={(value) => updateRuleDelay(newLeadRule.id, parseInt(value))}>
-                            <SelectTrigger className="h-8 text-xs flex-1"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="0">Imediato</SelectItem>
-                              <SelectItem value="30">30 segundos</SelectItem>
-                              <SelectItem value="60">1 minuto</SelectItem>
-                              <SelectItem value="300">5 minutos</SelectItem>
-                              <SelectItem value="600">10 minutos</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setShowTemplatesModal(true)}>
-                          <Settings2 className="h-3.5 w-3.5 mr-1.5" />
-                          Personalizar Templates
+                        <Select value={String(newLeadRule.delay_seconds)} onValueChange={(value) => updateRuleDelay(newLeadRule.id, parseInt(value))}>
+                          <SelectTrigger className="h-8 text-xs w-[140px] bg-[hsl(160,3%,17%)/0.5] border-white/10 text-white">
+                            <Clock className="h-3 w-3 mr-1.5 text-white/40" />
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="0">Imediato</SelectItem>
+                            <SelectItem value="30">30 segundos</SelectItem>
+                            <SelectItem value="60">1 minuto</SelectItem>
+                            <SelectItem value="300">5 minutos</SelectItem>
+                            <SelectItem value="600">10 minutos</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-white/40 hover:text-white hover:bg-white/10"
+                          onClick={() => setShowTemplatesModal(true)}
+                          title="Personalizar Templates"
+                        >
+                          <Settings2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
                       {/* Sequence section */}
-                      <div className="p-3 border border-dashed rounded-lg space-y-2">
-                        <div className="flex items-center justify-center gap-2 flex-wrap">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 text-xs px-3"
-                            onClick={() => {
-                              setSequenceTarget({ automationRuleId: newLeadRule.id, label: 'Template Padrão (fallback)' });
-                              setShowSequenceModal(true);
-                            }}
-                          >
-                            <Edit2 className="h-3.5 w-3.5 mr-2" />
-                            {sequenceCounts[newLeadRule.id] ? 'Editar Sequência' : 'Configurar Sequência'}
-                          </Button>
-                          {sequenceCounts[newLeadRule.id] ? (
-                            <>
-                              <Badge className="gap-1 h-8 rounded-md px-3 text-xs flex items-center bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30 hover:bg-green-500/20">
-                                ✓ {sequenceCounts[newLeadRule.id]} msgs
-                              </Badge>
-                              <Button variant="outline" size="sm" className="h-8 text-xs px-3" onClick={() => handleDisableSequence(newLeadRule.id)}>
-                                Desativar
-                              </Button>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Excluir sequência?</AlertDialogTitle>
-                                    <AlertDialogDescription>Todas as mensagens da sequência serão removidas permanentemente.</AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleDeleteSequence(newLeadRule.id)}>Excluir</AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </>
-                          ) : null}
-                        </div>
-                        <p className="text-xs text-muted-foreground text-center">
-                          Configure 2–5 mensagens enviadas em sequência
-                        </p>
+                      <div className="flex items-center gap-2 flex-wrap mt-3">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-[11px] px-2.5 text-white/50 hover:text-white hover:bg-white/10"
+                          onClick={() => {
+                            setSequenceTarget({ automationRuleId: newLeadRule.id, label: 'Template Padrão (fallback)' });
+                            setShowSequenceModal(true);
+                          }}
+                        >
+                          <Edit2 className="h-3 w-3 mr-1.5" />
+                          {sequenceCounts[newLeadRule.id] ? 'Editar Sequência' : 'Configurar Sequência'}
+                        </Button>
+                        {sequenceCounts[newLeadRule.id] ? (
+                          <>
+                            <span className="text-[11px] text-green-400/80 flex items-center gap-1">
+                              ✓ {sequenceCounts[newLeadRule.id]} msgs
+                            </span>
+                            <Button variant="ghost" size="sm" className="h-7 text-[11px] px-2 text-white/40 hover:text-white hover:bg-white/10" onClick={() => handleDisableSequence(newLeadRule.id)}>
+                              Desativar
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive/60 hover:text-destructive hover:bg-destructive/10">
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Excluir sequência?</AlertDialogTitle>
+                                  <AlertDialogDescription>Todas as mensagens da sequência serão removidas permanentemente.</AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleDeleteSequence(newLeadRule.id)}>Excluir</AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </>
+                        ) : null}
                       </div>
                     </div>
 
-                    {/* Sources */}
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="h-px flex-1 bg-border" />
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-2">Enviar para leads de</span>
-                        <div className="h-px flex-1 bg-border" />
-                      </div>
-                      <div className="flex flex-wrap gap-3 justify-center">
-                        {[
-                          { key: 'manual', label: 'Cadastro Manual' },
-                          { key: 'meta', label: 'Meta Ads' },
-                          { key: 'webhook', label: 'Webhook' },
-                          { key: 'olx', label: 'Grupo OLX' },
-                        ].map(({ key, label }) => (
-                          <div key={key} className="flex items-center gap-2">
-                            <Checkbox
-                              id={`source-${key}`}
-                              checked={(newLeadRule.trigger_sources as Record<string, boolean> | null)?.[key] !== false}
-                              onCheckedChange={(checked) => updateRuleSources(newLeadRule.id, {
-                                ...newLeadRule.trigger_sources,
-                                [key]: !!checked,
-                              })}
-                            />
-                            <Label htmlFor={`source-${key}`} className="font-normal cursor-pointer text-xs">{label}</Label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Conditional Rules */}
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="h-px flex-1 bg-border" />
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-2">Regras Condicionais</span>
-                        <div className="h-px flex-1 bg-border" />
-                      </div>
+                    {/* ── STEP 3: Conditions ── */}
+                    <div className="relative">
+                      <div className="absolute left-[-18px] top-[3px] w-[9px] h-[9px] rounded-full bg-[hsl(207,37%,66%)] border-2 border-[hsl(160,3%,17%)]" />
+                      <p className="text-[11px] text-white/50 uppercase tracking-wider font-medium mb-2.5">
+                        3. Condições Específicas (Opcional)
+                      </p>
 
                       <div className="space-y-2 mb-3">
                         {greetingRules.length === 0 ? (
-                          <div className="text-center py-4 text-sm text-muted-foreground border border-dashed rounded-lg">
-                            <GitBranch className="h-5 w-5 mx-auto mb-2 opacity-40" />
-                            Nenhuma regra condicional criada.<br />
-                            <span className="text-xs">O template padrão acima será usado.</span>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => { setEditingRule(null); setShowGreetingRuleModal(true); }}
+                            className="w-full flex items-center justify-center gap-2 py-3 border border-dashed border-white/20 rounded-lg text-xs text-white/40 hover:text-white/70 hover:border-white/30 transition-all cursor-pointer"
+                          >
+                            <GitBranch className="h-4 w-4" />
+                            Adicionar Condição
+                          </button>
                         ) : (
-                          greetingRules.map((rule) => {
-                            const templateName = templates.find(t => t.id === rule.template_id)?.name;
-                            const summary = formatConditionSummary(rule);
-                            return (
-                              <div key={rule.id} className="flex flex-col gap-2 p-2.5 border rounded-lg bg-muted/20">
-                                <div className="flex items-center gap-2">
-                                  <Switch
-                                    checked={rule.is_active}
-                                    onCheckedChange={(v) => toggleGreetingRule(rule.id, v)}
-                                    disabled={!isConnected}
-                                  />
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <Badge variant="outline" className="text-xs h-5 px-1.5 font-normal">
-                                        #{rule.priority}
-                                      </Badge>
-                                      <span className="text-xs font-medium text-muted-foreground">
-                                        {CONDITION_TYPE_LABELS[rule.condition_type]}
-                                      </span>
-                                      {summary && (
-                                        <span className="text-xs text-foreground truncate">{summary}</span>
-                                      )}
+                          <>
+                            {greetingRules.map((rule) => {
+                              const templateName = templates.find(t => t.id === rule.template_id)?.name;
+                              const summary = formatConditionSummary(rule);
+                              return (
+                                <div key={rule.id} className="flex flex-col gap-2 p-2.5 border border-white/10 rounded-lg bg-[hsl(160,3%,17%)/0.3]">
+                                  <div className="flex items-center gap-2">
+                                    <Switch
+                                      checked={rule.is_active}
+                                      onCheckedChange={(v) => toggleGreetingRule(rule.id, v)}
+                                      disabled={!isConnected}
+                                      className="data-[state=checked]:bg-[hsl(207,37%,66%)]"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-normal border-white/20 text-white/60">
+                                          #{rule.priority}
+                                        </Badge>
+                                        <span className="text-xs font-medium text-white/50">
+                                          {CONDITION_TYPE_LABELS[rule.condition_type]}
+                                        </span>
+                                        {summary && (
+                                          <span className="text-xs text-white/80 truncate">{summary}</span>
+                                        )}
+                                      </div>
+                                      <p className="text-[11px] text-white/40 truncate mt-0.5">
+                                        {rule.name} {templateName ? `→ ${templateName}` : ''}
+                                      </p>
                                     </div>
-                                    <p className="text-xs text-muted-foreground truncate mt-0.5">
-                                      {rule.name} {templateName ? `→ ${templateName}` : ''}
-                                    </p>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-white/40 hover:text-white hover:bg-white/10" onClick={() => { setEditingRule(rule); setShowGreetingRuleModal(true); }}>
+                                      <Edit2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <AlertDialog>
+                                      <AlertDialogTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive/60 hover:text-destructive hover:bg-destructive/10">
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </Button>
+                                      </AlertDialogTrigger>
+                                      <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                          <AlertDialogTitle>Remover regra?</AlertDialogTitle>
+                                          <AlertDialogDescription>Esta regra de saudação será removida permanentemente.</AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                          <AlertDialogAction onClick={() => deleteGreetingRule(rule.id)}>Remover</AlertDialogAction>
+                                        </AlertDialogFooter>
+                                      </AlertDialogContent>
+                                    </AlertDialog>
                                   </div>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => { setEditingRule(rule); setShowGreetingRuleModal(true); }}>
-                                    <Edit2 className="h-3.5 w-3.5" />
-                                  </Button>
-                                  <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive">
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </Button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                      <AlertDialogHeader>
-                                        <AlertDialogTitle>Remover regra?</AlertDialogTitle>
-                                        <AlertDialogDescription>Esta regra de saudação será removida permanentemente.</AlertDialogDescription>
-                                      </AlertDialogHeader>
-                                      <AlertDialogFooter>
-                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                        <AlertDialogAction onClick={() => deleteGreetingRule(rule.id)}>Remover</AlertDialogAction>
-                                      </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                  </AlertDialog>
+                                  {/* Sequence row for conditional rule */}
+                                  <div className="flex items-center gap-2 flex-wrap pl-10">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 text-[11px] px-2.5 text-white/50 hover:text-white hover:bg-white/10"
+                                      onClick={() => {
+                                        setSequenceTarget({ greetingRuleId: rule.id, label: rule.name });
+                                        setShowSequenceModal(true);
+                                      }}
+                                    >
+                                      <Edit2 className="h-3 w-3 mr-1.5" />
+                                      {sequenceCounts[rule.id] ? 'Editar Sequência' : 'Configurar Sequência'}
+                                    </Button>
+                                    {sequenceCounts[rule.id] ? (
+                                      <>
+                                        <span className="text-[11px] text-green-400/80 flex items-center gap-1">
+                                          ✓ {sequenceCounts[rule.id]} msgs
+                                        </span>
+                                        <Button variant="ghost" size="sm" className="h-7 text-[11px] px-2 text-white/40 hover:text-white hover:bg-white/10" onClick={() => handleDisableSequence(undefined, rule.id)}>
+                                          Desativar
+                                        </Button>
+                                        <AlertDialog>
+                                          <AlertDialogTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive/60 hover:text-destructive hover:bg-destructive/10">
+                                              <Trash2 className="h-3 w-3" />
+                                            </Button>
+                                          </AlertDialogTrigger>
+                                          <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                              <AlertDialogTitle>Excluir sequência?</AlertDialogTitle>
+                                              <AlertDialogDescription>As mensagens da sequência desta regra serão removidas permanentemente.</AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                              <AlertDialogAction onClick={() => handleDeleteSequence(undefined, rule.id)}>Excluir</AlertDialogAction>
+                                            </AlertDialogFooter>
+                                          </AlertDialogContent>
+                                        </AlertDialog>
+                                      </>
+                                    ) : null}
+                                  </div>
                                 </div>
-                                {/* Sequence row for conditional rule */}
-                                <div className="flex items-center justify-center gap-2 flex-wrap pl-10">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-8 text-xs px-3"
-                                    onClick={() => {
-                                      setSequenceTarget({ greetingRuleId: rule.id, label: rule.name });
-                                      setShowSequenceModal(true);
-                                    }}
-                                  >
-                                    <Edit2 className="h-3 w-3 mr-1.5" />
-                                    {sequenceCounts[rule.id] ? 'Editar Sequência' : 'Configurar Sequência'}
-                                  </Button>
-                                  {sequenceCounts[rule.id] ? (
-                                    <>
-                                      <Badge className="gap-1 h-8 rounded-md px-3 text-xs flex items-center bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30 hover:bg-green-500/20">
-                                        ✓ {sequenceCounts[rule.id]} msgs
-                                      </Badge>
-                                      <Button variant="outline" size="sm" className="h-8 text-xs px-3" onClick={() => handleDisableSequence(undefined, rule.id)}>
-                                        Desativar
-                                      </Button>
-                                      <AlertDialog>
-                                        <AlertDialogTrigger asChild>
-                                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
-                                            <Trash2 className="h-3 w-3" />
-                                          </Button>
-                                        </AlertDialogTrigger>
-                                        <AlertDialogContent>
-                                          <AlertDialogHeader>
-                                            <AlertDialogTitle>Excluir sequência?</AlertDialogTitle>
-                                            <AlertDialogDescription>As mensagens da sequência desta regra serão removidas permanentemente.</AlertDialogDescription>
-                                          </AlertDialogHeader>
-                                          <AlertDialogFooter>
-                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                            <AlertDialogAction onClick={() => handleDeleteSequence(undefined, rule.id)}>Excluir</AlertDialogAction>
-                                          </AlertDialogFooter>
-                                        </AlertDialogContent>
-                                      </AlertDialog>
-                                    </>
-                                  ) : null}
-                                </div>
-                              </div>
-                            );
-                          })
+                              );
+                            })}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="w-full h-8 text-xs text-white/40 hover:text-white hover:bg-white/10 border border-dashed border-white/15"
+                              onClick={() => { setEditingRule(null); setShowGreetingRuleModal(true); }}
+                            >
+                              <Plus className="h-3.5 w-3.5 mr-1.5" />
+                              Adicionar Condição
+                            </Button>
+                          </>
                         )}
                       </div>
 
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onClick={() => { setEditingRule(null); setShowGreetingRuleModal(true); }}
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Adicionar Regra Condicional
-                      </Button>
-
-                      <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                      <p className="text-[11px] text-white/30 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
-                        As regras são avaliadas em ordem de prioridade. O template padrão é usado quando nenhuma regra casar.
+                        Regras avaliadas por prioridade. Template padrão usado quando nenhuma casar.
                       </p>
                     </div>
-                  </>
+                  </div>
                 )}
               </>
             ) : (
-              <Button variant="outline" onClick={() => createNewLeadRule()} className="w-full">
+              <Button variant="outline" onClick={() => createNewLeadRule()} className="w-full border-white/15 text-white/60 hover:text-white hover:bg-white/10">
                 <Zap className="h-4 w-4 mr-2" />
                 Configurar Saudação Automática
               </Button>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* COLUNA DIREITA: Follow-up Timeline */}
         <Card>
