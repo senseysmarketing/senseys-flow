@@ -1,50 +1,72 @@
 
 
-## Refatoração: Kanban de Leads — Estética Premium Glassmorphism
+## Diagnostico e Solucao: Variaveis de Formulario nos Templates WhatsApp
 
-### Análise
+### O que esta acontecendo
 
-Ao examinar o código, os badges de **TemperatureBadge** e **OriginBadge** já usam o estilo neon (bg transparente + border colorida + texto vibrante) — portanto não precisam de alteração. O foco é no **LeadKanbanCard.tsx** e nas **colunas do Kanban** em `Leads.tsx`.
+Sua analise esta **100% correta**. O lead Cristal Lorca veio do formulario **Cidade-Jardim** (form_id: 1852010645681625) e possui estes campos salvos:
 
-### Mudanças
+- `você_já_investe_em_imóveis?` → sim, tenho portfólio...
+- `qual_seu_momento_de_decisão_para_investir?` → 6 meses
+- `qual_valor_você_considera_investir_neste_empreendimento?` → até R$ 300 mil
 
-#### 1. `src/components/LeadKanbanCard.tsx` — Redesign completo do card
+O template que foi enviado provavelmente usa uma variavel do formulario **Ilha Pura** (ex: `{form_você_está_buscando_imóvel_para_moradia_própria_ou_para_investimento?_}`), que **nao existe** nos dados desse lead. Por isso aparece vazio na mensagem.
 
-**Container:**
-- Trocar `bg-black/20` por `bg-[#5a5f65]/30 backdrop-blur-md border-white/10`
-- Hover: `hover:border-[#81afd1]/50 hover:-translate-y-1` (substituir o scale atual)
-- Manter `rounded-xl`, drag state com `ring-2 ring-[#81afd1]/40`
+### A conta tem 6+ formularios com perguntas sobrepostas
 
-**Header (Avatar + Nome + Tempo):**
-- Substituir `AvatarFallbackColored` (gradientes coloridos) por avatar com fundo escuro uniforme `bg-[#465666] text-[#a6c8e1]`
-- Nome: manter `text-white font-semibold text-sm`, aumentar `max-w` do truncate
-- Time badge: `bg-white/5 border border-white/10 text-gray-400 text-[11px] rounded-full`
+- Art Wood, Cidade-Jardim, Ilha Pura v3/v4/v5/v6, Ipanema v2
+- Varias perguntas sao **iguais** entre formularios (ex: "fase da compra", "valor maximo")
+- Mas o Cidade-Jardim tem perguntas **exclusivas** (ex: "Voce ja investe em imoveis?")
+- Hoje o modal de templates mostra **todas as variaveis de todos os formularios misturadas**, sem indicar de qual formulario vem cada uma
 
-**Corpo — Reorganizar layout:**
-- Mover telefone e email para o rodapé
-- Tags (origem, temperatura, duplicado) ficam logo abaixo do nome
-- Imóvel de interesse: criar mini-container `bg-black/20 p-2 rounded-md` com ícone `Building2` + texto `text-[#a6c8e1] text-xs`
+### Solucao: Duas mudancas
 
-**Rodapé — Separação clara:**
-- Linha `border-t border-white/5 mt-3 pt-3`
-- Lado esquerdo: telefone e email empilhados `text-gray-400 text-xs font-mono`
-- Lado direito: ícones de ação (WhatsApp, Phone, Email) que ficam `text-gray-500` e ganham `hover:text-[#81afd1] hover:scale-110`
+#### 1. Confirmar a abordagem correta de configuracao (sem codigo)
 
-#### 2. `src/components/ui/avatar-fallback-colored.tsx` — Adicionar variante "dark"
+Sim, o correto e:
+- Criar **um template por formulario/imovel** com as variaveis especificas daquele formulario
+- Usar **regras condicionais de saudacao** (que ja existem no sistema) vinculadas a campanha, formulario ou imovel
+- Cada regra aponta para o template correto com as variaveis daquele formulario
 
-Adicionar uma prop `variant?: "gradient" | "dark"` para que o Kanban use a versão escura (`bg-[#465666] text-[#a6c8e1]`) enquanto outros lugares mantêm o gradiente.
+#### 2. Melhorar o seletor de variaveis no modal de templates (mudanca de codigo)
 
-#### 3. `src/pages/Leads.tsx` (linhas 1256-1284) — Colunas do Kanban
+Agrupar as variaveis por formulario no modal `WhatsAppTemplatesModal`, para ficar claro de qual formulario vem cada variavel.
 
-- Column container: já usa `bg-transparent` — manter
-- Column header: trocar `border-border/50` por `border-white/10`
-- Titulo: `text-white font-medium text-sm` (trocar de `text-gray-300`)
-- Badge contador: trocar `Badge variant="secondary"` por badge translúcida `bg-white/10 text-white rounded-full px-2 py-0.5 text-xs font-bold` (remover cor inline do status)
-- Manter bolinha colorida com glow como está
+**Mudancas em `WhatsAppTemplatesModal.tsx`:**
 
-### O que NÃO muda
-- TemperatureBadge e OriginBadge (já estão no estilo neon correto)
-- Lógica de drag-and-drop, portals, filtros
-- WhatsAppChatModal
-- Dropdown menu de ações (Ver, Editar, Deletar)
+- Alterar `fetchFormVars` para buscar tambem o `form_name` via join com `meta_form_configs`
+- Na interface `FormVar`, adicionar campo `formName`
+- Na secao expandivel de variaveis, agrupar por nome do formulario com headers visuais (ex: "Cidade-Jardim", "Ilha Pura v6")
+- Cada grupo mostra apenas as variaveis daquele formulario
+
+**Layout proposto:**
+
+```text
+▼ Mostrar variaveis de formulario Meta (12)
+
+  ── Cidade-Jardim ──
+  {form_qual_seu_momento...}   Qual seu momento de decisao...
+  {form_você_já_investe...}    Voce ja investe em imoveis?
+  {form_qual_valor_você...}    Qual valor voce considera...
+
+  ── Ilha Pura v6 ──
+  {form_Para_entendermos...}   Para entendermos melhor...
+  {form_Qual_o_valor...}       Qual o valor maximo...
+  {form_Você_está_buscando...} Voce esta buscando...
+
+  ── Art Wood ──
+  ...
+```
+
+### Arquivo a modificar
+
+| Arquivo | Mudanca |
+|---------|---------|
+| `src/components/whatsapp/WhatsAppTemplatesModal.tsx` | Agrupar variaveis por formulario, buscar form_name via join |
+
+### Impacto
+
+- Nenhuma mudanca no backend ou edge functions
+- Apenas melhoria de UX no seletor de variaveis
+- O sistema de substituicao de variaveis ja funciona corretamente — o problema e de configuracao (template errado para o formulario do lead)
 

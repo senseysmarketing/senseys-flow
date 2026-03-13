@@ -1258,20 +1258,16 @@ const Leads = () => {
                         >
                           {/* Column header - Compact */}
                           <div 
-                            className="flex items-center gap-2 mb-3 pb-3 border-b border-border/50 shrink-0"
+                            className="flex items-center gap-2 mb-3 pb-3 border-b border-white/10 shrink-0"
                           >
                             <div 
                               className="w-2.5 h-2.5 rounded-full" 
                               style={{ backgroundColor: status.color, boxShadow: `0 0 8px ${status.color}60` }}
                             />
-                            <h3 className="text-gray-300 font-medium text-sm flex-1">{status.name}</h3>
-                            <Badge 
-                              variant="secondary" 
-                              className="font-bold text-xs px-2 py-0.5"
-                              style={{ backgroundColor: `${status.color}20`, color: status.color }}
-                            >
+                            <h3 className="text-white font-medium text-sm flex-1">{status.name}</h3>
+                            <span className="bg-white/10 text-white rounded-full px-2 py-0.5 text-xs font-bold">
                               {statusLeads.length}
-                            </Badge>
+                            </span>
                             <Button
                               variant="ghost"
                               size="sm"
