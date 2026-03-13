@@ -414,11 +414,11 @@ const LeadDetailModal = ({ lead, open, onOpenChange, onEdit }: LeadDetailModalPr
 
         {/* Detalhes tab content */}
         {activeTab === 'details' && (
-        <div className="p-6 space-y-6 overflow-y-auto flex-1">
+        <div className="p-6 space-y-5 overflow-y-auto flex-1">
           {/* Alerta de Lead Recorrente */}
           {lead.is_duplicate && duplicateLeadInfo && (
             <>
-              <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
                 <div className="flex items-center gap-2 mb-3">
                   <AlertTriangle className="h-5 w-5 text-amber-500" />
                   <h3 className="font-semibold text-amber-600 dark:text-amber-400">Lead Recorrente</h3>
