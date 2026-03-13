@@ -238,6 +238,7 @@ const Dashboard = () => {
                     phone={lead.phone}
                     leadName={lead.name}
                     leadId={lead.id}
+                    variant="icon"
                     className="h-9 w-9 p-0 rounded-full hover:shadow-glow transition-shadow"
                   />
                   <Button
