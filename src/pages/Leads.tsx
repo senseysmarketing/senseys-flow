@@ -1264,7 +1264,7 @@ const Leads = () => {
                               className="w-2.5 h-2.5 rounded-full" 
                               style={{ backgroundColor: status.color, boxShadow: `0 0 8px ${status.color}60` }}
                             />
-                            <h3 className="font-semibold text-sm flex-1">{status.name}</h3>
+                            <h3 className="text-gray-300 font-medium text-sm flex-1">{status.name}</h3>
                             <Badge 
                               variant="secondary" 
                               className="font-bold text-xs px-2 py-0.5"
