@@ -61,8 +61,6 @@ export function FloatingSidebar() {
 
   if (isMobile) return null;
 
-  const logoSrc = account?.logo_url || logoAlternativaBranca;
-
   return (
     <motion.nav
       className="fixed left-0 top-0 h-screen z-50 flex flex-col bg-[#1e1e20] border-r border-white/5 overflow-hidden"
