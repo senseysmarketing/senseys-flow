@@ -26,7 +26,10 @@ import {
   Upload,
   ChevronRight,
   Send,
+  Download,
 } from "lucide-react";
+import { toast } from "sonner";
+import { exportLeadsToExcel } from "./LeadsExport";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useIsMobile } from "@/hooks/use-mobile";
 import LeadStatusManager from "./LeadStatusManager";
@@ -36,11 +39,12 @@ import FollowUpSettings from "@/components/FollowUpSettings";
 import DataImporter from "@/components/DataImporter";
 import MetaEventMappingManager from "@/components/MetaEventMappingManager";
 
-type SettingsTab = "status" | "distribution" | "qualification" | "followup" | "import" | "meta-events";
+type SettingsTab = "status" | "distribution" | "qualification" | "followup" | "import" | "meta-events" | "export";
 
 interface LeadsSettingsSheetProps {
   children?: React.ReactNode;
   onOpenTab?: (tab: SettingsTab) => void;
+  filteredLeads?: any[];
 }
 
 const settingsItems = [
@@ -81,9 +85,15 @@ const settingsItems = [
     label: "Eventos Meta CAPI",
     description: "Configure o disparo de eventos para otimização de campanhas",
   },
+  {
+    id: "export" as SettingsTab,
+    icon: Download,
+    label: "Exportar Leads",
+    description: "Exporte os leads filtrados em planilha Excel (.xlsx)",
+  },
 ];
 
-const modalConfig: Record<SettingsTab, { title: string; description: string; maxWidth: string }> = {
+const modalConfig: Record<Exclude<SettingsTab, "export">, { title: string; description: string; maxWidth: string }> = {
   status: {
     title: "Status dos Leads",
     description: "Personalize os status do funil de vendas",
@@ -116,15 +126,24 @@ const modalConfig: Record<SettingsTab, { title: string; description: string; max
   },
 };
 
-export const LeadsSettingsSheet = ({ children, onOpenTab }: LeadsSettingsSheetProps) => {
+export const LeadsSettingsSheet = ({ children, onOpenTab, filteredLeads }: LeadsSettingsSheetProps) => {
   const [open, setOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<SettingsTab | null>(null);
   const { hasPermission } = usePermissions();
   const isMobile = useIsMobile();
 
   const handleItemClick = (tab: SettingsTab) => {
+    if (tab === "export") {
+      setOpen(false);
+      if (!filteredLeads || filteredLeads.length === 0) {
+        toast.error("Nenhum lead para exportar");
+        return;
+      }
+      exportLeadsToExcel(filteredLeads);
+      toast.success(`${filteredLeads.length} leads exportados com sucesso`);
+      return;
+    }
     setOpen(false);
-    // Small delay to let sheet close animation finish before opening dialog
     setTimeout(() => setActiveModal(tab), 150);
   };
 
@@ -151,7 +170,7 @@ export const LeadsSettingsSheet = ({ children, onOpenTab }: LeadsSettingsSheetPr
     }
   };
 
-  const currentConfig = activeModal ? modalConfig[activeModal] : null;
+  const currentConfig = activeModal && activeModal !== "export" ? modalConfig[activeModal] : null;
 
   return (
     <>
