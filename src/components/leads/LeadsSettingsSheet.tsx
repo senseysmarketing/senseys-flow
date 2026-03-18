@@ -85,6 +85,12 @@ const settingsItems = [
     label: "Eventos Meta CAPI",
     description: "Configure o disparo de eventos para otimização de campanhas",
   },
+  {
+    id: "export" as SettingsTab,
+    icon: Download,
+    label: "Exportar Leads",
+    description: "Exporte os leads filtrados em planilha Excel (.xlsx)",
+  },
 ];
 
 const modalConfig: Record<SettingsTab, { title: string; description: string; maxWidth: string }> = {
