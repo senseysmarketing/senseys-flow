@@ -126,15 +126,24 @@ const modalConfig: Record<SettingsTab, { title: string; description: string; max
   },
 };
 
-export const LeadsSettingsSheet = ({ children, onOpenTab }: LeadsSettingsSheetProps) => {
+export const LeadsSettingsSheet = ({ children, onOpenTab, filteredLeads }: LeadsSettingsSheetProps) => {
   const [open, setOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<SettingsTab | null>(null);
   const { hasPermission } = usePermissions();
   const isMobile = useIsMobile();
 
   const handleItemClick = (tab: SettingsTab) => {
+    if (tab === "export") {
+      setOpen(false);
+      if (!filteredLeads || filteredLeads.length === 0) {
+        toast.error("Nenhum lead para exportar");
+        return;
+      }
+      exportLeadsToExcel(filteredLeads);
+      toast.success(`${filteredLeads.length} leads exportados com sucesso`);
+      return;
+    }
     setOpen(false);
-    // Small delay to let sheet close animation finish before opening dialog
     setTimeout(() => setActiveModal(tab), 150);
   };
 

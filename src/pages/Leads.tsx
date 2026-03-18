@@ -910,7 +910,7 @@ const Leads = () => {
           
           <div className="flex gap-2">
             {/* Settings Sheet */}
-            <LeadsSettingsSheet />
+            <LeadsSettingsSheet filteredLeads={filteredLeads} />
             
             {/* New Lead Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
