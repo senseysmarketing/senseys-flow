@@ -93,7 +93,7 @@ const settingsItems = [
   },
 ];
 
-const modalConfig: Record<SettingsTab, { title: string; description: string; maxWidth: string }> = {
+const modalConfig: Record<Exclude<SettingsTab, "export">, { title: string; description: string; maxWidth: string }> = {
   status: {
     title: "Status dos Leads",
     description: "Personalize os status do funil de vendas",
