@@ -39,11 +39,12 @@ import FollowUpSettings from "@/components/FollowUpSettings";
 import DataImporter from "@/components/DataImporter";
 import MetaEventMappingManager from "@/components/MetaEventMappingManager";
 
-type SettingsTab = "status" | "distribution" | "qualification" | "followup" | "import" | "meta-events";
+type SettingsTab = "status" | "distribution" | "qualification" | "followup" | "import" | "meta-events" | "export";
 
 interface LeadsSettingsSheetProps {
   children?: React.ReactNode;
   onOpenTab?: (tab: SettingsTab) => void;
+  filteredLeads?: any[];
 }
 
 const settingsItems = [
