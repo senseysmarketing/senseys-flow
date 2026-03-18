@@ -170,7 +170,7 @@ export const LeadsSettingsSheet = ({ children, onOpenTab, filteredLeads }: Leads
     }
   };
 
-  const currentConfig = activeModal ? modalConfig[activeModal] : null;
+  const currentConfig = activeModal && activeModal !== "export" ? modalConfig[activeModal] : null;
 
   return (
     <>
