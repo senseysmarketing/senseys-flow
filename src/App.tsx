@@ -24,39 +24,40 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <AuthProvider>
-        <PermissionsProvider>
-          <AccountProvider>
-            <FirebaseMessagingProvider>
-              <Toaster />
-              <Sonner />
-              <BrowserRouter>
-                <Routes>
-                  <Route path="/" element={<Layout><Index /></Layout>} />
-                  <Route path="/auth" element={<Layout><Auth /></Layout>} />
-                  <Route path="/auth/support-callback" element={<SupportCallback />} />
-                  <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
-                  <Route path="/leads" element={<Layout fullHeight><Leads /></Layout>} />
-                  <Route path="/properties" element={<Layout><Properties /></Layout>} />
-                  <Route path="/calendar" element={<Layout><Calendar /></Layout>} />
-                  <Route path="/reports" element={<Layout><Reports /></Layout>} />
-                  <Route path="/settings" element={<Layout><Settings /></Layout>} />
-                  <Route path="/conversations" element={<Layout fullHeight><Conversations /></Layout>} />
-                  <Route path="/integrations" element={<Layout><Integrations /></Layout>} />
-                  <Route path="/agency-admin" element={<Layout><AgencyAdmin /></Layout>} />
-                  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                  <Route path="*" element={<Layout><NotFound /></Layout>} />
-                </Routes>
-              </BrowserRouter>
-            </FirebaseMessagingProvider>
-          </AccountProvider>
-        </PermissionsProvider>
-      </AuthProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <AuthProvider>
+          <PermissionsProvider>
+            <AccountProvider>
+              <FirebaseMessagingProvider>
+                <Toaster />
+                <Sonner />
+                <BrowserRouter>
+                  <Routes>
+                    <Route path="/" element={<Layout><Index /></Layout>} />
+                    <Route path="/auth" element={<Layout><Auth /></Layout>} />
+                    <Route path="/auth/support-callback" element={<SupportCallback />} />
+                    <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
+                    <Route path="/leads" element={<Layout fullHeight><Leads /></Layout>} />
+                    <Route path="/properties" element={<Layout><Properties /></Layout>} />
+                    <Route path="/calendar" element={<Layout><Calendar /></Layout>} />
+                    <Route path="/reports" element={<Layout><Reports /></Layout>} />
+                    <Route path="/settings" element={<Layout><Settings /></Layout>} />
+                    <Route path="/conversations" element={<Layout fullHeight><Conversations /></Layout>} />
+                    <Route path="/integrations" element={<Layout><Integrations /></Layout>} />
+                    <Route path="/agency-admin" element={<Layout><AgencyAdmin /></Layout>} />
+                    <Route path="*" element={<Layout><NotFound /></Layout>} />
+                  </Routes>
+                </BrowserRouter>
+              </FirebaseMessagingProvider>
+            </AccountProvider>
+          </PermissionsProvider>
+        </AuthProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;
