@@ -40,8 +40,9 @@ import MetaFormScoringManager from "@/components/MetaFormScoringManager";
 import FollowUpSettings from "@/components/FollowUpSettings";
 import DataImporter from "@/components/DataImporter";
 import MetaEventMappingManager from "@/components/MetaEventMappingManager";
+import { AiFunnelToggle } from "@/components/settings/AiFunnelToggle";
 
-type SettingsTab = "status" | "distribution" | "qualification" | "followup" | "import" | "meta-events" | "export" | "ai-logs";
+type SettingsTab = "status" | "distribution" | "qualification" | "followup" | "import" | "meta-events" | "export" | "ai-toggle" | "ai-logs";
 
 interface LeadsSettingsSheetProps {
   children?: React.ReactNode;
@@ -94,6 +95,12 @@ const settingsItems = [
     description: "Exporte os leads filtrados em planilha Excel (.xlsx)",
   },
   {
+    id: "ai-toggle" as SettingsTab,
+    icon: Brain,
+    label: "IA de Avanço Automático",
+    description: "Ative a IA para avançar leads no funil automaticamente",
+  },
+  {
     id: "ai-logs" as SettingsTab,
     icon: Brain,
     label: "Logs da IA",
@@ -131,6 +138,11 @@ const modalConfig: Record<Exclude<SettingsTab, "export">, { title: string; descr
     title: "Eventos Meta CAPI",
     description: "Configure eventos de conversão enviados ao Meta",
     maxWidth: "!max-w-5xl",
+  },
+  "ai-toggle": {
+    title: "IA de Avanço Automático",
+    description: "Ative a IA para avançar leads no funil automaticamente",
+    maxWidth: "!max-w-lg",
   },
   "ai-logs": {
     title: "Logs da IA de Funil",
@@ -178,6 +190,8 @@ export const LeadsSettingsSheet = ({ children, onOpenTab, filteredLeads }: Leads
         return <DataImporter />;
       case "meta-events":
         return <MetaEventMappingManager />;
+      case "ai-toggle":
+        return <AiFunnelToggle />;
       case "ai-logs":
         return <AiFunnelLogs />;
       default:
