@@ -62,8 +62,19 @@ const CreateLeadDialog = ({ open, onOpenChange, statuses, canAssignLeads, onSucc
       const { data: insertedLead, error } = await supabase
         .from("leads")
         .insert([{
-          ...data,
+          name: data.name,
+          phone: data.phone,
+          email: data.email || null,
+          interesse: data.interesse || null,
+          observacoes: data.observacoes || null,
+          origem: data.origem || null,
+          campanha: data.campanha || null,
+          conjunto: data.conjunto || null,
+          anuncio: data.anuncio || null,
           status_id: statusId,
+          temperature: data.temperature,
+          assigned_broker_id: data.assigned_broker_id || null,
+          property_id: data.property_id || null,
           account_id: profile.account_id,
           is_duplicate: isDuplicate,
           duplicate_of_lead_id: duplicateOfLeadId,
