@@ -28,6 +28,7 @@ import {
   ChevronRight,
   Send,
   Download,
+  Brain,
 } from "lucide-react";
 import { toast } from "sonner";
 import { exportLeadsToExcel } from "./LeadsExport";
