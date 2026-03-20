@@ -1,29 +1,48 @@
 
 
-## Corrigir Duplicação de Atividade "Status Alterado" no WhatsApp Webhook
+## Corrigir Redundância no Histórico de Atividades ao Criar Lead
 
 ### Problema
-Quando um lead responde via WhatsApp e é movido de "Novo Lead" para "Em Contato":
-1. O **webhook** faz `UPDATE leads SET status_id = ...` e depois insere manualmente uma atividade com descrição "Lead respondeu via WhatsApp - movido automaticamente para Em Contato"
-2. O **trigger do banco** (`track_lead_changes`) detecta a mudança de `status_id` e insere automaticamente outra atividade "Status alterado por Sistema"
 
-Resultado: duas entradas redundantes na timeline.
+Quando um lead chega (ex: via Facebook), 3 atividades são criadas simultaneamente:
+
+1. **Trigger do banco (INSERT)** → "Lead criado por Sistema"
+2. **meta-webhook (manual)** → "Lead via Facebook (campanha) - Frio"
+3. **apply-distribution-rules (manual)** → "Lead atribuído automaticamente a X via regra Y"
+
+Os itens 1 e 2 são redundantes — ambos registram a criação do lead. A solução é unificar em uma única entrada.
 
 ### Solução
-Remover o INSERT manual de `lead_activities` do `whatsapp-webhook/index.ts` (linhas 601-610) e, em vez disso, melhorar a descrição que o trigger gera para chamadas do sistema.
 
-Para isso:
-1. **No `whatsapp-webhook/index.ts`**: Remover o bloco de insert manual na `lead_activities` (linhas 601-617). O trigger já cuida disso.
-2. **No trigger `track_lead_changes`**: Alterar a descrição para ser mais informativa quando `user_id IS NULL` (chamadas do sistema/service_role). Em vez de "Status alterado por Sistema", usar "Lead respondeu via WhatsApp - movido automaticamente".
+#### 1. Melhorar o trigger `log_lead_activity()` no INSERT
 
-Porém, o trigger não sabe **por que** o status mudou (se foi WhatsApp, IA, etc). A abordagem mais limpa:
+Alterar a descrição do INSERT no trigger para incluir informações de origem e temperatura do lead, gerando algo como:
 
-**Abordagem final**: Remover apenas o INSERT manual do webhook, mantendo o trigger como fonte única. A descrição "Status alterado por Sistema" é suficiente e não redundante.
+`"Lead via Facebook - Frio"` (quando origem existe)  
+`"Lead criado por João"` (quando criado manualmente por um usuário logado)
 
-### Arquivo modificado
-- `supabase/functions/whatsapp-webhook/index.ts` — Remover linhas 601-617 (o insert manual + error handling da atividade), mantendo apenas o log do console
+Lógica: se `NEW.origem IS NOT NULL`, usar origem + temperatura na descrição. Caso contrário, manter "Lead criado por {user_name}".
 
-### Detalhes Técnicos
-- O trigger `track_lead_changes` já captura toda mudança de `status_id` automaticamente
-- A mesma correção deve ser aplicada à edge function `ai-funnel-advance/index.ts` que também faz insert manual (mas essa foi criada recentemente sabendo do trigger — verificar se há duplicação lá também)
+**Migração SQL**: `CREATE OR REPLACE FUNCTION public.log_lead_activity()` — alterar apenas o bloco `IF TG_OP = 'INSERT'`.
+
+#### 2. Remover insert manual do `meta-webhook/index.ts`
+
+Remover a linha 251 que insere manualmente a atividade "created". O trigger já cuidará disso com as informações de origem.
+
+#### 3. Manter o "assigned" do `apply-distribution-rules`
+
+Este não é redundante — registra a atribuição ao corretor, que é uma ação separada da criação. Manter como está.
+
+### Resultado Final
+
+Apenas 2 entradas no histórico ao criar um lead com distribuição:
+- "Lead via Facebook - Frio" (trigger)
+- "Lead atribuído automaticamente a Gabriel via regra X" (distribution)
+
+### Arquivos Modificados
+
+| Arquivo | Ação |
+|---------|------|
+| Nova migração SQL | Atualizar função `log_lead_activity()` |
+| `supabase/functions/meta-webhook/index.ts` | Remover insert manual (linha 251) |
 
