@@ -1,3 +1,4 @@
+import { Fragment, createElement } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -24,39 +25,60 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+const withLayout = (page: unknown, fullHeight = false) =>
+  createElement(Layout, fullHeight ? { fullHeight: true } : null, page);
+
+const routes = [
+  createElement(Route, { key: "/", path: "/", element: withLayout(createElement(Index)) }),
+  createElement(Route, { key: "/auth", path: "/auth", element: withLayout(createElement(Auth)) }),
+  createElement(Route, { key: "/auth/support-callback", path: "/auth/support-callback", element: createElement(SupportCallback) }),
+  createElement(Route, { key: "/dashboard", path: "/dashboard", element: withLayout(createElement(Dashboard)) }),
+  createElement(Route, { key: "/leads", path: "/leads", element: withLayout(createElement(Leads), true) }),
+  createElement(Route, { key: "/properties", path: "/properties", element: withLayout(createElement(Properties)) }),
+  createElement(Route, { key: "/calendar", path: "/calendar", element: withLayout(createElement(Calendar)) }),
+  createElement(Route, { key: "/reports", path: "/reports", element: withLayout(createElement(Reports)) }),
+  createElement(Route, { key: "/settings", path: "/settings", element: withLayout(createElement(Settings)) }),
+  createElement(Route, { key: "/conversations", path: "/conversations", element: withLayout(createElement(Conversations), true) }),
+  createElement(Route, { key: "/integrations", path: "/integrations", element: withLayout(createElement(Integrations)) }),
+  createElement(Route, { key: "/agency-admin", path: "/agency-admin", element: withLayout(createElement(AgencyAdmin)) }),
+  createElement(Route, { key: "*", path: "*", element: withLayout(createElement(NotFound)) }),
+];
+
 function AppProviders() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <AuthProvider>
-          <PermissionsProvider>
-            <AccountProvider>
-              <FirebaseMessagingProvider>
-                <Toaster />
-                <Sonner />
-                <BrowserRouter>
-                  <Routes>
-                    <Route path="/" element={<Layout><Index /></Layout>} />
-                    <Route path="/auth" element={<Layout><Auth /></Layout>} />
-                    <Route path="/auth/support-callback" element={<SupportCallback />} />
-                    <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
-                    <Route path="/leads" element={<Layout fullHeight><Leads /></Layout>} />
-                    <Route path="/properties" element={<Layout><Properties /></Layout>} />
-                    <Route path="/calendar" element={<Layout><Calendar /></Layout>} />
-                    <Route path="/reports" element={<Layout><Reports /></Layout>} />
-                    <Route path="/settings" element={<Layout><Settings /></Layout>} />
-                    <Route path="/conversations" element={<Layout fullHeight><Conversations /></Layout>} />
-                    <Route path="/integrations" element={<Layout><Integrations /></Layout>} />
-                    <Route path="/agency-admin" element={<Layout><AgencyAdmin /></Layout>} />
-                    <Route path="*" element={<Layout><NotFound /></Layout>} />
-                  </Routes>
-                </BrowserRouter>
-              </FirebaseMessagingProvider>
-            </AccountProvider>
-          </PermissionsProvider>
-        </AuthProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
+  return createElement(
+    QueryClientProvider,
+    { client: queryClient },
+    createElement(
+      TooltipProvider,
+      null,
+      createElement(
+        AuthProvider,
+        null,
+        createElement(
+          PermissionsProvider,
+          null,
+          createElement(
+            AccountProvider,
+            null,
+            createElement(
+              FirebaseMessagingProvider,
+              null,
+              createElement(
+                Fragment,
+                null,
+                createElement(Toaster),
+                createElement(Sonner),
+                createElement(
+                  BrowserRouter,
+                  null,
+                  createElement(Routes, null, ...routes),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
   );
 }
 
