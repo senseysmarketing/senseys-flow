@@ -95,6 +95,12 @@ const settingsItems = [
     description: "Exporte os leads filtrados em planilha Excel (.xlsx)",
   },
   {
+    id: "ai-toggle" as SettingsTab,
+    icon: Brain,
+    label: "IA de Avanço Automático",
+    description: "Ative a IA para avançar leads no funil automaticamente",
+  },
+  {
     id: "ai-logs" as SettingsTab,
     icon: Brain,
     label: "Logs da IA",
