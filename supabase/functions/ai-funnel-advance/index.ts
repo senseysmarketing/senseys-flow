@@ -338,16 +338,7 @@ REGRAS:
       messages_analyzed: messages.length,
     });
 
-    // Log in lead_activities (timeline)
-    await supabase.from("lead_activities").insert({
-      lead_id: lead.id,
-      account_id: accountId,
-      activity_type: "status_changed",
-      description: `[IA] ${reason}`,
-      old_value: currentStatus.name,
-      new_value: newStatus.name,
-      created_by: null,
-    });
+    // Activity is logged automatically by the DB trigger (log_lead_activity)
 
     // Trigger Meta CAPI event if mapping exists
     try {
