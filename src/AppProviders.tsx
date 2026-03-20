@@ -1,4 +1,4 @@
-import { Fragment, createElement } from "react";
+import { Fragment, createElement, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -25,8 +25,8 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const withLayout = (page: unknown, fullHeight = false) =>
-  createElement(Layout, fullHeight ? { fullHeight: true } : null, page);
+const withLayout = (page: ReactNode, fullHeight = false) =>
+  createElement(Layout, fullHeight ? { fullHeight: true, children: page } : { children: page });
 
 const routes = [
   createElement(Route, { key: "/", path: "/", element: withLayout(createElement(Index)) }),
