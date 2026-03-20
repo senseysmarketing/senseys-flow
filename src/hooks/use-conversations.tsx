@@ -55,11 +55,6 @@ export function useConversations() {
 
   const refetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const debouncedRefetch = useCallback(() => {
-    if (refetchTimerRef.current) clearTimeout(refetchTimerRef.current);
-    refetchTimerRef.current = setTimeout(() => fetchConversationsInner(), 300);
-  }, []);
-
   const fetchConversationsInner = useCallback(async () => {
     if (!accountId) return;
 
