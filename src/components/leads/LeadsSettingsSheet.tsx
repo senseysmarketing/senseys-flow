@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AiFunnelLogs } from "@/components/settings/AiFunnelLogs";
 import {
   Sheet,
   SheetContent,
