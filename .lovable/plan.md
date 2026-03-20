@@ -1,72 +1,68 @@
 
 
-## Diagnostico e Solucao: Variaveis de Formulario nos Templates WhatsApp
+## Correção: Conversas do WhatsApp não aparecendo em tempo real
 
-### O que esta acontecendo
+### Diagnóstico
 
-Sua analise esta **100% correta**. O lead Cristal Lorca veio do formulario **Cidade-Jardim** (form_id: 1852010645681625) e possui estes campos salvos:
+Ao analisar o hook `use-conversations.tsx`, identifiquei dois problemas:
 
-- `você_já_investe_em_imóveis?` → sim, tenho portfólio...
-- `qual_seu_momento_de_decisão_para_investir?` → 6 meses
-- `qual_valor_você_considera_investir_neste_empreendimento?` → até R$ 300 mil
+1. **Realtime UPDATE ignora conversas fora da lista**: Quando uma conversa recebe um UPDATE (nova mensagem), o handler apenas atualiza conversas já presentes no state local (`prev.map(...)`). Se a conversa não estava na lista inicial (por exemplo, `session_phone` foi corrigido ou era `null` e agora tem valor), ela nunca aparece sem refresh manual.
 
-O template que foi enviado provavelmente usa uma variavel do formulario **Ilha Pura** (ex: `{form_você_está_buscando_imóvel_para_moradia_própria_ou_para_investimento?_}`), que **nao existe** nos dados desse lead. Por isso aparece vazio na mensagem.
+2. **Realtime INSERT faz refetch completo** mas o **UPDATE não** — quando chega uma mensagem nova em conversa existente, apenas os campos são atualizados in-place. Se a conversa foi filtrada na query inicial (por `session_phone` ou `@lid`), ela fica invisível permanentemente até refresh.
 
-### A conta tem 6+ formularios com perguntas sobrepostas
+### Solução no `src/hooks/use-conversations.tsx`
 
-- Art Wood, Cidade-Jardim, Ilha Pura v3/v4/v5/v6, Ipanema v2
-- Varias perguntas sao **iguais** entre formularios (ex: "fase da compra", "valor maximo")
-- Mas o Cidade-Jardim tem perguntas **exclusivas** (ex: "Voce ja investe em imoveis?")
-- Hoje o modal de templates mostra **todas as variaveis de todos os formularios misturadas**, sem indicar de qual formulario vem cada uma
+#### Correção 1: UPDATE handler com fallback para refetch
 
-### Solucao: Duas mudancas
+No handler de UPDATE (linhas 190-199), se a conversa atualizada não existir no state local, fazer um refetch para incluí-la:
 
-#### 1. Confirmar a abordagem correta de configuracao (sem codigo)
-
-Sim, o correto e:
-- Criar **um template por formulario/imovel** com as variaveis especificas daquele formulario
-- Usar **regras condicionais de saudacao** (que ja existem no sistema) vinculadas a campanha, formulario ou imovel
-- Cada regra aponta para o template correto com as variaveis daquele formulario
-
-#### 2. Melhorar o seletor de variaveis no modal de templates (mudanca de codigo)
-
-Agrupar as variaveis por formulario no modal `WhatsAppTemplatesModal`, para ficar claro de qual formulario vem cada variavel.
-
-**Mudancas em `WhatsAppTemplatesModal.tsx`:**
-
-- Alterar `fetchFormVars` para buscar tambem o `form_name` via join com `meta_form_configs`
-- Na interface `FormVar`, adicionar campo `formName`
-- Na secao expandivel de variaveis, agrupar por nome do formulario com headers visuais (ex: "Cidade-Jardim", "Ilha Pura v6")
-- Cada grupo mostra apenas as variaveis daquele formulario
-
-**Layout proposto:**
-
-```text
-▼ Mostrar variaveis de formulario Meta (12)
-
-  ── Cidade-Jardim ──
-  {form_qual_seu_momento...}   Qual seu momento de decisao...
-  {form_você_já_investe...}    Voce ja investe em imoveis?
-  {form_qual_valor_você...}    Qual valor voce considera...
-
-  ── Ilha Pura v6 ──
-  {form_Para_entendermos...}   Para entendermos melhor...
-  {form_Qual_o_valor...}       Qual o valor maximo...
-  {form_Você_está_buscando...} Voce esta buscando...
-
-  ── Art Wood ──
-  ...
+```typescript
+(payload) => {
+  const updated = payload.new as any;
+  setConversations(prev => {
+    const exists = prev.some(c => c.id === updated.id);
+    if (!exists) {
+      // Conversation not in local list — trigger full refetch to enrich with lead data
+      fetchConversations();
+      return prev;
+    }
+    return prev
+      .map(c => c.id === updated.id ? { ...c, ...updated } : c)
+      .sort((a, b) =>
+        new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime()
+      );
+  });
+}
 ```
 
-### Arquivo a modificar
+#### Correção 2: Debounce para evitar refetches duplicados
 
-| Arquivo | Mudanca |
-|---------|---------|
-| `src/components/whatsapp/WhatsAppTemplatesModal.tsx` | Agrupar variaveis por formulario, buscar form_name via join |
+Como INSERT já faz refetch e UPDATE agora também pode fazer, adicionar um debounce simples com `useRef` para evitar múltiplos refetches simultâneos:
 
-### Impacto
+```typescript
+const refetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-- Nenhuma mudanca no backend ou edge functions
-- Apenas melhoria de UX no seletor de variaveis
-- O sistema de substituicao de variaveis ja funciona corretamente — o problema e de configuracao (template errado para o formulario do lead)
+const debouncedRefetch = useCallback(() => {
+  if (refetchTimerRef.current) clearTimeout(refetchTimerRef.current);
+  refetchTimerRef.current = setTimeout(() => fetchConversations(), 300);
+}, [fetchConversations]);
+```
+
+Usar `debouncedRefetch` tanto no INSERT handler quanto no fallback do UPDATE handler.
+
+#### Correção 3: Filtro de session_phone mais resiliente
+
+No fetch inicial (linha 95), expandir o filtro `or` para incluir também conversas cujo `session_phone` contenha os últimos 8 dígitos do phone atual (para lidar com variações de formato):
+
+```typescript
+const phoneSuffix = currentPhone.slice(-8);
+// Keep exact match + null + suffix match for format variations
+.or(`session_phone.eq.${currentPhone},session_phone.is.null,session_phone.like.%${phoneSuffix}`)
+```
+
+### O que NÃO muda
+- Lógica de envio de mensagens
+- Enriquecimento com dados do lead
+- Realtime de mensagens individuais (já funciona)
+- RLS policies no banco
 
