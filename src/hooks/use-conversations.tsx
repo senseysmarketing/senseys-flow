@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAccount } from "@/hooks/use-account";
 import { toast } from "@/hooks/use-toast";
@@ -53,7 +53,9 @@ export function useConversations() {
   const [isWhatsAppConnected, setIsWhatsAppConnected] = useState<boolean | null>(null);
   const [sessionPhone, setSessionPhone] = useState<string | null>(null);
 
-  const fetchConversations = useCallback(async () => {
+  const refetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchConversationsInner = useCallback(async () => {
     if (!accountId) return;
 
     // First check WhatsApp connection status
@@ -87,12 +89,13 @@ export function useConversations() {
     }
 
     const currentPhone = session.phone_number;
+    const phoneSuffix = currentPhone.slice(-8);
 
     const { data, error } = await supabase
       .from('whatsapp_conversations')
       .select('*')
       .eq('account_id', accountId)
-      .or(`session_phone.eq.${currentPhone},session_phone.is.null`)
+      .or(`session_phone.eq.${currentPhone},session_phone.is.null,session_phone.like.%${phoneSuffix}`)
       .not('remote_jid', 'like', '%@lid')
       .order('last_message_at', { ascending: false });
 
@@ -174,6 +177,16 @@ export function useConversations() {
     setLoading(false);
   }, [accountId]);
 
+  // Stable reference that debouncedRefetch can use
+  const fetchConversations = fetchConversationsInner;
+
+  // Update debouncedRefetch to use the inner function
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stableDebouncedRefetch = useCallback(() => {
+    if (refetchTimerRef.current) clearTimeout(refetchTimerRef.current);
+    refetchTimerRef.current = setTimeout(() => fetchConversationsInner(), 300);
+  }, [fetchConversationsInner]);
+
   useEffect(() => {
     fetchConversations();
   }, [fetchConversations]);
@@ -188,29 +201,32 @@ export function useConversations() {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'whatsapp_conversations', filter: `account_id=eq.${accountId}` },
         (payload) => {
-          // Update only the affected conversation in local state — no full refetch needed
           const updated = payload.new as any;
-          setConversations(prev =>
-            prev
+          setConversations(prev => {
+            const exists = prev.some(c => c.id === updated.id);
+            if (!exists) {
+              stableDebouncedRefetch();
+              return prev;
+            }
+            return prev
               .map(c => c.id === updated.id ? { ...c, ...updated } : c)
               .sort((a, b) =>
                 new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime()
-              )
-          );
+              );
+          });
         }
       )
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'whatsapp_conversations', filter: `account_id=eq.${accountId}` },
         () => {
-          // New conversation — fetch to enrich with lead data
-          fetchConversations();
+          stableDebouncedRefetch();
         }
       )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [accountId, fetchConversations]);
+  }, [accountId, fetchConversations, stableDebouncedRefetch]);
 
   const filtered = conversations.filter(c => {
     if (!searchTerm) return true;
