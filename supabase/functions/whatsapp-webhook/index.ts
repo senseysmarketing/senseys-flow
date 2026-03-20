@@ -598,23 +598,7 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any, inst
           continue
         }
 
-        const { error: activityError } = await supabase
-          .from('lead_activities')
-          .insert({
-            lead_id: lead.id,
-            account_id: session.account_id,
-            activity_type: 'status_changed',
-            description: 'Lead respondeu via WhatsApp - movido automaticamente para Em Contato',
-            old_value: 'Novo Lead',
-            new_value: 'Em Contato',
-          })
-
-        if (activityError) {
-          // Status was already updated — log the missing audit trail but do not revert
-          console.warn(`[whatsapp-webhook] Lead ${lead.id} moved to "Em Contato" but activity insert failed:`, activityError)
-        } else {
-          console.log(`[whatsapp-webhook] Lead "${lead.name}" moved to "Em Contato"`)
-        }
+        console.log(`[whatsapp-webhook] Lead "${lead.name}" moved to "Em Contato" (activity logged by DB trigger)`)
       }
     }
   }
