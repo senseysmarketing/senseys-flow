@@ -1,27 +1,31 @@
-## IA de Avanço Automático de Leads no Funil
 
-### Status: Implementado ✅
 
-### O que foi criado
+## Mover Toggle da IA para a tela de Leads (LeadsSettingsSheet)
 
-1. **Migration**: Colunas `ai_funnel_enabled` e `last_ai_funnel_run_at` na tabela `accounts` + tabela `ai_funnel_logs` com RLS
-2. **Edge Function `ai-funnel-advance`**: Analisa conversas do WhatsApp via Gemini 3 Flash, avança leads no funil, dispara Meta CAPI, registra na timeline
-3. **Frontend**: Toggle em Configurações > Notificações + modal "Logs da IA" no menu de configurações de Leads
+### Situação Atual
+O `AiFunnelToggle` está na página `Settings.tsx`, mas o usuário quer que ele fique acessível diretamente na tela de Leads, dentro do `LeadsSettingsSheet` (o menu de configurações de leads).
 
-### Pendente (ação manual do usuário)
+### Plano
 
-O cron job precisa ser criado no SQL Editor do Supabase:
+#### 1. Adicionar item "IA de Avanço" no `LeadsSettingsSheet`
 
-```sql
-SELECT cron.schedule(
-  'ai-funnel-advance-hourly',
-  '0 * * * *',
-  $$
-  SELECT net.http_post(
-    url:='https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/ai-funnel-advance',
-    headers:='{"Content-Type":"application/json","Authorization":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVqb2R4bHpsZnZkd3F1ZmtnZG53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgyMzE4MTQsImV4cCI6MjA3MzgwNzgxNH0.lACzxZrVOLEf996sq6oLV5M48k174JGWrsXkvbrWsEM"}'::jsonb,
-    body:='{}'::jsonb
-  ) as request_id;
-  $$
-);
-```
+- Adicionar novo item `"ai-toggle"` no array `settingsItems` com ícone `Brain`, label "IA de Avanço Automático" e descrição "Ative a IA para avançar leads no funil automaticamente"
+- Posicionar antes de "Logs da IA" para ficarem agrupados
+- Adicionar entrada no `modalConfig` e no `renderModalContent` para renderizar o `AiFunnelToggle` dentro do modal
+
+#### 2. Atualizar tipos e imports
+
+- Adicionar `"ai-toggle"` ao tipo `SettingsTab`
+- Importar `AiFunnelToggle` no `LeadsSettingsSheet`
+- Atualizar `modalConfig` com entrada para `"ai-toggle"` (max-w-lg, título "IA de Avanço Automático")
+
+#### 3. Remover da Settings.tsx (opcional)
+
+- Remover o `AiFunnelToggle` da página `Settings.tsx` para evitar duplicação, ou manter em ambos os locais para acesso via Settings também
+
+### Detalhes Técnicos
+
+- Arquivo principal: `src/components/leads/LeadsSettingsSheet.tsx`
+- O `AiFunnelToggle` já é um componente self-contained que busca e atualiza `accounts.ai_funnel_enabled` — basta renderizá-lo dentro do modal
+- Também corrigir o erro de build do `main.tsx` (duplicate data-lov-id) reescrevendo o arquivo
+
