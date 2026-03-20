@@ -486,7 +486,12 @@ const SettingsPage = () => {
         return <TeamManagement />;
 
       case 'notifications':
-        return <NotificationSettings />;
+        return (
+          <div className="space-y-6">
+            <NotificationSettings />
+            <AiFunnelToggle />
+          </div>
+        );
 
       case 'statuses':
         return (
