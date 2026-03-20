@@ -132,6 +132,11 @@ const modalConfig: Record<Exclude<SettingsTab, "export">, { title: string; descr
     description: "Configure eventos de conversão enviados ao Meta",
     maxWidth: "!max-w-5xl",
   },
+  "ai-logs": {
+    title: "Logs da IA de Funil",
+    description: "Histórico de análises automáticas da IA",
+    maxWidth: "!max-w-3xl",
+  },
 };
 
 export const LeadsSettingsSheet = ({ children, onOpenTab, filteredLeads }: LeadsSettingsSheetProps) => {
