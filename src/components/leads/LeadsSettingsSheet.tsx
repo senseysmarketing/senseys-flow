@@ -139,6 +139,11 @@ const modalConfig: Record<Exclude<SettingsTab, "export">, { title: string; descr
     description: "Configure eventos de conversão enviados ao Meta",
     maxWidth: "!max-w-5xl",
   },
+  "ai-toggle": {
+    title: "IA de Avanço Automático",
+    description: "Ative a IA para avançar leads no funil automaticamente",
+    maxWidth: "!max-w-lg",
+  },
   "ai-logs": {
     title: "Logs da IA de Funil",
     description: "Histórico de análises automáticas da IA",
