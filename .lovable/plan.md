@@ -1,68 +1,27 @@
+## IA de Avanço Automático de Leads no Funil
 
+### Status: Implementado ✅
 
-## Correção: Conversas do WhatsApp não aparecendo em tempo real
+### O que foi criado
 
-### Diagnóstico
+1. **Migration**: Colunas `ai_funnel_enabled` e `last_ai_funnel_run_at` na tabela `accounts` + tabela `ai_funnel_logs` com RLS
+2. **Edge Function `ai-funnel-advance`**: Analisa conversas do WhatsApp via Gemini 3 Flash, avança leads no funil, dispara Meta CAPI, registra na timeline
+3. **Frontend**: Toggle em Configurações > Notificações + modal "Logs da IA" no menu de configurações de Leads
 
-Ao analisar o hook `use-conversations.tsx`, identifiquei dois problemas:
+### Pendente (ação manual do usuário)
 
-1. **Realtime UPDATE ignora conversas fora da lista**: Quando uma conversa recebe um UPDATE (nova mensagem), o handler apenas atualiza conversas já presentes no state local (`prev.map(...)`). Se a conversa não estava na lista inicial (por exemplo, `session_phone` foi corrigido ou era `null` e agora tem valor), ela nunca aparece sem refresh manual.
+O cron job precisa ser criado no SQL Editor do Supabase:
 
-2. **Realtime INSERT faz refetch completo** mas o **UPDATE não** — quando chega uma mensagem nova em conversa existente, apenas os campos são atualizados in-place. Se a conversa foi filtrada na query inicial (por `session_phone` ou `@lid`), ela fica invisível permanentemente até refresh.
-
-### Solução no `src/hooks/use-conversations.tsx`
-
-#### Correção 1: UPDATE handler com fallback para refetch
-
-No handler de UPDATE (linhas 190-199), se a conversa atualizada não existir no state local, fazer um refetch para incluí-la:
-
-```typescript
-(payload) => {
-  const updated = payload.new as any;
-  setConversations(prev => {
-    const exists = prev.some(c => c.id === updated.id);
-    if (!exists) {
-      // Conversation not in local list — trigger full refetch to enrich with lead data
-      fetchConversations();
-      return prev;
-    }
-    return prev
-      .map(c => c.id === updated.id ? { ...c, ...updated } : c)
-      .sort((a, b) =>
-        new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime()
-      );
-  });
-}
+```sql
+SELECT cron.schedule(
+  'ai-funnel-advance-hourly',
+  '0 * * * *',
+  $$
+  SELECT net.http_post(
+    url:='https://ujodxlzlfvdwqufkgdnw.supabase.co/functions/v1/ai-funnel-advance',
+    headers:='{"Content-Type":"application/json","Authorization":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVqb2R4bHpsZnZkd3F1ZmtnZG53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgyMzE4MTQsImV4cCI6MjA3MzgwNzgxNH0.lACzxZrVOLEf996sq6oLV5M48k174JGWrsXkvbrWsEM"}'::jsonb,
+    body:='{}'::jsonb
+  ) as request_id;
+  $$
+);
 ```
-
-#### Correção 2: Debounce para evitar refetches duplicados
-
-Como INSERT já faz refetch e UPDATE agora também pode fazer, adicionar um debounce simples com `useRef` para evitar múltiplos refetches simultâneos:
-
-```typescript
-const refetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-const debouncedRefetch = useCallback(() => {
-  if (refetchTimerRef.current) clearTimeout(refetchTimerRef.current);
-  refetchTimerRef.current = setTimeout(() => fetchConversations(), 300);
-}, [fetchConversations]);
-```
-
-Usar `debouncedRefetch` tanto no INSERT handler quanto no fallback do UPDATE handler.
-
-#### Correção 3: Filtro de session_phone mais resiliente
-
-No fetch inicial (linha 95), expandir o filtro `or` para incluir também conversas cujo `session_phone` contenha os últimos 8 dígitos do phone atual (para lidar com variações de formato):
-
-```typescript
-const phoneSuffix = currentPhone.slice(-8);
-// Keep exact match + null + suffix match for format variations
-.or(`session_phone.eq.${currentPhone},session_phone.is.null,session_phone.like.%${phoneSuffix}`)
-```
-
-### O que NÃO muda
-- Lógica de envio de mensagens
-- Enriquecimento com dados do lead
-- Realtime de mensagens individuais (já funciona)
-- RLS policies no banco
-
