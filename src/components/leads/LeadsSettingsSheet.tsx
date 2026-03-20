@@ -93,6 +93,12 @@ const settingsItems = [
     label: "Exportar Leads",
     description: "Exporte os leads filtrados em planilha Excel (.xlsx)",
   },
+  {
+    id: "ai-logs" as SettingsTab,
+    icon: Brain,
+    label: "Logs da IA",
+    description: "Veja o histórico de análises automáticas da IA no funil",
+  },
 ];
 
 const modalConfig: Record<Exclude<SettingsTab, "export">, { title: string; description: string; maxWidth: string }> = {
