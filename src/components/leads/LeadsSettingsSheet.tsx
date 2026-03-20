@@ -40,8 +40,9 @@ import MetaFormScoringManager from "@/components/MetaFormScoringManager";
 import FollowUpSettings from "@/components/FollowUpSettings";
 import DataImporter from "@/components/DataImporter";
 import MetaEventMappingManager from "@/components/MetaEventMappingManager";
+import { AiFunnelToggle } from "@/components/settings/AiFunnelToggle";
 
-type SettingsTab = "status" | "distribution" | "qualification" | "followup" | "import" | "meta-events" | "export" | "ai-logs";
+type SettingsTab = "status" | "distribution" | "qualification" | "followup" | "import" | "meta-events" | "export" | "ai-toggle" | "ai-logs";
 
 interface LeadsSettingsSheetProps {
   children?: React.ReactNode;
