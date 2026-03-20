@@ -178,6 +178,8 @@ export const LeadsSettingsSheet = ({ children, onOpenTab, filteredLeads }: Leads
         return <DataImporter />;
       case "meta-events":
         return <MetaEventMappingManager />;
+      case "ai-logs":
+        return <AiFunnelLogs />;
       default:
         return null;
     }
