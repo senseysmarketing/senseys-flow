@@ -26,6 +26,7 @@ import MetaFormScoringManager from "@/components/MetaFormScoringManager";
 import MetaEventMappingManager from "@/components/MetaEventMappingManager";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import DataImporter from "@/components/DataImporter";
+import { AiFunnelToggle } from "@/components/settings/AiFunnelToggle";
 
 interface Profile {
   id: string;
