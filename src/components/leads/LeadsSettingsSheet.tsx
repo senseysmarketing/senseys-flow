@@ -41,7 +41,7 @@ import FollowUpSettings from "@/components/FollowUpSettings";
 import DataImporter from "@/components/DataImporter";
 import MetaEventMappingManager from "@/components/MetaEventMappingManager";
 
-type SettingsTab = "status" | "distribution" | "qualification" | "followup" | "import" | "meta-events" | "export";
+type SettingsTab = "status" | "distribution" | "qualification" | "followup" | "import" | "meta-events" | "export" | "ai-logs";
 
 interface LeadsSettingsSheetProps {
   children?: React.ReactNode;
