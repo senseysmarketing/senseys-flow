@@ -248,7 +248,7 @@ const handler = async (req: Request): Promise<Response> => {
             });
           }
 
-          await supabase.from("lead_activities").insert({ lead_id: newLead.id, account_id: cfg.account_id, activity_type: "created", description: `Lead via Facebook${campName ? ` (${campName})` : ""} - ${temp === "hot" ? "Quente" : temp === "warm" ? "Morno" : "Frio"}` });
+          // Activity log handled by database trigger (log_lead_activity)
 
           // Notify
           try {
