@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AiFunnelLogs } from "@/components/settings/AiFunnelLogs";
 import {
   Sheet,
   SheetContent,
@@ -27,6 +28,7 @@ import {
   ChevronRight,
   Send,
   Download,
+  Brain,
 } from "lucide-react";
 import { toast } from "sonner";
 import { exportLeadsToExcel } from "./LeadsExport";
@@ -39,7 +41,7 @@ import FollowUpSettings from "@/components/FollowUpSettings";
 import DataImporter from "@/components/DataImporter";
 import MetaEventMappingManager from "@/components/MetaEventMappingManager";
 
-type SettingsTab = "status" | "distribution" | "qualification" | "followup" | "import" | "meta-events" | "export";
+type SettingsTab = "status" | "distribution" | "qualification" | "followup" | "import" | "meta-events" | "export" | "ai-logs";
 
 interface LeadsSettingsSheetProps {
   children?: React.ReactNode;
@@ -91,6 +93,12 @@ const settingsItems = [
     label: "Exportar Leads",
     description: "Exporte os leads filtrados em planilha Excel (.xlsx)",
   },
+  {
+    id: "ai-logs" as SettingsTab,
+    icon: Brain,
+    label: "Logs da IA",
+    description: "Veja o histórico de análises automáticas da IA no funil",
+  },
 ];
 
 const modalConfig: Record<Exclude<SettingsTab, "export">, { title: string; description: string; maxWidth: string }> = {
@@ -123,6 +131,11 @@ const modalConfig: Record<Exclude<SettingsTab, "export">, { title: string; descr
     title: "Eventos Meta CAPI",
     description: "Configure eventos de conversão enviados ao Meta",
     maxWidth: "!max-w-5xl",
+  },
+  "ai-logs": {
+    title: "Logs da IA de Funil",
+    description: "Histórico de análises automáticas da IA",
+    maxWidth: "!max-w-3xl",
   },
 };
 
@@ -165,6 +178,8 @@ export const LeadsSettingsSheet = ({ children, onOpenTab, filteredLeads }: Leads
         return <DataImporter />;
       case "meta-events":
         return <MetaEventMappingManager />;
+      case "ai-logs":
+        return <AiFunnelLogs />;
       default:
         return null;
     }

@@ -72,30 +72,101 @@ export type Database = {
       }
       accounts: {
         Row: {
+          ai_funnel_enabled: boolean | null
           company_name: string | null
           created_at: string
           id: string
+          last_ai_funnel_run_at: string | null
           logo_url: string | null
           name: string
           updated_at: string
         }
         Insert: {
+          ai_funnel_enabled?: boolean | null
           company_name?: string | null
           created_at?: string
           id?: string
+          last_ai_funnel_run_at?: string | null
           logo_url?: string | null
           name: string
           updated_at?: string
         }
         Update: {
+          ai_funnel_enabled?: boolean | null
           company_name?: string | null
           created_at?: string
           id?: string
+          last_ai_funnel_run_at?: string | null
           logo_url?: string | null
           name?: string
           updated_at?: string
         }
         Relationships: []
+      }
+      ai_funnel_logs: {
+        Row: {
+          account_id: string
+          action_taken: string
+          ai_summary: string
+          created_at: string | null
+          id: string
+          lead_id: string
+          messages_analyzed: number | null
+          new_status_id: string | null
+          previous_status_id: string | null
+        }
+        Insert: {
+          account_id: string
+          action_taken: string
+          ai_summary: string
+          created_at?: string | null
+          id?: string
+          lead_id: string
+          messages_analyzed?: number | null
+          new_status_id?: string | null
+          previous_status_id?: string | null
+        }
+        Update: {
+          account_id?: string
+          action_taken?: string
+          ai_summary?: string
+          created_at?: string | null
+          id?: string
+          lead_id?: string
+          messages_analyzed?: number | null
+          new_status_id?: string | null
+          previous_status_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_funnel_logs_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_funnel_logs_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_funnel_logs_new_status_id_fkey"
+            columns: ["new_status_id"]
+            isOneToOne: false
+            referencedRelation: "lead_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_funnel_logs_previous_status_id_fkey"
+            columns: ["previous_status_id"]
+            isOneToOne: false
+            referencedRelation: "lead_status"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       broker_round_robin: {
         Row: {
