@@ -53,7 +53,14 @@ export function useConversations() {
   const [isWhatsAppConnected, setIsWhatsAppConnected] = useState<boolean | null>(null);
   const [sessionPhone, setSessionPhone] = useState<string | null>(null);
 
-  const fetchConversations = useCallback(async () => {
+  const refetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const debouncedRefetch = useCallback(() => {
+    if (refetchTimerRef.current) clearTimeout(refetchTimerRef.current);
+    refetchTimerRef.current = setTimeout(() => fetchConversationsInner(), 300);
+  }, []);
+
+  const fetchConversationsInner = useCallback(async () => {
     if (!accountId) return;
 
     // First check WhatsApp connection status
@@ -87,12 +94,13 @@ export function useConversations() {
     }
 
     const currentPhone = session.phone_number;
+    const phoneSuffix = currentPhone.slice(-8);
 
     const { data, error } = await supabase
       .from('whatsapp_conversations')
       .select('*')
       .eq('account_id', accountId)
-      .or(`session_phone.eq.${currentPhone},session_phone.is.null`)
+      .or(`session_phone.eq.${currentPhone},session_phone.is.null,session_phone.like.%${phoneSuffix}`)
       .not('remote_jid', 'like', '%@lid')
       .order('last_message_at', { ascending: false });
 
