@@ -524,6 +524,37 @@ const DistributionRulesManager = () => {
     }
   };
 
+  const handleRulesReorder = async (result: DropResult) => {
+    if (!result.destination || result.source.index === result.destination.index) return;
+    if (!canManageRules) return;
+
+    const reordered = Array.from(rules);
+    const [moved] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, moved);
+
+    // Assign priorities: top = highest number, bottom = lowest
+    const updatedRules = reordered.map((rule, index) => ({
+      ...rule,
+      priority: (reordered.length - index) * 100,
+    }));
+
+    setRules(updatedRules);
+
+    try {
+      const updates = updatedRules.map(rule =>
+        supabase
+          .from("distribution_rules")
+          .update({ priority: rule.priority })
+          .eq("id", rule.id)
+      );
+      await Promise.all(updates);
+      toast({ title: "Sucesso", description: "Ordem das regras atualizada!" });
+    } catch (error) {
+      console.error("Erro ao reordenar regras:", error);
+      toast({ variant: "destructive", title: "Erro", description: "Não foi possível salvar a nova ordem." });
+      fetchData(); // revert
+    }
+
   const toggleDay = (day: string) => {
     setForm(prev => ({
       ...prev,
