@@ -209,6 +209,17 @@ async function evaluateRule(
       const adsetMatch = conditions.conjunto ? valuesMatch(lead.conjunto, conditions.conjunto) : true;
       return campaignMatch && adsetMatch;
     
+    case 'transaction_type':
+      // Check property transaction type
+      if (!lead.property_id) return false;
+      const { data: txProperty } = await supabase
+        .from('properties')
+        .select('transaction_type')
+        .eq('id', lead.property_id)
+        .single();
+      if (!txProperty) return false;
+      return valuesMatch(txProperty.transaction_type, conditions.transaction_type);
+    
     case 'time_based':
       return evaluateTimeRule(conditions);
     
@@ -404,6 +415,23 @@ async function resolveBroker(
     return await getNextRoundRobinBroker(supabase, accountId, undefined, undefined, participatingBrokerIds);
   }
   
+  // For transaction_type with random mode, pick randomly
+  if (rule.rule_type === 'transaction_type' && rule.conditions?.distribution_mode === 'random') {
+    if (participatingBrokerIds && participatingBrokerIds.length > 0) {
+      const randomIndex = Math.floor(Math.random() * participatingBrokerIds.length);
+      const randomBrokerId = participatingBrokerIds[randomIndex];
+      const { data: broker } = await supabase
+        .from('profiles')
+        .select('user_id, full_name')
+        .eq('user_id', randomBrokerId)
+        .single();
+      if (broker) {
+        console.log(`Random selection: ${broker.full_name}`);
+        return { brokerId: broker.user_id, brokerName: broker.full_name || 'Corretor' };
+      }
+    }
+  }
+
   // For other rules without a target broker, use round robin as fallback
   return await getNextRoundRobinBroker(supabase, accountId, undefined, undefined, participatingBrokerIds);
 }
