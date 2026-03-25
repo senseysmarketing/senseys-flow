@@ -1,64 +1,55 @@
 
 
-## Nova Regra de Distribuição: Por Tipo de Transação do Imóvel
+## Corrigir Erro ao Salvar Regra + Substituir Prioridade Numérica por Drag-and-Drop
 
-### Conceito
+### Problema 1: Erro ao salvar regra
 
-Criar o tipo de regra `transaction_type` que verifica o `transaction_type` do imóvel vinculado ao lead (venda, aluguel ou venda+aluguel) e distribui entre uma lista de corretores participantes, com opção de distribuição **ordenada** (round robin dentro do grupo) ou **aleatória**.
+O usuário logado (`matheuscorretor015@gmail.com`) é um membro de equipe (`is_team_member: true`). A policy RLS da tabela `distribution_rules` exige `is_account_owner() OR has_permission(auth.uid(), 'settings.manage')` para INSERT/UPDATE/DELETE. Além disso, existem **duas policies conflitantes**: uma `FOR SELECT` e uma `FOR ALL` — a `FOR ALL` inclui SELECT também, e quando o Postgres avalia múltiplas policies, ele usa OR entre elas. Porém, para INSERT a policy `FOR ALL` exige a verificação de owner/permissão, e se o usuário não tem essa permissão, o INSERT falha silenciosamente (RLS).
 
-### Mudanças Necessárias
+**Solução**: Verificar se o usuário tem a permissão `settings.manage` na conta e, caso não tenha, exibir mensagem clara. Também verificar se a função `has_permission` está funcionando corretamente para esse usuário. Se o problema for a RLS, ajustar para garantir que a policy funcione para membros com a permissão correta.
 
-#### 1. Edge Function `apply-distribution-rules/index.ts`
+### Problema 2: Substituir prioridade numérica por drag-and-drop
 
-- Adicionar case `transaction_type` no `evaluateRule()`:
-  - Buscar o `transaction_type` do imóvel vinculado ao lead (`properties.transaction_type`)
-  - Comparar com `conditions.transaction_type` (valores: `venda`, `aluguel`, `venda_aluguel`)
-  - Se lead não tem `property_id`, a regra não dá match
+Em vez de um campo numérico de prioridade, as regras serão exibidas como uma lista reordenável (drag-and-drop). A posição na lista define a prioridade: a regra no topo é avaliada primeiro.
 
-- No `resolveBroker()`, tratar o tipo `transaction_type`:
-  - Usar `participating_broker_ids` das conditions
-  - Se `conditions.distribution_mode === 'random'`, escolher aleatoriamente entre os participantes
-  - Se `'ordered'` (padrão), usar o round robin existente filtrado pelos participantes
+### Mudanças
 
-#### 2. Frontend `DistributionRulesManager.tsx`
+#### 1. `src/components/DistributionRulesManager.tsx`
 
-- Adicionar na lista `RULE_TYPES`:
-  ```
-  { value: "transaction_type", label: "Por Tipo de Transação", icon: Building2,
-    description: "Direciona leads conforme o imóvel ser de venda ou aluguel" }
-  ```
+- **Remover** o campo de input numérico de prioridade do formulário de criação/edição (linhas 983-996)
+- **Remover** o badge `P: {rule.priority}` da lista de regras (linhas 1054-1056)
+- **Substituir** a lista estática de regras por uma lista com `DragDropContext/Droppable/Draggable` (já tem a lib `@hello-pangea/dnd` importada)
+- Ao criar uma nova regra, atribuir `priority` automaticamente como o maior valor + 1 (posição no topo)
+- Ao reordenar via drag-and-drop, atualizar o campo `priority` de todas as regras reordenadas no banco (regra no topo = maior priority, embaixo = menor)
+- Adicionar `GripVertical` icon em cada regra para indicar que é arrastável
+- Manter a ordenação `ORDER BY priority DESC` no fetch (regra no topo = maior número)
 
-- Adicionar campo `transaction_type` e `distribution_mode` no estado do form
+#### 2. Nova migração SQL (para corrigir o erro de RLS)
 
-- Adicionar UI condicional no formulário:
-  - Select para tipo de transação: Venda / Aluguel / Venda e Aluguel
-  - Select para modo de distribuição: Ordenada (Round Robin) / Aleatória
-  - Checkbox list de corretores participantes (reutilizar padrão existente)
+- Investigar e corrigir a policy RLS se necessário. A causa provável é que o usuário não tem a permissão `settings.manage`. Vou verificar isso no banco e, se for o caso, a correção é dar a permissão ao usuário ou ajustar o fluxo de UI para bloquear a ação antes.
 
-- Atualizar `buildConditions()` para incluir `transaction_type` e `distribution_mode`
-- Atualizar `getConditionLabel()` para exibir o tipo de transação
-- Atualizar `openEditDialog()` para carregar os campos ao editar
-- Remover exigência de `target_broker_id` para esse tipo (usa lista de participantes)
+#### 3. Edge Function `apply-distribution-rules/index.ts`
 
-#### 3. Fluxo de Avaliação
+- Sem mudanças — já usa `ORDER BY priority DESC`, que continuará funcionando com os novos valores numéricos atribuídos automaticamente.
+
+### Fluxo de Prioridade
 
 ```text
-Lead chega → property_id vinculado?
-  ├── Não → regra não dá match, próxima regra
-  └── Sim → busca properties.transaction_type
-              ├── Compara com conditions.transaction_type
-              ├── Match → seleciona corretor:
-              │     ├── mode=ordered → round robin entre participating_broker_ids
-              │     └── mode=random → escolha aleatória entre participating_broker_ids
-              └── Não match → próxima regra
+Lista visual (topo → baixo):
+  [Regra A]  → priority = 300
+  [Regra B]  → priority = 200  
+  [Regra C]  → priority = 100
+
+Usuário arrasta B para o topo:
+  [Regra B]  → priority = 300
+  [Regra A]  → priority = 200
+  [Regra C]  → priority = 100
 ```
 
 ### Arquivos Modificados
 
 | Arquivo | Ação |
 |---------|------|
-| `supabase/functions/apply-distribution-rules/index.ts` | Adicionar avaliação e resolução do tipo `transaction_type` |
-| `src/components/DistributionRulesManager.tsx` | Adicionar tipo na UI, campos de formulário e lógica de build/parse |
-
-Nenhuma migração de banco é necessária — o tipo e condições são armazenados no campo JSONB `conditions` já existente na tabela `distribution_rules`.
+| `src/components/DistributionRulesManager.tsx` | Remover campo prioridade, adicionar drag-and-drop na lista de regras, auto-atribuir prioridade |
+| Possível migração SQL | Corrigir RLS se necessário |
 
