@@ -20,6 +20,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
+import { usePermissions } from "@/hooks/use-permissions";
 
 interface DistributionRule {
   id: string;
@@ -78,6 +79,8 @@ const DAYS_OF_WEEK = [
 ];
 
 const DistributionRulesManager = () => {
+  const { hasPermission, isOwner } = usePermissions();
+  const canManageRules = isOwner || hasPermission('settings.manage');
   const [loading, setLoading] = useState(true);
   const [rules, setRules] = useState<DistributionRule[]>([]);
   const [brokers, setBrokers] = useState<Broker[]>([]);
@@ -273,18 +276,28 @@ const DistributionRulesManager = () => {
       return;
     }
 
+    if (!canManageRules) {
+      toast({ variant: "destructive", title: "Sem permissão", description: "Você não tem permissão para gerenciar regras de distribuição. Peça ao proprietário da conta." });
+      return;
+    }
+
     try {
       const { data: accountData, error: accountError } = await supabase.rpc('get_user_account_id');
       if (accountError) throw accountError;
 
       const conditions = buildConditions();
 
+      // Auto-assign priority: new rules get highest priority
+      const autoPriority = editingRule 
+        ? editingRule.priority 
+        : (rules.length > 0 ? Math.max(...rules.map(r => r.priority)) + 100 : 100);
+
       const ruleData = {
         name: form.name,
         rule_type: form.rule_type,
         conditions,
         target_broker_id: needsBroker ? form.target_broker_id : null,
-        priority: form.priority,
+        priority: autoPriority,
         account_id: accountData,
       };
 
@@ -508,6 +521,38 @@ const DistributionRulesManager = () => {
       toast({ title: "Sucesso", description: "Ordem atualizada!" });
     } catch (error) {
       console.error("Erro ao reordenar:", error);
+    }
+  };
+
+  const handleRulesReorder = async (result: DropResult) => {
+    if (!result.destination || result.source.index === result.destination.index) return;
+    if (!canManageRules) return;
+
+    const reordered = Array.from(rules);
+    const [moved] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, moved);
+
+    // Assign priorities: top = highest number, bottom = lowest
+    const updatedRules = reordered.map((rule, index) => ({
+      ...rule,
+      priority: (reordered.length - index) * 100,
+    }));
+
+    setRules(updatedRules);
+
+    try {
+      const updates = updatedRules.map(rule =>
+        supabase
+          .from("distribution_rules")
+          .update({ priority: rule.priority })
+          .eq("id", rule.id)
+      );
+      await Promise.all(updates);
+      toast({ title: "Sucesso", description: "Ordem das regras atualizada!" });
+    } catch (error) {
+      console.error("Erro ao reordenar regras:", error);
+      toast({ variant: "destructive", title: "Erro", description: "Não foi possível salvar a nova ordem." });
+      fetchData(); // revert
     }
   };
 
@@ -982,19 +1027,6 @@ const DistributionRulesManager = () => {
 
                   <Separator />
 
-                  <div className="space-y-2">
-                    <Label htmlFor="priority">Prioridade</Label>
-                    <Input
-                      id="priority"
-                      type="number"
-                      value={form.priority}
-                      onChange={e => setForm({ ...form, priority: parseInt(e.target.value) || 0 })}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Regras com maior prioridade são avaliadas primeiro. Use 100 para alta, 50 para média, 0 para baixa.
-                    </p>
-                  </div>
-
                   <div className="flex justify-end gap-2 pt-4">
                     <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                       Cancelar
@@ -1018,77 +1050,98 @@ const DistributionRulesManager = () => {
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {rules.map(rule => {
-                const typeInfo = getRuleTypeInfo(rule.rule_type);
-                const broker = brokers.find(b => b.user_id === rule.target_broker_id);
-                const Icon = typeInfo.icon;
+            <>
+              <DragDropContext onDragEnd={handleRulesReorder}>
+                <Droppable droppableId="rules-list">
+                  {(provided) => (
+                    <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-3">
+                      {rules.map((rule, index) => {
+                        const typeInfo = getRuleTypeInfo(rule.rule_type);
+                        const broker = brokers.find(b => b.user_id === rule.target_broker_id);
+                        const Icon = typeInfo.icon;
 
-                return (
-                  <div
-                    key={rule.id}
-                    className={`flex items-center gap-4 p-4 rounded-lg border ${
-                      rule.is_active ? "bg-card" : "bg-muted/50 opacity-60"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className={`p-2 rounded-lg shrink-0 ${rule.is_active ? "bg-primary/10" : "bg-muted"}`}>
-                        <Icon className={`h-5 w-5 ${rule.is_active ? "text-primary" : "text-muted-foreground"}`} />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-medium truncate">{rule.name}</p>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-                          <Badge variant="outline" className="shrink-0">{typeInfo.label}</Badge>
-                          <span className="truncate">{getConditionLabel(rule)}</span>
-                          {broker && <span className="shrink-0">→ {broker.full_name}</span>}
-                        </div>
-                      </div>
+                        return (
+                          <Draggable key={rule.id} draggableId={rule.id} index={index} isDragDisabled={!canManageRules}>
+                            {(provided, snapshot) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                className={`flex items-center gap-4 p-4 rounded-lg border ${
+                                  snapshot.isDragging ? "shadow-lg bg-accent" : rule.is_active ? "bg-card" : "bg-muted/50 opacity-60"
+                                }`}
+                              >
+                                <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing shrink-0">
+                                  <GripVertical className="h-5 w-5 text-muted-foreground" />
+                                </div>
+
+                                <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
+                                  {index + 1}
+                                </div>
+
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                  <div className={`p-2 rounded-lg shrink-0 ${rule.is_active ? "bg-primary/10" : "bg-muted"}`}>
+                                    <Icon className={`h-5 w-5 ${rule.is_active ? "text-primary" : "text-muted-foreground"}`} />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="font-medium truncate">{rule.name}</p>
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+                                      <Badge variant="outline" className="shrink-0">{typeInfo.label}</Badge>
+                                      <span className="truncate">{getConditionLabel(rule)}</span>
+                                      {broker && <span className="shrink-0">→ {broker.full_name}</span>}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {rule.is_default && (
+                                  <Badge variant="outline" className="shrink-0 border-primary text-primary">
+                                    Padrão
+                                  </Badge>
+                                )}
+
+                                <Switch
+                                  checked={rule.is_active}
+                                  onCheckedChange={() => handleToggleActive(rule)}
+                                />
+
+                                <Button variant="ghost" size="icon" onClick={() => openEditDialog(rule)}>
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="text-destructive">
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Remover regra?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Esta ação não pode ser desfeita.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => handleDelete(rule.id)}>
+                                        Remover
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
+                            )}
+                          </Draggable>
+                        );
+                      })}
+                      {provided.placeholder}
                     </div>
-
-                    {rule.is_default && (
-                      <Badge variant="outline" className="shrink-0 border-primary text-primary">
-                        Padrão
-                      </Badge>
-                    )}
-
-                    <Badge variant="secondary" className="shrink-0">
-                      P: {rule.priority}
-                    </Badge>
-
-                    <Switch
-                      checked={rule.is_active}
-                      onCheckedChange={() => handleToggleActive(rule)}
-                    />
-
-                    <Button variant="ghost" size="icon" onClick={() => openEditDialog(rule)}>
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="text-destructive">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Remover regra?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Esta ação não pode ser desfeita.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDelete(rule.id)}>
-                            Remover
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                );
-              })}
-            </div>
+                  )}
+                </Droppable>
+              </DragDropContext>
+              <p className="text-xs text-muted-foreground mt-3">
+                Arraste as regras para reordenar. Regras no topo são avaliadas primeiro.
+              </p>
+            </>
           )}
         </CardContent>
       </Card>
