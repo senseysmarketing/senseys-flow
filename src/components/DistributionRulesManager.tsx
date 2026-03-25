@@ -554,6 +554,7 @@ const DistributionRulesManager = () => {
       toast({ variant: "destructive", title: "Erro", description: "Não foi possível salvar a nova ordem." });
       fetchData(); // revert
     }
+  };
 
   const toggleDay = (day: string) => {
     setForm(prev => ({
