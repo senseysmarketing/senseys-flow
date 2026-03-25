@@ -1018,96 +1018,98 @@ const DistributionRulesManager = () => {
               </p>
             </div>
           ) : (
-            <DragDropContext onDragEnd={handleRulesReorder}>
-              <Droppable droppableId="rules-list">
-                {(provided) => (
-                  <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-3">
-                    {rules.map((rule, index) => {
-                      const typeInfo = getRuleTypeInfo(rule.rule_type);
-                      const broker = brokers.find(b => b.user_id === rule.target_broker_id);
-                      const Icon = typeInfo.icon;
+            <>
+              <DragDropContext onDragEnd={handleRulesReorder}>
+                <Droppable droppableId="rules-list">
+                  {(provided) => (
+                    <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-3">
+                      {rules.map((rule, index) => {
+                        const typeInfo = getRuleTypeInfo(rule.rule_type);
+                        const broker = brokers.find(b => b.user_id === rule.target_broker_id);
+                        const Icon = typeInfo.icon;
 
-                      return (
-                        <Draggable key={rule.id} draggableId={rule.id} index={index} isDragDisabled={!canManageRules}>
-                          {(provided, snapshot) => (
-                            <div
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              className={`flex items-center gap-4 p-4 rounded-lg border ${
-                                snapshot.isDragging ? "shadow-lg bg-accent" : rule.is_active ? "bg-card" : "bg-muted/50 opacity-60"
-                              }`}
-                            >
-                              <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing shrink-0">
-                                <GripVertical className="h-5 w-5 text-muted-foreground" />
-                              </div>
-
-                              <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
-                                {index + 1}
-                              </div>
-
-                              <div className="flex items-center gap-3 flex-1 min-w-0">
-                                <div className={`p-2 rounded-lg shrink-0 ${rule.is_active ? "bg-primary/10" : "bg-muted"}`}>
-                                  <Icon className={`h-5 w-5 ${rule.is_active ? "text-primary" : "text-muted-foreground"}`} />
+                        return (
+                          <Draggable key={rule.id} draggableId={rule.id} index={index} isDragDisabled={!canManageRules}>
+                            {(provided, snapshot) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                className={`flex items-center gap-4 p-4 rounded-lg border ${
+                                  snapshot.isDragging ? "shadow-lg bg-accent" : rule.is_active ? "bg-card" : "bg-muted/50 opacity-60"
+                                }`}
+                              >
+                                <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing shrink-0">
+                                  <GripVertical className="h-5 w-5 text-muted-foreground" />
                                 </div>
-                                <div className="min-w-0">
-                                  <p className="font-medium truncate">{rule.name}</p>
-                                  <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-                                    <Badge variant="outline" className="shrink-0">{typeInfo.label}</Badge>
-                                    <span className="truncate">{getConditionLabel(rule)}</span>
-                                    {broker && <span className="shrink-0">→ {broker.full_name}</span>}
+
+                                <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
+                                  {index + 1}
+                                </div>
+
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                  <div className={`p-2 rounded-lg shrink-0 ${rule.is_active ? "bg-primary/10" : "bg-muted"}`}>
+                                    <Icon className={`h-5 w-5 ${rule.is_active ? "text-primary" : "text-muted-foreground"}`} />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="font-medium truncate">{rule.name}</p>
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+                                      <Badge variant="outline" className="shrink-0">{typeInfo.label}</Badge>
+                                      <span className="truncate">{getConditionLabel(rule)}</span>
+                                      {broker && <span className="shrink-0">→ {broker.full_name}</span>}
+                                    </div>
                                   </div>
                                 </div>
+
+                                {rule.is_default && (
+                                  <Badge variant="outline" className="shrink-0 border-primary text-primary">
+                                    Padrão
+                                  </Badge>
+                                )}
+
+                                <Switch
+                                  checked={rule.is_active}
+                                  onCheckedChange={() => handleToggleActive(rule)}
+                                />
+
+                                <Button variant="ghost" size="icon" onClick={() => openEditDialog(rule)}>
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="text-destructive">
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Remover regra?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Esta ação não pode ser desfeita.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => handleDelete(rule.id)}>
+                                        Remover
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
                               </div>
-
-                              {rule.is_default && (
-                                <Badge variant="outline" className="shrink-0 border-primary text-primary">
-                                  Padrão
-                                </Badge>
-                              )}
-
-                              <Switch
-                                checked={rule.is_active}
-                                onCheckedChange={() => handleToggleActive(rule)}
-                              />
-
-                              <Button variant="ghost" size="icon" onClick={() => openEditDialog(rule)}>
-                                <Edit2 className="h-4 w-4" />
-                              </Button>
-
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="text-destructive">
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Remover regra?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      Esta ação não pode ser desfeita.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleDelete(rule.id)}>
-                                      Remover
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </div>
-                          )}
-                        </Draggable>
-                      );
-                    })}
-                    {provided.placeholder}
-                  </div>
-                )}
-              </Droppable>
-            </DragDropContext>
-            <p className="text-xs text-muted-foreground mt-3">
-              Arraste as regras para reordenar. Regras no topo são avaliadas primeiro.
-            </p>
+                            )}
+                          </Draggable>
+                        );
+                      })}
+                      {provided.placeholder}
+                    </div>
+                  )}
+                </Droppable>
+              </DragDropContext>
+              <p className="text-xs text-muted-foreground mt-3">
+                Arraste as regras para reordenar. Regras no topo são avaliadas primeiro.
+              </p>
+            </>
           )}
         </CardContent>
       </Card>
