@@ -60,6 +60,7 @@ const RULE_TYPES = [
   { value: "property", label: "Por Imóvel", icon: Building2, description: "Direciona leads interessados em imóvel específico" },
   { value: "temperature", label: "Por Temperatura", icon: Thermometer, description: "Direciona leads quentes, mornos ou frios para corretores específicos" },
   { value: "campaign", label: "Por Campanha", icon: Megaphone, description: "Direciona leads de campanhas ou conjuntos de anúncios específicos" },
+  { value: "transaction_type", label: "Por Tipo de Transação", icon: Building2, description: "Direciona leads conforme o imóvel ser de venda ou aluguel" },
   { value: "time_based", label: "Por Horário", icon: Clock, description: "Distribui baseado no horário e dia da semana de entrada do lead" },
   { value: "workload", label: "Por Carga", icon: Scale, description: "Considera quantos leads ativos cada corretor tem antes de atribuir" },
   { value: "region", label: "Por Região", icon: MapPin, description: "Direciona baseado na localização do imóvel (cidade, estado, bairro)" },
@@ -114,6 +115,9 @@ const DistributionRulesManager = () => {
     compound_conditions: Array<{ type: string; value: string }>;
     // Participating brokers
     participating_broker_ids: string[];
+    // Transaction type
+    transaction_type: string;
+    distribution_mode: string;
   }>({
     name: "",
     rule_type: "round_robin",
@@ -135,6 +139,8 @@ const DistributionRulesManager = () => {
     compound_operator: "AND",
     compound_conditions: [],
     participating_broker_ids: [],
+    transaction_type: "",
+    distribution_mode: "ordered",
   });
 
   useEffect(() => {
@@ -234,6 +240,10 @@ const DistributionRulesManager = () => {
         if (form.city) conditions.city = form.city;
         if (form.neighborhood) conditions.neighborhood = form.neighborhood;
         break;
+      case "transaction_type":
+        if (form.transaction_type) conditions.transaction_type = form.transaction_type;
+        conditions.distribution_mode = form.distribution_mode || "ordered";
+        break;
       case "compound":
         conditions.operator = form.compound_operator;
         conditions.conditions = form.compound_conditions;
@@ -257,7 +267,7 @@ const DistributionRulesManager = () => {
     }
 
     // Validate based on rule type
-    const needsBroker = !["round_robin", "workload"].includes(form.rule_type);
+    const needsBroker = !["round_robin", "workload", "transaction_type"].includes(form.rule_type);
     if (needsBroker && !form.target_broker_id) {
       toast({ variant: "destructive", title: "Erro", description: "Selecione um corretor de destino." });
       return;
@@ -376,6 +386,8 @@ const DistributionRulesManager = () => {
       compound_operator: "AND",
       compound_conditions: [],
       participating_broker_ids: [],
+      transaction_type: "",
+      distribution_mode: "ordered",
     });
   };
 
@@ -404,6 +416,8 @@ const DistributionRulesManager = () => {
       compound_operator: conditions.operator || "AND",
       compound_conditions: conditions.conditions || [],
       participating_broker_ids: conditions.participating_broker_ids || [],
+      transaction_type: conditions.transaction_type || "",
+      distribution_mode: conditions.distribution_mode || "ordered",
     });
     setIsDialogOpen(true);
   };
@@ -451,6 +465,11 @@ const DistributionRulesManager = () => {
       case "property":
         const property = properties.find(p => p.id === conditions.property_id);
         parts.push(property?.title || conditions.property_id);
+        break;
+      case "transaction_type":
+        const txLabels: Record<string, string> = { venda: "Venda", aluguel: "Aluguel", venda_aluguel: "Venda e Aluguel" };
+        parts.push(txLabels[conditions.transaction_type] || conditions.transaction_type);
+        if (conditions.distribution_mode === 'random') parts.push('Aleatório');
         break;
     }
     
@@ -816,8 +835,52 @@ const DistributionRulesManager = () => {
                     </div>
                   )}
 
+                  {/* TRANSACTION TYPE */}
+                  {form.rule_type === "transaction_type" && (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>Tipo de Transação do Imóvel</Label>
+                        <Select value={form.transaction_type} onValueChange={v => setForm({ ...form, transaction_type: v })}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o tipo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="venda">Venda</SelectItem>
+                            <SelectItem value="aluguel">Aluguel</SelectItem>
+                            <SelectItem value="venda_aluguel">Venda e Aluguel</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          A regra verifica o tipo de transação do imóvel vinculado ao lead.
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Modo de Distribuição</Label>
+                        <Select value={form.distribution_mode} onValueChange={v => setForm({ ...form, distribution_mode: v })}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="ordered">
+                              <div className="flex items-center gap-2">
+                                <Shuffle className="w-4 h-4" />
+                                Ordenada (Round Robin)
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="random">
+                              <div className="flex items-center gap-2">
+                                <Target className="w-4 h-4" />
+                                Aleatória
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
+
                   {/* CORRETOR DE DESTINO */}
-                  {!["round_robin", "workload"].includes(form.rule_type) && (
+                  {!["round_robin", "workload", "transaction_type"].includes(form.rule_type) && (
                     <>
                       <Separator />
                       <div className="space-y-2">
@@ -842,7 +905,7 @@ const DistributionRulesManager = () => {
                   )}
 
                   {/* CORRETORES PARTICIPANTES */}
-                  {["round_robin", "workload"].includes(form.rule_type) && (
+                  {["round_robin", "workload", "transaction_type"].includes(form.rule_type) && (
                     <>
                       <Separator />
                       <div className="space-y-3">
