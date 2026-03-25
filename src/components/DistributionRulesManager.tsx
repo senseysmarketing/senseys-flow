@@ -466,6 +466,11 @@ const DistributionRulesManager = () => {
         const property = properties.find(p => p.id === conditions.property_id);
         parts.push(property?.title || conditions.property_id);
         break;
+      case "transaction_type":
+        const txLabels: Record<string, string> = { venda: "Venda", aluguel: "Aluguel", venda_aluguel: "Venda e Aluguel" };
+        parts.push(txLabels[conditions.transaction_type] || conditions.transaction_type);
+        if (conditions.distribution_mode === 'random') parts.push('Aleatório');
+        break;
     }
     
     return parts.join(" | ");
@@ -830,8 +835,52 @@ const DistributionRulesManager = () => {
                     </div>
                   )}
 
+                  {/* TRANSACTION TYPE */}
+                  {form.rule_type === "transaction_type" && (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>Tipo de Transação do Imóvel</Label>
+                        <Select value={form.transaction_type} onValueChange={v => setForm({ ...form, transaction_type: v })}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o tipo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="venda">Venda</SelectItem>
+                            <SelectItem value="aluguel">Aluguel</SelectItem>
+                            <SelectItem value="venda_aluguel">Venda e Aluguel</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          A regra verifica o tipo de transação do imóvel vinculado ao lead.
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Modo de Distribuição</Label>
+                        <Select value={form.distribution_mode} onValueChange={v => setForm({ ...form, distribution_mode: v })}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="ordered">
+                              <div className="flex items-center gap-2">
+                                <Shuffle className="w-4 h-4" />
+                                Ordenada (Round Robin)
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="random">
+                              <div className="flex items-center gap-2">
+                                <Target className="w-4 h-4" />
+                                Aleatória
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
+
                   {/* CORRETOR DE DESTINO */}
-                  {!["round_robin", "workload"].includes(form.rule_type) && (
+                  {!["round_robin", "workload", "transaction_type"].includes(form.rule_type) && (
                     <>
                       <Separator />
                       <div className="space-y-2">
@@ -856,7 +905,7 @@ const DistributionRulesManager = () => {
                   )}
 
                   {/* CORRETORES PARTICIPANTES */}
-                  {["round_robin", "workload"].includes(form.rule_type) && (
+                  {["round_robin", "workload", "transaction_type"].includes(form.rule_type) && (
                     <>
                       <Separator />
                       <div className="space-y-3">
