@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -142,6 +142,8 @@ const formatConditionSummary = (rule: GreetingRule): string => {
 
 export function WhatsAppIntegrationSettings() {
   const { user } = useAuth();
+  const userId = user?.id ?? null;
+  const lastLoadedUserIdRef = useRef<string | null>(null);
   const [session, setSession] = useState<WhatsAppSession | null>(null);
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
   const [automationRules, setAutomationRules] = useState<AutomationRule[]>([]);
@@ -173,7 +175,7 @@ export function WhatsAppIntegrationSettings() {
   const DAYS_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
   const fetchSession = useCallback(async () => {
-    if (!user) return;
+    if (!userId) return;
 
 
     const { data, error } = await supabase
@@ -226,7 +228,7 @@ export function WhatsAppIntegrationSettings() {
     } else {
       setSession(null);
     }
-  }, [user]);
+  }, [userId]);
 
   const fetchTemplates = useCallback(async () => {
     const { data } = await supabase
@@ -356,18 +358,45 @@ export function WhatsAppIntegrationSettings() {
     }
   };
 
-  useEffect(() => {
-
-    const loadData = async () => {
-      setLoading(true);
-      await Promise.all([fetchSession(), fetchTemplates(), fetchAutomationRules(), fetchGreetingRules(), fetchFollowUpSteps(), fetchGreetingSequenceSteps(), fetchSequenceCounts(), fetchSendingSchedule()]);
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      await Promise.all([
+        fetchSession(),
+        fetchTemplates(),
+        fetchAutomationRules(),
+        fetchGreetingRules(),
+        fetchFollowUpSteps(),
+        fetchGreetingSequenceSteps(),
+        fetchSequenceCounts(),
+        fetchSendingSchedule(),
+      ]);
+    } finally {
       setLoading(false);
-    };
-
-    if (user) {
-      loadData();
     }
-  }, [user, fetchSession, fetchTemplates, fetchAutomationRules, fetchGreetingRules, fetchFollowUpSteps, fetchGreetingSequenceSteps, fetchSequenceCounts, fetchSendingSchedule]);
+  }, [fetchSession, fetchTemplates, fetchAutomationRules, fetchGreetingRules, fetchFollowUpSteps, fetchGreetingSequenceSteps, fetchSequenceCounts, fetchSendingSchedule]);
+
+  useEffect(() => {
+    if (!userId) {
+      lastLoadedUserIdRef.current = null;
+      setSession(null);
+      setTemplates([]);
+      setAutomationRules([]);
+      setGreetingRules([]);
+      setFollowUpSteps([]);
+      setGreetingSequenceSteps([]);
+      setSequenceCounts({});
+      setLoading(false);
+      return;
+    }
+
+    if (lastLoadedUserIdRef.current === userId) {
+      return;
+    }
+
+    lastLoadedUserIdRef.current = userId;
+    loadData();
+  }, [userId, loadData]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
