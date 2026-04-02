@@ -1,27 +1,42 @@
 
 
-## Preservar Estado da Aba WhatsApp ao Navegar
+## Corrigir Reload da Aba WhatsApp ao Alternar Abas do Navegador
 
-### Problema
+### Causa Raiz
 
-Quando o usuário sai da página de Integrações e volta, o componente `WhatsAppIntegrationSettings` é desmontado e remontado, perdendo todo o estado (formulários abertos, templates sendo editados, configurações em andamento). Isso acontece porque `renderContent()` usa renderização condicional — apenas a aba ativa é montada.
+O hook `use-auth.tsx` tem um listener de `visibilitychange` que, ao retornar ao tab do navegador, chama `supabase.auth.getSession()` e faz `setUser(currentSession.user)`. Isso cria uma **nova referência de objeto** para `user`, mesmo sendo o mesmo usuário. Como o `useEffect` principal do `WhatsAppIntegrationSettings` depende de `[user, ...]`, ele re-executa `loadData()` inteiro — fazendo `setLoading(true)` e recarregando tudo do zero.
 
 ### Solução
 
-Manter **todas as abas montadas simultaneamente** no DOM, usando `display: none` (via CSS) para esconder as inativas. Assim, ao trocar de aba ou navegar para outra página e voltar, o componente WhatsApp não desmonta e preserva seu estado interno.
+**Arquivo: `src/hooks/use-auth.tsx`** (linhas 61-91)
 
-### Mudança
+No handler de `visibilitychange`, evitar chamar `setSession`/`setUser` se a sessão retornada é a mesma que já temos (mesmo `user.id`). Isso previne re-renders desnecessários em toda a árvore de componentes:
 
-**Arquivo: `src/pages/Integrations.tsx`**
-
-- Remover a função `renderContent()` com switch/case
-- Renderizar os 3 componentes (`WebhookSettings`, `OlxIntegrationSettings`, `WhatsAppIntegrationSettings`) sempre, envolvendo cada um em uma `div` com `className={activeTab === 'x' ? 'block' : 'hidden'}`
-- Isso garante que ao trocar de aba, o componente não é desmontado — apenas escondido visualmente
-
-```text
-Antes:  switch(activeTab) → monta apenas 1 componente
-Depois: monta todos 3, exibe apenas o ativo via CSS hidden/block
+```typescript
+const handleVisibilityChange = async () => {
+  if (document.visibilityState === 'visible') {
+    const { data: { session: currentSession }, error } = await supabase.auth.getSession();
+    
+    if (error) {
+      // ... manter lógica de recovery existente
+    } else if (currentSession) {
+      // Só atualizar state se o user mudou de fato
+      if (currentSession.user?.id !== user?.id) {
+        setSession(currentSession);
+        setUser(currentSession.user);
+      }
+    }
+  }
+};
 ```
 
-Isso resolve tanto a troca entre abas quanto a navegação para outra página do sistema e retorno, pois o React Router mantém o componente `Integrations` montado enquanto a rota `/integrations` estiver ativa. Se o usuário de fato navega para `/leads` e volta, o componente remonta inevitavelmente — mas nesse caso é o comportamento esperado (ir para outra tela de verdade). O problema relatado é sobre troca rápida entre abas dentro da mesma página.
+Isso é suficiente porque:
+- Se o token foi refreshed, o `onAuthStateChange` já cuida disso
+- O `visibilitychange` só precisa detectar se a sessão **expirou ou mudou de usuário**, não re-setar o mesmo estado
+
+### Arquivo Modificado
+
+| Arquivo | Ação |
+|---------|------|
+| `src/hooks/use-auth.tsx` | Adicionar guard no `visibilitychange` para não re-setar `user`/`session` quando são os mesmos |
 
