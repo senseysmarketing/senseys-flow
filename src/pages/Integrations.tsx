@@ -74,7 +74,15 @@ const Integrations = () => {
       </Tabs>
 
       <div className="w-full">
-        {renderContent()}
+        <div className={activeTab === 'webhook' ? 'block' : 'hidden'}>
+          <WebhookSettings />
+        </div>
+        <div className={activeTab === 'olx' ? 'block' : 'hidden'}>
+          <OlxIntegrationSettings accountId={accountId} />
+        </div>
+        <div className={activeTab === 'whatsapp' ? 'block' : 'hidden'}>
+          <WhatsAppIntegrationSettings />
+        </div>
       </div>
     </div>
   );
