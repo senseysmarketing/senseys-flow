@@ -1,55 +1,27 @@
 
 
-## Corrigir Erro ao Salvar Regra + Substituir Prioridade Numérica por Drag-and-Drop
+## Preservar Estado da Aba WhatsApp ao Navegar
 
-### Problema 1: Erro ao salvar regra
+### Problema
 
-O usuário logado (`matheuscorretor015@gmail.com`) é um membro de equipe (`is_team_member: true`). A policy RLS da tabela `distribution_rules` exige `is_account_owner() OR has_permission(auth.uid(), 'settings.manage')` para INSERT/UPDATE/DELETE. Além disso, existem **duas policies conflitantes**: uma `FOR SELECT` e uma `FOR ALL` — a `FOR ALL` inclui SELECT também, e quando o Postgres avalia múltiplas policies, ele usa OR entre elas. Porém, para INSERT a policy `FOR ALL` exige a verificação de owner/permissão, e se o usuário não tem essa permissão, o INSERT falha silenciosamente (RLS).
+Quando o usuário sai da página de Integrações e volta, o componente `WhatsAppIntegrationSettings` é desmontado e remontado, perdendo todo o estado (formulários abertos, templates sendo editados, configurações em andamento). Isso acontece porque `renderContent()` usa renderização condicional — apenas a aba ativa é montada.
 
-**Solução**: Verificar se o usuário tem a permissão `settings.manage` na conta e, caso não tenha, exibir mensagem clara. Também verificar se a função `has_permission` está funcionando corretamente para esse usuário. Se o problema for a RLS, ajustar para garantir que a policy funcione para membros com a permissão correta.
+### Solução
 
-### Problema 2: Substituir prioridade numérica por drag-and-drop
+Manter **todas as abas montadas simultaneamente** no DOM, usando `display: none` (via CSS) para esconder as inativas. Assim, ao trocar de aba ou navegar para outra página e voltar, o componente WhatsApp não desmonta e preserva seu estado interno.
 
-Em vez de um campo numérico de prioridade, as regras serão exibidas como uma lista reordenável (drag-and-drop). A posição na lista define a prioridade: a regra no topo é avaliada primeiro.
+### Mudança
 
-### Mudanças
+**Arquivo: `src/pages/Integrations.tsx`**
 
-#### 1. `src/components/DistributionRulesManager.tsx`
-
-- **Remover** o campo de input numérico de prioridade do formulário de criação/edição (linhas 983-996)
-- **Remover** o badge `P: {rule.priority}` da lista de regras (linhas 1054-1056)
-- **Substituir** a lista estática de regras por uma lista com `DragDropContext/Droppable/Draggable` (já tem a lib `@hello-pangea/dnd` importada)
-- Ao criar uma nova regra, atribuir `priority` automaticamente como o maior valor + 1 (posição no topo)
-- Ao reordenar via drag-and-drop, atualizar o campo `priority` de todas as regras reordenadas no banco (regra no topo = maior priority, embaixo = menor)
-- Adicionar `GripVertical` icon em cada regra para indicar que é arrastável
-- Manter a ordenação `ORDER BY priority DESC` no fetch (regra no topo = maior número)
-
-#### 2. Nova migração SQL (para corrigir o erro de RLS)
-
-- Investigar e corrigir a policy RLS se necessário. A causa provável é que o usuário não tem a permissão `settings.manage`. Vou verificar isso no banco e, se for o caso, a correção é dar a permissão ao usuário ou ajustar o fluxo de UI para bloquear a ação antes.
-
-#### 3. Edge Function `apply-distribution-rules/index.ts`
-
-- Sem mudanças — já usa `ORDER BY priority DESC`, que continuará funcionando com os novos valores numéricos atribuídos automaticamente.
-
-### Fluxo de Prioridade
+- Remover a função `renderContent()` com switch/case
+- Renderizar os 3 componentes (`WebhookSettings`, `OlxIntegrationSettings`, `WhatsAppIntegrationSettings`) sempre, envolvendo cada um em uma `div` com `className={activeTab === 'x' ? 'block' : 'hidden'}`
+- Isso garante que ao trocar de aba, o componente não é desmontado — apenas escondido visualmente
 
 ```text
-Lista visual (topo → baixo):
-  [Regra A]  → priority = 300
-  [Regra B]  → priority = 200  
-  [Regra C]  → priority = 100
-
-Usuário arrasta B para o topo:
-  [Regra B]  → priority = 300
-  [Regra A]  → priority = 200
-  [Regra C]  → priority = 100
+Antes:  switch(activeTab) → monta apenas 1 componente
+Depois: monta todos 3, exibe apenas o ativo via CSS hidden/block
 ```
 
-### Arquivos Modificados
-
-| Arquivo | Ação |
-|---------|------|
-| `src/components/DistributionRulesManager.tsx` | Remover campo prioridade, adicionar drag-and-drop na lista de regras, auto-atribuir prioridade |
-| Possível migração SQL | Corrigir RLS se necessário |
+Isso resolve tanto a troca entre abas quanto a navegação para outra página do sistema e retorno, pois o React Router mantém o componente `Integrations` montado enquanto a rota `/integrations` estiver ativa. Se o usuário de fato navega para `/leads` e volta, o componente remonta inevitavelmente — mas nesse caso é o comportamento esperado (ir para outra tela de verdade). O problema relatado é sobre troca rápida entre abas dentro da mesma página.
 
