@@ -31,6 +31,34 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const syncAuthState = useCallback((nextSession: Session | null, options?: { force?: boolean }) => {
+    const force = options?.force ?? false;
+    const nextUser = nextSession?.user ?? null;
+
+    setSession((prevSession) => {
+      if (!force) {
+        const prevUserId = prevSession?.user?.id ?? null;
+        const nextUserId = nextUser?.id ?? null;
+
+        if ((prevSession && nextSession && prevUserId === nextUserId) || (!prevSession && !nextSession)) {
+          return prevSession;
+        }
+      }
+
+      return nextSession;
+    });
+
+    setUser((prevUser) => {
+      if (!force && prevUser?.id === nextUser?.id) {
+        return prevUser;
+      }
+
+      return nextUser;
+    });
+
+    setLoading(false);
+  }, []);
+
   // Function to recover session from backup storage
   const recoverSession = useCallback(async () => {
     try {
@@ -46,8 +74,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           });
           if (!error && data.session) {
             console.log('Session recovered successfully');
-            setSession(data.session);
-            setUser(data.session.user);
+            syncAuthState(data.session, { force: true });
             return true;
           }
         }
@@ -78,27 +105,23 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             }
           }
         } else if (currentSession) {
-          // Only update state if user actually changed to avoid unnecessary re-renders
-          if (currentSession.user?.id !== user?.id) {
-            setSession(currentSession);
-            setUser(currentSession.user);
-          }
+          syncAuthState(currentSession);
+        } else {
+          syncAuthState(null);
         }
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [session, recoverSession]);
+  }, [session, recoverSession, syncAuthState]);
 
   useEffect(() => {
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         console.log('Auth state changed:', event);
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
+        syncAuthState(session);
       }
     );
 
@@ -109,14 +132,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         // Try to recover on initial load if there's an error
         recoverSession().finally(() => setLoading(false));
       } else {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
+        syncAuthState(session);
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [recoverSession]);
+  }, [recoverSession, syncAuthState]);
 
   return (
     <AuthContext.Provider value={{ user, session, loading }}>
