@@ -74,14 +74,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
               error.message?.includes('Invalid Refresh Token')) {
             const recovered = await recoverSession();
             if (!recovered && session) {
-              // Only if we had a session before and couldn't recover
               console.log('Could not recover session, user will need to re-login');
             }
           }
         } else if (currentSession) {
-          // Session is valid, update state
-          setSession(currentSession);
-          setUser(currentSession.user);
+          // Only update state if user actually changed to avoid unnecessary re-renders
+          if (currentSession.user?.id !== user?.id) {
+            setSession(currentSession);
+            setUser(currentSession.user);
+          }
         }
       }
     };
