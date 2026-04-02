@@ -43,15 +43,6 @@ const Integrations = () => {
     { value: 'whatsapp' as TabValue, label: 'WhatsApp', icon: <MessageCircle className="h-4 w-4" /> },
   ];
 
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'webhook': return <WebhookSettings />;
-      case 'olx': return <OlxIntegrationSettings accountId={accountId} />;
-      case 'whatsapp': return <WhatsAppIntegrationSettings />;
-      default: return null;
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -83,7 +74,15 @@ const Integrations = () => {
       </Tabs>
 
       <div className="w-full">
-        {renderContent()}
+        <div className={activeTab === 'webhook' ? 'block' : 'hidden'}>
+          <WebhookSettings />
+        </div>
+        <div className={activeTab === 'olx' ? 'block' : 'hidden'}>
+          <OlxIntegrationSettings accountId={accountId} />
+        </div>
+        <div className={activeTab === 'whatsapp' ? 'block' : 'hidden'}>
+          <WhatsAppIntegrationSettings />
+        </div>
       </div>
     </div>
   );
