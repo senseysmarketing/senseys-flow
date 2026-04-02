@@ -43,15 +43,6 @@ const Integrations = () => {
     { value: 'whatsapp' as TabValue, label: 'WhatsApp', icon: <MessageCircle className="h-4 w-4" /> },
   ];
 
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'webhook': return <WebhookSettings />;
-      case 'olx': return <OlxIntegrationSettings accountId={accountId} />;
-      case 'whatsapp': return <WhatsAppIntegrationSettings />;
-      default: return null;
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
