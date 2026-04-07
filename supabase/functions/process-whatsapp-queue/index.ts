@@ -267,6 +267,57 @@ async function verifySession(supabase: any, accountId: string): Promise<{ connec
 }
 // ────────────────────────────────────────────────────────────────────────────
 
+// ─── Auto-restart degraded instances ───────────────────────────────────────
+// Detects "not-acceptable" errors from Evolution API and restarts the instance
+function isNotAcceptableError(sendResult: any): boolean {
+  const errorStr = JSON.stringify(sendResult || '').toLowerCase()
+  return errorStr.includes('not-acceptable')
+}
+
+async function tryRestartInstance(instanceName: string): Promise<boolean> {
+  const rawUrl = Deno.env.get('EVOLUTION_API_URL') || ''
+  const apiUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`
+  const apiKey = Deno.env.get('EVOLUTION_API_KEY') || ''
+  if (!apiUrl || !apiKey) return false
+
+  try {
+    // Try DELETE + recreate (restart)
+    console.log(`[process-whatsapp-queue] 🔄 Restarting degraded instance: ${instanceName}`)
+    
+    // Just call logout + reconnect pattern
+    const logoutResp = await fetch(`${apiUrl}/instance/logout/${instanceName}`, {
+      method: 'DELETE',
+      headers: { 'apikey': apiKey }
+    })
+    console.log(`[process-whatsapp-queue] Logout: ${logoutResp.status}`)
+    await logoutResp.text()
+
+    await new Promise(r => setTimeout(r, 3000))
+
+    const connectResp = await fetch(`${apiUrl}/instance/connect/${instanceName}`, {
+      method: 'GET',
+      headers: { 'apikey': apiKey }
+    })
+    const connectData = await connectResp.text()
+    console.log(`[process-whatsapp-queue] Reconnect: ${connectResp.status} ${connectData.substring(0, 200)}`)
+
+    await new Promise(r => setTimeout(r, 5000))
+
+    // Check status
+    const statusResp = await fetch(`${apiUrl}/instance/connectionState/${instanceName}`, {
+      headers: { 'apikey': apiKey }
+    })
+    const statusData = await statusResp.json()
+    const isOpen = statusData?.instance?.state === 'open'
+    console.log(`[process-whatsapp-queue] Post-restart status: ${isOpen ? 'connected ✅' : 'not connected ❌'}`)
+    return isOpen
+  } catch (e) {
+    console.error(`[process-whatsapp-queue] Error restarting instance:`, e)
+    return false
+  }
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 // ═══════════════════════════════════════════════════════════════════════════
 // ═══ NEW: Automation Control State Machine Processing ═══════════════════
 // ═══════════════════════════════════════════════════════════════════════════
