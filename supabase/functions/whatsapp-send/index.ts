@@ -74,6 +74,10 @@ function normalizeEvolutionError(status: number, data: any): string {
     return 'Servidor não respondeu a tempo. Tente novamente.'
   }
   if (status === 400) {
+    // Check for "not-acceptable" which indicates a degraded instance needing restart
+    if (errorStr.includes('not-acceptable') || (Array.isArray(data?.response?.message) && data.response.message.some((m: any) => typeof m === 'string' && m.toLowerCase().includes('not-acceptable')))) {
+      return 'Instância do WhatsApp em estado degradado. Reiniciando automaticamente...'
+    }
     return 'Erro temporário na conexão. Tente novamente em alguns segundos.'
   }
   if (status >= 500) {
