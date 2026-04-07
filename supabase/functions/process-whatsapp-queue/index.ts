@@ -678,6 +678,25 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
 
       // Handle other send failures with retry limit (max 5 attempts)
       if (!sendResponse.ok) {
+        // Detect "not-acceptable" error — instance is degraded, try auto-restart
+        if (isNotAcceptableError(sendResult) && sessionInfo.instanceName) {
+          console.log(`[automation-control] 🔄 "not-acceptable" detected for account ${record.account_id}, attempting auto-restart...`)
+          const restarted = await tryRestartInstance(sessionInfo.instanceName)
+          if (restarted) {
+            // Don't count this as a retry — reschedule in 2 minutes to allow instance to stabilize
+            await supabase
+              .from('whatsapp_automation_control')
+              .update({
+                status: 'active',
+                next_execution_at: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', record.id)
+            console.log(`[automation-control] ✅ Instance restarted, rescheduling lead ${record.lead_id} in 2min (retry_count NOT incremented)`)
+            continue
+          }
+        }
+
         const newRetryCount = (record.retry_count || 0) + 1
         const MAX_RETRIES = 5
 
