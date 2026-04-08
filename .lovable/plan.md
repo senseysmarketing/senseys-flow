@@ -1,72 +1,45 @@
 
 
-## Diagnóstico: Falhas de Envio WhatsApp — Conta Marinho
+## Recuperar Instância WhatsApp "Marinho" Travada em "Connecting"
 
-### Causa Raiz
+### Diagnóstico
 
-A instância Evolution API da conta "Caique Marinho" (`senseys_98bbd535_...`) está em **estado degradado**. Ela reporta como "connected" (state: open), mas retorna erro `400 Bad Request` com `"Error: not-acceptable"` em todas as tentativas de envio. A instância precisa ser reiniciada.
+A instância `senseys_98bbd535_b8a4_4a5f_80da_e1e0e35f6809` está presa no estado `connecting` na Evolution API. Os logs mostram dezenas de chamadas de status consecutivas, todas retornando `state: "connecting"`. O usuário desconectou e reconectou, mas a instância não conseguiu completar a reconexão.
 
-**Teste realizado**: chamei `whatsapp-send` diretamente e recebi:
-```json
-{
-  "status": 400,
-  "error": "Bad Request",
-  "response": {"message": ["Error: not-acceptable"]}
-}
-```
-
-### Impacto
-
-Desde ~6 de abril às 15h, **todas** as mensagens automáticas falharam para estes leads:
-- Juliana Nascimento (+5511971426334)
-- Cynthia Steinmeyer Mussolin (+5511992448992)
-- Ramona Sousa (+5511984203840)
-- Larissa Hon (+5511991981419)
-- Ronaldo Dias (+5511971583435)
-- Andrea Ambros (+5551996638771)
-- Lucia Maria Occhialini (+5511987773047)
-
-Todas as automações atingiram o limite de 5 retries e foram marcadas como `failed`.
+O DB mostra `status: qr_ready` mas a Evolution API retorna `connecting` — a instância está corrompida/travada.
 
 ### Plano de Correção
 
-#### 1. Reiniciar a instância Evolution API
-Criar um script temporário que chama diretamente a Evolution API para reiniciar a instância `senseys_98bbd535_b8a4_4a5f_80da_e1e0e35f6809` e reconfigurar o webhook.
+#### 1. Intervenção imediata: Deletar e recriar a instância
+Executar um script administrativo temporário que:
+1. **Deleta** a instância na Evolution API (`DELETE /instance/delete/{instanceName}`)
+2. **Limpa** o registro na tabela `whatsapp_sessions` (status → `disconnected`, qr_code → null)
+3. O usuário poderá então reconectar normalmente pelo CRM
+
+Isso é necessário porque `restart` e `logout` não resolvem instâncias presas em `connecting`.
 
 #### 2. Resetar automações falhadas
-Atualizar os registros `whatsapp_automation_control` que falharam por este problema (retry_count = 5, status = failed) para:
-- `status = 'active'`
-- `retry_count = 0`
-- `next_execution_at = now()`
+Atualizar os 3 registros recentes de `whatsapp_automation_control` com `status = 'failed'` e `retry_count = 5` (de 6, 7 e 8 de abril) para `status = 'active'`, `retry_count = 0`, para que sejam reprocessados quando a instância voltar.
 
-Isso fará o cron job reprocessá-los na próxima execução.
+#### 3. Melhoria no código: Tratar estado "connecting" travado
+**Arquivo**: `supabase/functions/whatsapp-connect/index.ts`
 
-#### 3. Melhoria no código: Auto-restart em erro "not-acceptable"
-**Arquivo**: `supabase/functions/process-whatsapp-queue/index.ts`
+No action `status`, quando a Evolution API retorna `state: "connecting"`:
+- Atualmente o código trata como `disconnected` (correto)
+- Adicionar: se o DB mostra que a sessão está em `connecting`/`qr_ready` há mais de 5 minutos, executar automaticamente um `DELETE /instance/delete` + recriação, em vez de apenas reportar como desconectado
 
-Adicionar detecção do erro `not-acceptable` na lógica de retry. Quando esse erro específico for detectado:
-- Tentar reiniciar a instância automaticamente via Evolution API (`PUT /instance/restart/{instanceName}`)
-- Aguardar 5s e reconfigurar o webhook
-- Só depois incrementar retry_count
+Isso evita que instâncias fiquem presas indefinidamente.
 
-Isso evita que o sistema queime 5 tentativas seguidas sem resolver o problema real.
-
-#### 4. Melhoria no código: Detecção no whatsapp-send
-**Arquivo**: `supabase/functions/whatsapp-send/index.ts`
-
-Na função `normalizeEvolutionError`, tratar `not-acceptable` como erro de instância degradada com mensagem específica em português: "Instância do WhatsApp em estado degradado. Reiniciando automaticamente..."
-
-### Arquivos a Modificar
+### Arquivos a modificar
 
 | Arquivo | Ação |
 |---|---|
-| Script temporário | Reiniciar instância + resetar automações |
-| `supabase/functions/process-whatsapp-queue/index.ts` | Adicionar auto-restart em erro "not-acceptable" |
-| `supabase/functions/whatsapp-send/index.ts` | Melhorar detecção de erro "not-acceptable" |
+| Script temporário (edge function) | Deletar instância + limpar DB + resetar automações |
+| `supabase/functions/whatsapp-connect/index.ts` | Auto-recuperação para instâncias travadas em "connecting" por mais de 5 min |
 
 ### Resultado Esperado
-
-1. Instância reiniciada e funcional imediatamente
-2. Leads afetados receberão suas mensagens na próxima execução do cron
-3. No futuro, erros "not-acceptable" dispararão auto-restart preventivo
+1. Instância deletada e limpa imediatamente
+2. Caique poderá reconectar o WhatsApp pelo CRM
+3. Leads com automações falhadas serão reprocessados
+4. No futuro, instâncias travadas em "connecting" serão auto-recuperadas
 
