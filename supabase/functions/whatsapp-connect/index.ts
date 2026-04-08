@@ -393,7 +393,48 @@ Deno.serve(async (req) => {
             const statusData = await statusResponse.json()
             console.log('[whatsapp-connect] Status data:', statusData)
 
-            const isConnected = statusData.instance?.state === 'open'
+            const evolutionState = statusData.instance?.state
+            const isConnected = evolutionState === 'open'
+
+            // Auto-recovery: if Evolution says "connecting" and DB has been stuck for 5+ min, delete & recreate
+            if (evolutionState === 'connecting') {
+              const updatedAt = session.updated_at ? new Date(session.updated_at).getTime() : 0
+              const stuckMinutes = (Date.now() - updatedAt) / 60000
+              const isStuckState = ['connecting', 'qr_ready'].includes(session.status || '')
+
+              if (isStuckState && stuckMinutes > 5) {
+                console.log(`[whatsapp-connect] Instance stuck in "connecting" for ${stuckMinutes.toFixed(1)} min — auto-recovering...`)
+
+                // Delete the corrupted instance
+                try {
+                  const delResp = await fetch(
+                    `${EVOLUTION_API_URL}/instance/delete/${instanceName}`,
+                    { method: 'DELETE', headers: { 'apikey': EVOLUTION_API_KEY } }
+                  )
+                  console.log('[whatsapp-connect] Auto-delete result:', delResp.status)
+                } catch (e) {
+                  console.log('[whatsapp-connect] Auto-delete error:', e)
+                }
+
+                // Reset DB session so user can reconnect cleanly
+                await supabase
+                  .from('whatsapp_sessions')
+                  .update({
+                    status: 'disconnected',
+                    qr_code: null,
+                    connected_at: null,
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('account_id', accountId)
+
+                return new Response(JSON.stringify({
+                  status: 'disconnected', connected: false,
+                  autoRecovered: true,
+                  message: 'Instância travada foi recuperada automaticamente. Reconecte o WhatsApp.'
+                }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+              }
+            }
+
             const newStatus = isConnected ? 'connected' : 'disconnected'
 
             // Reconfigure webhook automatically when connected
