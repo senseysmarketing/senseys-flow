@@ -16,6 +16,29 @@ function formatPhoneForEvolution(phone: string): string {
   return cleaned
 }
 
+// Generate both 8-digit and 9-digit BR phone suffixes for search
+function normalizeBRPhoneSuffixes(phone: string): string[] {
+  const digits = phone.replace(/\D/g, '')
+  let local = digits
+  if (digits.startsWith('55') && digits.length >= 12) {
+    local = digits.slice(4)
+  } else if (digits.length >= 10) {
+    local = digits.slice(2)
+  }
+  
+  const suffixes: string[] = []
+  if (local.length === 9 && local.startsWith('9')) {
+    suffixes.push(local)
+    suffixes.push(local.slice(1))
+  } else if (local.length === 8) {
+    suffixes.push(local)
+    suffixes.push('9' + local)
+  } else {
+    suffixes.push(digits.slice(-9))
+  }
+  return [...new Set(suffixes)]
+}
+
 // ─── Business Hours: next valid send time ───────────────────────────────────
 interface SendingSchedule {
   is_enabled: boolean
@@ -430,13 +453,14 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
       // b3. Phone-based fallback: catches @lid messages that were stored without lead_id
       // (when @lid JID couldn't be resolved, the message phone field is the @lid identifier,
       //  but the conversation.phone field always has the real phone number)
-      const recordPhoneSuffix = (record.phone || '').replace(/\D/g, '').slice(-9)
-      if (recordPhoneSuffix.length >= 8) {
+      const recordPhoneSuffixes = normalizeBRPhoneSuffixes(record.phone || '')
+      if (recordPhoneSuffixes[0]?.length >= 8) {
+        const orFilter = recordPhoneSuffixes.map(s => `phone.ilike.%${s}%`).join(',')
         const { data: convByPhone } = await supabase
           .from('whatsapp_conversations')
           .select('last_customer_message_at')
           .eq('account_id', record.account_id)
-          .ilike('phone', `%${recordPhoneSuffix}%`)
+          .or(orFilter)
           .gt('last_customer_message_at', record.started_at)
           .limit(1)
 
@@ -528,13 +552,14 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
         }
 
         // Phone-based fallback for waiting_response phase (catches @lid messages without lead_id)
-        const waitingPhoneSuffix = (record.phone || '').replace(/\D/g, '').slice(-9)
-        if (waitingPhoneSuffix.length >= 8) {
+        const waitingPhoneSuffixes = normalizeBRPhoneSuffixes(record.phone || '')
+        if (waitingPhoneSuffixes[0]?.length >= 8) {
+          const orFilter = waitingPhoneSuffixes.map(s => `phone.ilike.%${s}%`).join(',')
           const { data: convByPhoneWaiting } = await supabase
             .from('whatsapp_conversations')
             .select('last_customer_message_at')
             .eq('account_id', record.account_id)
-            .ilike('phone', `%${waitingPhoneSuffix}%`)
+            .or(orFilter)
             .gt('last_customer_message_at', record.started_at)
             .limit(1)
 
