@@ -1,45 +1,60 @@
 
 
-## Recuperar Instância WhatsApp "Marinho" Travada em "Connecting"
+## Bug: Follow-ups não cancelados quando lead responde — Problema de normalização de telefone BR
 
-### Diagnóstico
+### Causa Raiz
 
-A instância `senseys_98bbd535_b8a4_4a5f_80da_e1e0e35f6809` está presa no estado `connecting` na Evolution API. Os logs mostram dezenas de chamadas de status consecutivas, todas retornando `state: "connecting"`. O usuário desconectou e reconectou, mas a instância não conseguiu completar a reconexão.
+O número da Lúcia está armazenado no lead como `+554188791919` (sem o nono dígito móvel), mas o WhatsApp envia respostas com o JID `5541988791919@s.whatsapp.net` (com o 9). Isso causa **3 falhas em cascata**:
 
-O DB mostra `status: qr_ready` mas a Evolution API retorna `connecting` — a instância está corrompida/travada.
+1. **Webhook não encontra o lead**: `findLeadByPhone` usa `slice(-9)` do telefone da resposta = `988791919`. Busca `%988791919%` no campo phone do lead `+554188791919` → **não encontra** (o lead tem `188791919` nos últimos 9 dígitos)
+
+2. **Automação não é cancelada**: Como o lead não foi encontrado, o bloco que faz `update automation_control set status = 'responded'` nunca executa
+
+3. **Fallback do cron falha também**: O `process-whatsapp-queue` tenta buscar por `record.phone.slice(-9)` = `188791919`, mas a conversa com a resposta tem phone `5541988791919` que não contém `188791919`
+
+**Resultado**: Duas conversas separadas no banco — uma com o lead (sem resposta), outra com as respostas (sem lead). O sistema nunca cruza as duas.
+
+**Escopo**: Afeta qualquer lead cujo telefone está salvo com 8 dígitos na parte local (formato antigo BR), pois o WhatsApp normaliza para 9 dígitos. Vi vários na lista de automações ativas: `+554187097574`, `+554199523885`, `+554195860515`, etc.
 
 ### Plano de Correção
 
-#### 1. Intervenção imediata: Deletar e recriar a instância
-Executar um script administrativo temporário que:
-1. **Deleta** a instância na Evolution API (`DELETE /instance/delete/{instanceName}`)
-2. **Limpa** o registro na tabela `whatsapp_sessions` (status → `disconnected`, qr_code → null)
-3. O usuário poderá então reconectar normalmente pelo CRM
+#### 1. Criar função utilitária `normalizeBRPhone` (ambos os arquivos)
+Função que, dado um telefone brasileiro (DDD 2 dígitos + número), gera variantes com e sem o nono dígito para busca:
+- Se o número local tem 8 dígitos → adiciona o 9
+- Se tem 9 dígitos → remove o 9
+- Retorna array de sufixos para busca
 
-Isso é necessário porque `restart` e `logout` não resolvem instâncias presas em `connecting`.
+#### 2. Corrigir `findLeadByPhone` no webhook
+**Arquivo**: `supabase/functions/whatsapp-webhook/index.ts`
 
-#### 2. Resetar automações falhadas
-Atualizar os 3 registros recentes de `whatsapp_automation_control` com `status = 'failed'` e `retry_count = 5` (de 6, 7 e 8 de abril) para `status = 'active'`, `retry_count = 0`, para que sejam reprocessados quando a instância voltar.
+Ao buscar lead por telefone, gerar os dois sufixos possíveis (com e sem o 9) e fazer a busca com `or`:
+```
+ilike phone %988791919% OR ilike phone %88791919%
+```
 
-#### 3. Melhoria no código: Tratar estado "connecting" travado
-**Arquivo**: `supabase/functions/whatsapp-connect/index.ts`
+#### 3. Corrigir busca de leads no bloco de resposta do webhook (linha ~532)
+Mesma lógica: usar ambos os sufixos para garantir que o lead `+554188791919` seja encontrado quando a resposta vem de `5541988791919`
 
-No action `status`, quando a Evolution API retorna `state: "connecting"`:
-- Atualmente o código trata como `disconnected` (correto)
-- Adicionar: se o DB mostra que a sessão está em `connecting`/`qr_ready` há mais de 5 minutos, executar automaticamente um `DELETE /instance/delete` + recriação, em vez de apenas reportar como desconectado
+#### 4. Corrigir fallback phone-based no `process-whatsapp-queue`
+**Arquivo**: `supabase/functions/process-whatsapp-queue/index.ts`
 
-Isso evita que instâncias fiquem presas indefinidamente.
+Na busca de conversas por phone suffix (linhas ~433 e ~537), gerar ambos os sufixos e usar `or` para cobrir os dois formatos.
 
-### Arquivos a modificar
+#### 5. Unificar conversas duplicadas (script pontual)
+Executar um script que:
+- Encontra pares de conversas para o mesmo número real (com/sem 9) na mesma conta
+- Transfere o `lead_id` e `last_customer_message_at` para a conversa principal
+- Marca a automação da Lúcia e similares como `responded`
 
-| Arquivo | Ação |
+### Arquivos a Modificar
+
+| Arquivo | Mudança |
 |---|---|
-| Script temporário (edge function) | Deletar instância + limpar DB + resetar automações |
-| `supabase/functions/whatsapp-connect/index.ts` | Auto-recuperação para instâncias travadas em "connecting" por mais de 5 min |
+| `supabase/functions/whatsapp-webhook/index.ts` | `findLeadByPhone` e bloco de resposta: busca com dois sufixos BR |
+| `supabase/functions/process-whatsapp-queue/index.ts` | Fallback phone-based: busca com dois sufixos BR |
+| Script temporário | Corrigir automações ativas que já receberam resposta |
 
 ### Resultado Esperado
-1. Instância deletada e limpa imediatamente
-2. Caique poderá reconectar o WhatsApp pelo CRM
-3. Leads com automações falhadas serão reprocessados
-4. No futuro, instâncias travadas em "connecting" serão auto-recuperadas
-
+1. Respostas de leads são detectadas corretamente mesmo com variação do nono dígito
+2. Automações são canceladas imediatamente ao receber resposta
+3. Lúcia e leads similares terão follow-ups cancelados retroativamente
