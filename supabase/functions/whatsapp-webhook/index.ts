@@ -130,6 +130,34 @@ function normalizeBrazilianJid(jid: string): string {
   return jid;
 }
 
+// Generate both 8-digit and 9-digit BR phone suffixes for search
+// E.g. "5541988791919" → ["988791919", "88791919"]
+// E.g. "554188791919"  → ["88791919", "988791919"]
+function normalizeBRPhoneSuffixes(phone: string): string[] {
+  const digits = phone.replace(/\D/g, '')
+  // Get local number (after country code 55 + DDD 2 digits)
+  let local = digits
+  if (digits.startsWith('55') && digits.length >= 12) {
+    local = digits.slice(4) // after 55 + DD
+  } else if (digits.length >= 10) {
+    local = digits.slice(2) // after DD
+  }
+  
+  const suffixes: string[] = []
+  if (local.length === 9 && local.startsWith('9')) {
+    // Has 9th digit: return both with and without
+    suffixes.push(local)           // 988791919
+    suffixes.push(local.slice(1))  // 88791919
+  } else if (local.length === 8) {
+    // Missing 9th digit: return both without and with
+    suffixes.push(local)           // 88791919
+    suffixes.push('9' + local)     // 988791919
+  } else {
+    suffixes.push(digits.slice(-9))
+  }
+  return [...new Set(suffixes)]
+}
+
 function extractMessageContent(msg: any): { content: string | null, mediaType: string, mediaUrl: string | null } {
   if (msg.message?.ephemeralMessage?.message) {
     return extractMessageContent({ ...msg, message: msg.message.ephemeralMessage.message })
@@ -216,12 +244,13 @@ async function upsertConversation(supabase: any, accountId: string, remoteJid: s
 }
 
 async function findLeadByPhone(supabase: any, accountId: string, phone: string): Promise<string | null> {
-  const phoneSuffix = phone.slice(-9)
+  const suffixes = normalizeBRPhoneSuffixes(phone)
+  const orFilter = suffixes.map(s => `phone.ilike.%${s}%`).join(',')
   const { data: leads } = await supabase
     .from('leads')
     .select('id')
     .eq('account_id', accountId)
-    .ilike('phone', `%${phoneSuffix}%`)
+    .or(orFilter)
     .order('created_at', { ascending: false })
     .limit(1)
   
@@ -529,12 +558,13 @@ async function handleMessagesUpsert(supabase: any, session: any, data: any, inst
           .maybeSingle()
         if (exactLead) matchedLeads = [exactLead]
       } else {
-        const phoneSuffix = finalPhone.slice(-9)
+        const suffixes = normalizeBRPhoneSuffixes(finalPhone)
+        const orFilter = suffixes.map(s => `phone.ilike.%${s}%`).join(',')
         const { data: leads } = await supabase
           .from('leads')
           .select('id, status_id, name')
           .eq('account_id', session.account_id)
-          .ilike('phone', `%${phoneSuffix}%`)
+          .or(orFilter)
           .order('created_at', { ascending: false })
           .limit(5)
         matchedLeads = leads || []
