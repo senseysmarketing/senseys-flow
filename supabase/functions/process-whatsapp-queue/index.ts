@@ -875,6 +875,75 @@ async function processAutomationControl(supabase: any, supabaseUrl: string, supa
 // ═══ LEGACY: Queue-based Processing (whatsapp_message_queue) ════════════
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ═══ Auto-recovery: detect & reset instances stuck in connecting/qr_ready ═══
+async function autoRecoverStuckInstances(supabase: any) {
+  const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL') || ''
+  const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || ''
+  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) return
+
+  const apiUrl = EVOLUTION_API_URL.startsWith('http') ? EVOLUTION_API_URL : `https://${EVOLUTION_API_URL}`
+  const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+
+  const { data: stuck } = await supabase
+    .from('whatsapp_sessions')
+    .select('id, account_id, instance_name, status, updated_at')
+    .in('status', ['connecting', 'qr_ready'])
+    .lt('updated_at', cutoff)
+
+  if (!stuck || stuck.length === 0) return
+
+  console.log(`[auto-recovery] Found ${stuck.length} stuck instance(s)`)
+
+  for (const sess of stuck) {
+    try {
+      // Confirm via Evolution API
+      const stateRes = await fetch(
+        `${apiUrl}/instance/connectionState/${sess.instance_name}`,
+        { headers: { 'apikey': EVOLUTION_API_KEY } }
+      )
+
+      let confirmStuck = false
+      if (stateRes.ok) {
+        const body = await stateRes.json()
+        const state = body?.instance?.state || body?.state
+        if (state === 'connecting' || state === 'close' || !state) confirmStuck = true
+      } else if (stateRes.status === 404) {
+        confirmStuck = true
+      } else {
+        confirmStuck = true
+      }
+
+      if (!confirmStuck) {
+        console.log(`[auto-recovery] ${sess.instance_name} not actually stuck, skipping`)
+        continue
+      }
+
+      // Hard delete
+      const delRes = await fetch(
+        `${apiUrl}/instance/delete/${sess.instance_name}`,
+        { method: 'DELETE', headers: { 'apikey': EVOLUTION_API_KEY } }
+      )
+      console.log(`[auto-recovery] DELETE ${sess.instance_name} → ${delRes.status}`)
+
+      // Reset DB
+      await supabase
+        .from('whatsapp_sessions')
+        .update({
+          status: 'disconnected',
+          qr_code: null,
+          qr_code_expires_at: null,
+          phone_number: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', sess.id)
+
+      console.log(`[auto-recovery] Reset session for account ${sess.account_id}`)
+    } catch (err) {
+      console.error(`[auto-recovery] Error recovering ${sess.instance_name}:`, err)
+    }
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -886,6 +955,13 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     console.log('[process-whatsapp-queue] Starting queue processing...')
+
+    // ═══ BLOCK 0: Auto-recovery of stuck WhatsApp instances ═══
+    try {
+      await autoRecoverStuckInstances(supabase)
+    } catch (err) {
+      console.error('[process-whatsapp-queue] auto-recovery failed:', err)
+    }
 
     // ═══ BLOCK 1: Process NEW automation control (state machine) ═══
     const automationResult = await processAutomationControl(supabase, supabaseUrl, supabaseServiceKey)
