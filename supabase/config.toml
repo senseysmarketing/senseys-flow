@@ -80,3 +80,6 @@ verify_jwt = false
 
 [functions.ai-funnel-advance]
 verify_jwt = false
+
+[functions.admin-reset-braz-instance]
+verify_jwt = false
